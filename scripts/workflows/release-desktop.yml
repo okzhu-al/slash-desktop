@@ -146,29 +146,29 @@ jobs:
             echo "🔧 [Fix] Python.framework detected. Creating a valid Info.plist to resolve codesign ambiguity..."
             mkdir -p "$FRAMEWORK_DIR/Resources"
             cat << 'EOF' > "$FRAMEWORK_DIR/Resources/Info.plist"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>English</string>
-    <key>CFBundleIdentifier</key>
-    <string>org.python.python</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Python</string>
-    <key>CFBundlePackageType</key>
-    <string>FMWK</string>
-    <key>CFBundleShortVersionString</key>
-    <string>3.12</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-    <key>CFBundleVersion</key>
-    <string>3.12</string>
-</dict>
-</plist>
-EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>CFBundleDevelopmentRegion</key>
+                <string>English</string>
+                <key>CFBundleIdentifier</key>
+                <string>org.python.python</string>
+                <key>CFBundleInfoDictionaryVersion</key>
+                <string>6.0</string>
+                <key>CFBundleName</key>
+                <string>Python</string>
+                <key>CFBundlePackageType</key>
+                <string>FMWK</string>
+                <key>CFBundleShortVersionString</key>
+                <string>3.12</string>
+                <key>CFBundleSignature</key>
+                <string>????</string>
+                <key>CFBundleVersion</key>
+                <string>3.12</string>
+            </dict>
+            </plist>
+            EOF
             cp "$FRAMEWORK_DIR/Resources/Info.plist" "$FRAMEWORK_DIR/Info.plist"
             echo "✨ [Fix] Info.plist created successfully at $FRAMEWORK_DIR/Resources/Info.plist and $FRAMEWORK_DIR/Info.plist"
           fi
