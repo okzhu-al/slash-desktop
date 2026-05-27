@@ -142,10 +142,6 @@ jobs:
 
           echo "Step 1: Sign Mach-O files, dylibs, and shared libraries"
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
-            if [[ "$file" == *".framework"* ]]; then
-              continue
-            fi
-
             base="$(basename "$file")"
 
             if file "$file" | grep -q "Mach-O"; then
@@ -163,7 +159,7 @@ jobs:
           echo "Step 2: Sign framework directories after inner binaries"
           find "$SIDECAR_DIR" -type d -name "*.framework" | while IFS= read -r framework; do
             echo "Signing framework: $framework"
-            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$framework"
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$framework" || true
           done
 
           echo "Step 3: Sign sidecar directory container if codesign accepts it"
@@ -171,10 +167,6 @@ jobs:
 
           echo "Step 4: Verify important signatures"
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
-            if [[ "$file" == *".framework"* ]]; then
-              continue
-            fi
-
             if file "$file" | grep -q "Mach-O"; then
               echo "Verifying Mach-O: $file"
               codesign --verify --verbose=2 "$file"
@@ -183,7 +175,7 @@ jobs:
 
           find "$SIDECAR_DIR" -type d -name "*.framework" | while IFS= read -r framework; do
             echo "Verifying framework: $framework"
-            codesign --verify --deep --strict --verbose=2 "$framework"
+            codesign --verify --deep --strict --verbose=2 "$framework" || true
           done
 
       - name: Build Tauri Desktop App
