@@ -124,13 +124,59 @@ jobs:
           security import $RUNNER_TEMP/certificate.p12 -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      - name: Recursively Codesign macOS Python Sidecar (macOS only)
+      - name: Recursively Codesign macOS Python Sidecar
         if: matrix.platform == 'macos'
+        shell: bash
         run: |
-          SIDECAR_PATH="apps/desktop/src-tauri/binaries/slash-sidecar-aarch64-apple-darwin"
-          echo "🔐 [Sign] Execuring recursive codesign on Python Sidecar binaries and libraries..."
-          find "$SIDECAR_PATH" -type f \( -name "*.so" -o -name "*.dylib" -o -name "Python" -o -name "slash-sidecar-aarch64-apple-darwin" \) -exec codesign --force --options runtime --timestamp --sign "Developer ID Application: Jasper Zhu (H83XQSDL83)" {} \;
-          echo "✨ [Sign] Sidecar nested codesign completed successfully."
+          set -euo pipefail
+
+          SIDECAR_DIR="apps/desktop/src-tauri/binaries/slash-sidecar-${{ matrix.target }}"
+          SIGN_IDENTITY="Developer ID Application: Jasper Zhu (H83XQSDL83)"
+
+          echo "Signing macOS sidecar directory: $SIDECAR_DIR"
+
+          if [ ! -d "$SIDECAR_DIR" ]; then
+            echo "ERROR: sidecar directory not found: $SIDECAR_DIR"
+            exit 1
+          fi
+
+          echo "Step 1: Sign Mach-O files, dylibs, and shared libraries"
+          find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            base="$(basename "$file")"
+
+            if file "$file" | grep -q "Mach-O"; then
+              echo "Signing Mach-O: $file"
+              codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$file"
+            elif [[ "$file" == *.so || "$file" == *.dylib ]]; then
+              echo "Signing library: $file"
+              codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$file"
+            elif [[ -x "$file" || "$base" == "Python" ]]; then
+              echo "Signing executable-like file: $file"
+              codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$file"
+            fi
+          done
+
+          echo "Step 2: Sign framework directories after inner binaries"
+          find "$SIDECAR_DIR" -type d -name "*.framework" | while IFS= read -r framework; do
+            echo "Signing framework: $framework"
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$framework"
+          done
+
+          echo "Step 3: Sign sidecar directory container if codesign accepts it"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SIDECAR_DIR" || true
+
+          echo "Step 4: Verify important signatures"
+          find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            if file "$file" | grep -q "Mach-O"; then
+              echo "Verifying Mach-O: $file"
+              codesign --verify --verbose=2 "$file"
+            fi
+          done
+
+          find "$SIDECAR_DIR" -type d -name "*.framework" | while IFS= read -r framework; do
+            echo "Verifying framework: $framework"
+            codesign --verify --deep --strict --verbose=2 "$framework"
+          done
 
       - name: Build Tauri Desktop App
         working-directory: apps/desktop
@@ -151,7 +197,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Slash ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'beta') }}
           files: |
             target/**/bundle/dmg/*.dmg
             target/**/bundle/nsis/*.exe
