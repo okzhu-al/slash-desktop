@@ -67,8 +67,8 @@ jobs:
       - name: Build Python Sidecar
         working-directory: apps/python-sidecar
         env:
-          PYINSTALLER_CODESIGN_IDENTITY: ${{ matrix.platform == 'macos' && 'Developer ID Application: Jasper Zhu (H83XQSDL83)' || '' }}
-          PYINSTALLER_ENTITLEMENTS_FILE: ${{ matrix.platform == 'macos' && '../desktop/src-tauri/entitlements.plist' || '' }}
+          PYINSTALLER_CODESIGN_IDENTITY: "${{ matrix.platform == 'macos' && 'Developer ID Application: Jasper Zhu (H83XQSDL83)' || '' }}"
+          PYINSTALLER_ENTITLEMENTS_FILE: "${{ matrix.platform == 'macos' && '../desktop/src-tauri/entitlements.plist' || '' }}"
         run: python build.py
 
       - name: Install Sidecar to Tauri binaries
