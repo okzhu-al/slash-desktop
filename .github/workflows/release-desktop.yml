@@ -140,6 +140,39 @@ jobs:
             exit 1
           fi
 
+          # ⚙️ 动态自愈非标准 Python.framework 的 Info.plist 缺失问题，彻底打通 codesign 歧义
+          FRAMEWORK_DIR="$SIDECAR_DIR/_internal/Python.framework"
+          if [ -d "$FRAMEWORK_DIR" ]; then
+            echo "🔧 [Fix] Python.framework detected. Creating a valid Info.plist to resolve codesign ambiguity..."
+            mkdir -p "$FRAMEWORK_DIR/Resources"
+            cat << 'EOF' > "$FRAMEWORK_DIR/Resources/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>English</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.python.python</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Python</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>3.12</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleVersion</key>
+    <string>3.12</string>
+</dict>
+</plist>
+EOF
+            cp "$FRAMEWORK_DIR/Resources/Info.plist" "$FRAMEWORK_DIR/Info.plist"
+            echo "✨ [Fix] Info.plist created successfully at $FRAMEWORK_DIR/Resources/Info.plist and $FRAMEWORK_DIR/Info.plist"
+          fi
+
           echo "Step 1: Sign Mach-O files, dylibs, and shared libraries"
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
             base="$(basename "$file")"
