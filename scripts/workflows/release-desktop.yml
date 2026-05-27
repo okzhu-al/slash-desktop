@@ -172,9 +172,6 @@ jobs:
             codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$framework" || true
           done
 
-          echo "Step 3: Sign sidecar directory container if codesign accepts it"
-          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SIDECAR_DIR" || true
-
           echo "Step 4: Verify important signatures"
           find "$SIDECAR_DIR" -type f -not -path "*.framework/*" -not -path "*/*.framework/*" | while IFS= read -r file; do
             if file "$file" | grep -q "Mach-O"; then
