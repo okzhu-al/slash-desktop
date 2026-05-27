@@ -140,6 +140,10 @@ jobs:
             exit 1
           fi
 
+          # 🧼 前置强力清理可能残留的脏重命名目录，防止其引发逃逸签名歧义
+          rm -rf "$SIDECAR_DIR/_internal/Python.framework_temp"
+          rm -rf "$SIDECAR_DIR/_internal/Python_temp_dir"
+
           # ⚙️ 动态自愈非标准 Python.framework 的 Info.plist 缺失问题，彻底打通 codesign 歧义
           FRAMEWORK_DIR="$SIDECAR_DIR/_internal/Python.framework"
           if [ -d "$FRAMEWORK_DIR" ]; then

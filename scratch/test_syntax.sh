@@ -11,6 +11,10 @@ if [ ! -d "$SIDECAR_DIR" ]; then
   exit 1
 fi
 
+# 🧼 前置强力清理可能残留的脏重命名目录，防止其引发逃逸签名歧义
+rm -rf "$SIDECAR_DIR/_internal/Python.framework_temp"
+rm -rf "$SIDECAR_DIR/_internal/Python_temp_dir"
+
 # ⚙️ 动态自愈非标准 Python.framework 的 Info.plist 缺失问题，彻底打通 codesign 歧义
 FRAMEWORK_DIR="$SIDECAR_DIR/_internal/Python.framework"
 if [ -d "$FRAMEWORK_DIR" ]; then
@@ -24,8 +28,8 @@ fi
 # 🔄 临时更名以绕过对 .framework 后缀的敏感歧义拦截，实现 100% 写入 secure timestamp 与证书签名
 FRAMEWORK_TEMP_DIR=""
 if [ -d "$FRAMEWORK_DIR" ]; then
-  FRAMEWORK_TEMP_DIR="${FRAMEWORK_DIR}_temp"
-  echo "🔄 [Rename] Temporarily renaming Python.framework to Python.framework_temp to isolate it..."
+  FRAMEWORK_TEMP_DIR="$(dirname "$FRAMEWORK_DIR")/Python_temp_dir"
+  echo "🔄 [Rename] Temporarily renaming Python.framework to Python_temp_dir to isolate it..."
   mv "$FRAMEWORK_DIR" "$FRAMEWORK_TEMP_DIR"
 fi
 
@@ -45,9 +49,9 @@ find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
   fi
 done
 
-# 🔄 恢复原更名：将 Python.framework_temp 完美还原回 Python.framework
+# 🔄 恢复原更名：将 Python_temp_dir 完美还原回 Python.framework
 if [ -n "$FRAMEWORK_TEMP_DIR" ] && [ -d "$FRAMEWORK_TEMP_DIR" ]; then
-  echo "🔄 [Restore] Restoring Python.framework_temp back to Python.framework..."
+  echo "🔄 [Restore] Restoring Python_temp_dir back to Python.framework..."
   mv "$FRAMEWORK_TEMP_DIR" "$FRAMEWORK_DIR"
 fi
 
