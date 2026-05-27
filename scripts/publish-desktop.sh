@@ -137,6 +137,12 @@ echo "⚙️  Creating binaries placeholder to satisfy Tauri resources build che
 mkdir -p apps/desktop/src-tauri/binaries
 touch apps/desktop/src-tauri/binaries/.gitkeep
 
+# ⚙️ 自动将专属于分仓的 CI 与 Release 脚本部署到镜像分仓的 .github/workflows 下
+echo "⚙️  Deploying public workflows to .github/workflows in mirror repo..."
+mkdir -p .github/workflows
+cp "$SRC_ROOT/scripts/workflows/ci.yml" .github/workflows/
+cp "$SRC_ROOT/scripts/workflows/release-desktop.yml" .github/workflows/
+
 echo ""
 echo "✨ Desktop mirror staging complete."
 echo ""
