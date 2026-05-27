@@ -92,7 +92,7 @@ jobs:
           
           # 3. 复制
           mkdir -p "$DEST_DIR"
-          cp -r "$SRC_SIDECAR" "$DEST_DIR/"
+          cp -RP "$SRC_SIDECAR" "$DEST_DIR/"
           echo "✨ [Install] Sidecar installed successfully to $DEST_SIDECAR"
 
       - name: Verify Sidecar directory
