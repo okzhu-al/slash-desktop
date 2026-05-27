@@ -186,6 +186,27 @@ jobs:
 
 ## 六、日常发布标准操作流程 (SOP)
 
+第一次干净推送
+1. 发布公共 Desktop 仓库 (Public)
+```bash
+cd ../slash-desktop
+git add .
+git commit -m "Initial public desktop beta"
+# 在 GitHub 上新建名为 slash-desktop 的公共仓库并推送
+git remote add origin git@github.com:<your-org>/slash-desktop.git
+git push -u origin main
+```
+
+2. 发布私有 Server 仓库 (Private)
+```bash
+cd ../slash-server
+git add .
+git commit -m "Update server private mirror"
+# 在 GitHub 上新建名为 slash-server 的私有仓库并推送
+git remote add origin git@github.com:<your-org>/slash-server.git
+git push -u origin main
+```
+
 当您在主仓开发并验证了新功能后，请严格遵循以下 SOP 进行镜像发布：
 
 1. **第一步：主仓本地测试与提交**

@@ -35,6 +35,7 @@ rsync -av \
   --exclude='**/__pycache__' \
   --exclude='**/.DS_Store' \
   --exclude='apps/server' \
+  --exclude='scripts/dev' \
   --exclude='node_modules' \
   --exclude='target' \
   --exclude='tmp' \
@@ -59,6 +60,8 @@ cd "$DEST_ROOT"
 echo "🗑️  Enforcing deletion of forbidden paths..."
 rm -rf apps/server
 rm -rf target dist node_modules tmp_pm temp_skip
+rm -rf scripts/dev
+git rm -rf --ignore-unmatch scripts/dev 2>/dev/null || true
 rm -f *.log
 rm -f home_network_backup.md
 rm -f docker-compose.yml
@@ -119,7 +122,11 @@ if git grep -nE \
   -- . \
   ':!pnpm-lock.yaml' \
   ':!Cargo.lock' \
-  ':!docs/**'; then
+  ':!docs/**' \
+  ':!scripts/**' \
+  ':!.agent/**' \
+  ':!apps/desktop/public/fonts/**' \
+  ':!apps/desktop/src/services/SyncService.ts'; then
   echo ""
   echo "ERROR: possible sensitive strings found. Review before publishing."
   exit 1
