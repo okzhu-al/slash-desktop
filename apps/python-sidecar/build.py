@@ -111,6 +111,22 @@ def build(target_suffix: str | None = None):
         str(MAIN_PY),
     ]
 
+    import os
+    if sys.platform == "darwin":
+        codesign_identity = os.environ.get("PYINSTALLER_CODESIGN_IDENTITY")
+        if codesign_identity:
+            cmd.extend(["--codesign-identity", codesign_identity])
+            print(f"🔒 [Signing] PyInstaller Codesign Identity: {codesign_identity}")
+
+        entitlements_file = os.environ.get("PYINSTALLER_ENTITLEMENTS_FILE")
+        if entitlements_file:
+            entitlements_path = Path(entitlements_file)
+            if entitlements_path.exists():
+                cmd.extend(["--osx-entitlements-file", str(entitlements_path)])
+                print(f"🔒 [Signing] PyInstaller Entitlements File: {entitlements_path}")
+            else:
+                print(f"⚠️ [Signing] Entitlements file not found at: {entitlements_file}")
+
     print(f"\n🚀 执行: {' '.join(cmd)}\n")
     result = subprocess.run(cmd)
 
