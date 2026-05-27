@@ -1,0 +1,58 @@
+[package]
+name = "slash"
+version = "0.1.0"
+description = "Slash Note App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "tauri_appslash_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-fs = { version = "2.0.0", features = ["watch"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+trash = "5.1.1"
+tauri-plugin-dialog = "2"
+tauri-plugin-persisted-scope = "2"
+sha2 = "0.10"
+walkdir = "2"
+chrono = "0.4"
+regex = "1"
+urlencoding = "2"
+rusqlite = { version = "0.31", features = ["bundled"] }
+gray_matter = "0.2"
+serde_yaml = "0.9"
+ollama-rs = { version = "0.2", features = ["stream"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio-stream = "0.1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.4"
+anyhow = "1.0.100"
+async-trait = "0.1"
+strsim = "0.11.1"
+screenshots = "0.8"
+image = "0.24"
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+slash-core = { version = "0.1.0", path = "../../../packages/slash-core" }
+slash-sync-proto = { version = "0.1.0", path = "../../../packages/slash-sync-proto" }
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+zip = "8.4.0"
+tempfile = "3.27.0"
+log = "0.4.29"
+dirs = "5"
+semver = "1"
+uuid = { version = "1.23.1", features = ["v4"] }

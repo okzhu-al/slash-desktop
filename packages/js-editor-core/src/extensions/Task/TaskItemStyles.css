@@ -1,0 +1,776 @@
+/**
+ * Task Item Styles
+ * 
+ * Single-line layout: [checkbox] [content] [📅date] [@user] [🚩priority]
+ * All elements vertically centered on the same line.
+ */
+
+/* Task Item - flex container with top alignment */
+.slash-task-item {
+    display: block !important;
+    position: relative !important;
+    padding-left: 0 !important; /* Fixed padding to align text identically with standard bullet lists (which use ul ps-6 and li p-0) */
+    padding-top: 0;
+    margin-bottom: 0.35rem; /* Revert to user preference */
+    list-style: none;
+    min-height: 27px; /* 18px * 1.5 = 27px */
+}
+
+.slash-task-item.is-done > .task-content {
+    /* Color only applied at this level */
+    color: #9CA3AF; /* gray-400 */
+}
+
+/* Reset: unchecked items inherit prose text color */
+.slash-task-item:not(.is-done) > .task-content {
+    color: inherit;
+}
+
+.dark .slash-task-item:not(.is-done) > .task-content {
+    color: inherit;
+}
+
+/* Strikethrough on the actual paragraph element (TipTap v3 DOM: .task-content > div[data-node-view-content-react] > p) */
+.slash-task-item.is-done > .task-content > div > p {
+    text-decoration: line-through;
+    text-decoration-color: #9CA3AF;
+}
+
+/* Force all inline elements (bold, italic, links, code) to inherit completed style */
+.slash-task-item.is-done > .task-content > div > p * {
+    color: inherit !important;
+}
+
+/* Dark mode completed task */
+.dark .slash-task-item.is-done > .task-content {
+    color: #6B7280; /* gray-500 for dark mode */
+}
+
+.dark .slash-task-item.is-done > .task-content > div > p {
+    text-decoration-color: #6B7280;
+}
+
+/* Checkbox */
+.task-checkbox {
+    position: absolute;
+    left: -1.5rem; /* Reduced from -1.35rem: Aligns the RIGHT edge of the 14px checkbox perfectly with the right edge of ol/ul markers */
+    top: 6.5px; /* (27px line box - 14px item height) / 2 = 6.5px perfect absolute vertical centering */
+    width: 14px;
+    height: 14px;
+    margin-top: 0;
+    border-radius: 3px;
+    border: 1.5px solid #64748B;
+    background: transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 100ms ease;
+    color: transparent;
+}
+
+.task-checkbox:hover {
+    border-color: #22C55E;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.task-checkbox.is-checked {
+    background: #22C55E;
+    border-color: #22C55E;
+    color: #020617;
+}
+
+.task-checkbox.is-checked:hover {
+    background: #16A34A;
+    border-color: #16A34A;
+}
+
+/* Task Content */
+.task-content {
+    display: block;
+    width: 100%;
+}
+
+.task-content p {
+    margin: 0;
+}
+
+/* Capsules (Date, Assignee, Priority) */
+.task-capsule {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    transform: translateY(-1px);
+    flex-shrink: 0;
+    padding: 0 0.375rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border: none;
+    cursor: pointer;
+    transition: all 100ms ease;
+    background: #1E293B;
+    color: #94A3B8;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.task-capsule:hover {
+    background: #334155;
+    color: #F1F5F9;
+}
+
+.task-date {
+    background: #1E293B;
+    color: #94A3B8;
+}
+
+.task-date.is-overdue {
+    background: rgba(239, 68, 68, 0.2);
+    color: #F87171;
+}
+
+/* Assignee Capsule */
+.task-assignee {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60A5FA;
+    cursor: default;
+}
+
+/* Priority Tags */
+.task-priority {
+    font-weight: 500;
+}
+
+.priority-icon {
+    display: inline-block;
+    transform: scale(0.8);
+    transform-origin: center;
+    margin-right: 3px;
+}
+
+.task-priority.priority-high {
+    background: rgba(239, 68, 68, 0.2);
+    color: #F87171;
+}
+
+.task-priority.priority-medium {
+    background: rgba(251, 191, 36, 0.2);
+    color: #FBBF24;
+}
+
+.task-priority.priority-low {
+    background: rgba(96, 165, 250, 0.2);
+    color: #60A5FA;
+}
+
+/* ========================================
+   Date Picker Popup
+   ======================================== */
+
+.date-picker {
+    z-index: 1000;
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.75rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    min-width: 260px;
+}
+
+.date-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.date-picker-nav {
+    background: transparent;
+    border: none;
+    color: #94A3B8;
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: all 100ms ease;
+}
+
+.date-picker-nav:hover {
+    background: #1E293B;
+    color: #F1F5F9;
+}
+
+.date-picker-title {
+    font-weight: 500;
+    color: #F1F5F9;
+    font-size: 0.875rem;
+}
+
+.date-picker-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 0.5rem;
+}
+
+.date-picker-weekday {
+    text-align: center;
+    font-size: 0.7rem;
+    color: #64748B;
+    padding: 0.25rem;
+}
+
+.date-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.date-picker-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #CBD5E1;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 100ms ease;
+}
+
+.date-picker-day:hover:not(.empty) {
+    background: #1E293B;
+}
+
+.date-picker-day.empty {
+    cursor: default;
+}
+
+.date-picker-day.is-today {
+    background: #334155;
+    color: #22C55E;
+    font-weight: 600;
+}
+
+.date-picker-day.is-selected {
+    background: #22C55E;
+    color: #020617;
+    font-weight: 600;
+}
+
+.date-picker-day.is-selected:hover {
+    background: #16A34A;
+}
+
+.date-picker-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #334155;
+}
+
+.date-picker-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: transparent;
+    border: none;
+    color: #60A5FA;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 100ms ease;
+}
+
+.date-picker-action:hover {
+    background: rgba(96, 165, 250, 0.1);
+}
+
+.date-picker-action.danger {
+    color: #F87171;
+}
+
+.date-picker-action.danger:hover {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+/* ========================================
+   Priority Menu
+   ======================================== */
+
+.priority-menu {
+    position: absolute;
+    z-index: 1000;
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.25rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    min-width: 120px;
+    margin-top: 0.25rem;
+}
+
+.priority-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: #CBD5E1;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 100ms ease;
+    text-align: left;
+}
+
+.priority-option:hover {
+    background: #1E293B;
+}
+
+.priority-option.high {
+    color: #F87171;
+}
+
+.priority-option.medium {
+    color: #FBBF24;
+}
+
+.priority-option.low {
+    color: #60A5FA;
+}
+
+.priority-option.remove {
+    color: #64748B;
+    border-top: 1px solid #334155;
+    margin-top: 0.25rem;
+    padding-top: 0.5rem;
+}
+
+.priority-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+}
+
+/* ========================================
+   Metadata Type Selector Menu (space trigger)
+   ======================================== */
+
+.task-metadata-menu {
+    position: absolute;
+    z-index: 1000;
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.25rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    min-width: 140px;
+    margin-top: 0.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.task-metadata-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+}
+
+.task-metadata-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: #CBD5E1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 100ms ease;
+    text-align: left;
+}
+
+.task-metadata-option:hover {
+    background: #1E293B;
+    color: #F1F5F9;
+}
+
+/* ========================================
+   Assignee Input
+   ======================================== */
+
+.task-assignee-input-wrapper {
+    position: absolute;
+    z-index: 1000;
+    margin-top: 0.25rem;
+}
+
+.task-assignee-input {
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    color: #F1F5F9;
+    font-size: 0.85rem;
+    min-width: 160px;
+    outline: none;
+    transition: border-color 100ms ease;
+}
+
+.task-assignee-input:focus {
+    border-color: #60A5FA;
+}
+
+.task-assignee-input::placeholder {
+    color: #64748B;
+}
+
+/* Shortcut key hints in menu */
+.shortcut-key {
+    display: inline-block;
+    margin-left: auto;
+    padding: 0.125rem 0.375rem;
+    background: #1E293B;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    color: #64748B;
+    font-family: monospace;
+}
+
+/* User Input Popup */
+.task-user-input-popup {
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.task-user-input {
+    background: #1E293B;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    color: #F1F5F9;
+    font-size: 0.85rem;
+    min-width: 180px;
+    outline: none;
+    transition: border-color 100ms ease;
+}
+
+.task-user-input:focus {
+    border-color: #60A5FA;
+}
+
+.task-user-input::placeholder {
+    color: #64748B;
+}
+
+/* Priority Popup */
+.task-priority-popup {
+    background: #0F172A;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.25rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    min-width: 120px;
+}
+
+/* ========================================
+   Team Member Selector
+   ======================================== */
+
+.task-member-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.task-member-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    background: transparent;
+    border: none;
+    color: #CBD5E1;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 100ms ease;
+    text-align: left;
+}
+
+.task-member-option:hover {
+    background: #1E293B;
+    color: #F1F5F9;
+}
+
+.task-member-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #334155;
+    color: #94A3B8;
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.task-member-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.task-member-name {
+    font-size: 0.8rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.task-member-username {
+    font-size: 0.7rem;
+    color: #64748B;
+    line-height: 1.2;
+}
+
+.priority-menu-content {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ========================================
+   Light Mode Overrides
+   ======================================== */
+
+/* Task Metadata Menu - Light Mode */
+.light .task-metadata-menu {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.light .task-metadata-option {
+    color: #334155;
+}
+
+.light .task-metadata-option:hover {
+    background: #F1F5F9;
+    color: #0F172A;
+}
+
+/* Shortcut Key - Light Mode */
+.light .shortcut-key {
+    background: #F1F5F9;
+    color: #64748B;
+}
+
+/* User Input Popup - Light Mode */
+.light .task-user-input-popup {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.light .task-user-input {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    color: #0F172A;
+}
+
+.light .task-user-input:focus {
+    border-color: #3B82F6;
+}
+
+.light .task-user-input::placeholder {
+    color: #94A3B8;
+}
+
+/* Priority Popup - Light Mode */
+.light .task-priority-popup {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.light .priority-option {
+    color: #334155;
+}
+
+.light .priority-option:hover {
+    background: #F1F5F9;
+}
+
+.light .priority-option.high {
+    color: #DC2626;
+}
+
+.light .priority-option.medium {
+    color: #D97706;
+}
+
+.light .priority-option.low {
+    color: #2563EB;
+}
+
+/* Date Picker - Light Mode */
+.light .date-picker {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.light .date-picker-nav {
+    color: #64748B;
+}
+
+.light .date-picker-nav:hover {
+    background: #F1F5F9;
+    color: #0F172A;
+}
+
+.light .date-picker-title {
+    color: #0F172A;
+}
+
+.light .date-picker-weekday {
+    color: #94A3B8;
+}
+
+.light .date-picker-day {
+    color: #334155;
+}
+
+.light .date-picker-day:hover:not(.empty) {
+    background: #F1F5F9;
+}
+
+.light .date-picker-day.is-today {
+    background: #E0F2FE;
+    color: #0369A1;
+}
+
+.light .date-picker-day.is-selected {
+    background: #22C55E;
+    color: #FFFFFF;
+}
+
+.light .date-picker-footer {
+    border-top: 1px solid #E2E8F0;
+}
+
+.light .date-picker-action {
+    color: #2563EB;
+}
+
+.light .date-picker-action:hover {
+    background: rgba(37, 99, 235, 0.1);
+}
+
+.light .date-picker-action.danger {
+    color: #DC2626;
+}
+
+.light .date-picker-action.danger:hover {
+    background: rgba(220, 38, 38, 0.1);
+}
+
+/* Priority Menu - Light Mode */
+.light .priority-menu {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.light .priority-option.remove {
+    color: #94A3B8;
+    border-top: 1px solid #E2E8F0;
+}
+
+/* Task Capsules - Light Mode */
+.light .task-capsule {
+    background: #F1F5F9;
+    color: #475569;
+}
+
+.light .task-capsule:hover {
+    background: #E2E8F0;
+    color: #0F172A;
+}
+
+.light .task-date {
+    background: #F1F5F9;
+    color: #475569;
+}
+
+.light .task-date.is-overdue {
+    background: rgba(220, 38, 38, 0.1);
+    color: #DC2626;
+}
+
+.light .task-assignee {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563EB;
+}
+
+.light .task-priority.priority-high {
+    background: rgba(220, 38, 38, 0.1);
+    color: #DC2626;
+}
+
+.light .task-priority.priority-medium {
+    background: rgba(217, 119, 6, 0.1);
+    color: #D97706;
+}
+
+.light .task-priority.priority-low {
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563EB;
+}
+
+/* Team Member Selector - Light Mode */
+.light .task-member-option {
+    color: #334155;
+}
+
+.light .task-member-option:hover {
+    background: #F1F5F9;
+    color: #0F172A;
+}
+
+.light .task-member-avatar {
+    background: #E2E8F0;
+    color: #475569;
+}
+
+.light .task-member-username {
+    color: #94A3B8;
+}
+
+.task-metadata-draft-trigger {
+    color: #6366F1;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    display: inline;
+}

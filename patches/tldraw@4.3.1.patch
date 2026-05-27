@@ -1,0 +1,810 @@
+diff --git a/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js b/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
+index 2d267db6f442f34b38268c146fc6280fc9fd2e38..9c8c5ed1b5253023bccc0501a0d7410655750843 100644
+--- a/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
++++ b/dist-cjs/lib/shapes/arrow/ArrowShapeUtil.js
+@@ -581,8 +581,10 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+     const isSelected = shape.id === this.editor.getOnlySelectedShapeId();
+     const isEditing = this.editor.getEditingShapeId() === shape.id;
+     const showArrowLabel = isEditing || !(0, import_richText.isEmptyRichText)(shape.props.richText);
+-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_editor.SVGContainer, { style: { minWidth: 50, minHeight: 50 }, children: [
++    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, {
++      children: [
++      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_editor.SVGContainer, {
++        style: { minWidth: 50, minHeight: 50 }, children: [
+         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+           ArrowSvg,
+           {
+@@ -590,30 +592,30 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+             shouldDisplayHandles: shouldDisplayHandles && onlySelectedShape?.id === shape.id
+           }
+         ),
+-        shape.props.kind === "elbow" && import_editor.debugFlags.debugElbowArrows.get() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ElbowArrowDebug.ElbowArrowDebug, { arrow: shape })
+-      ] }),
+-      showArrowLabel && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-        import_RichTextLabel.RichTextLabel,
+-        {
+-          shapeId: shape.id,
+-          type: "arrow",
+-          font: shape.props.font,
+-          fontSize: (0, import_arrowLabel.getArrowLabelFontSize)(shape),
+-          lineHeight: import_default_shape_constants.TEXT_PROPS.lineHeight,
+-          align: "middle",
+-          verticalAlign: "middle",
+-          labelColor: (0, import_editor.getColorValue)(theme, shape.props.labelColor, "solid"),
+-          richText: shape.props.richText,
+-          textWidth: labelPosition.box.w - import_default_shape_constants.ARROW_LABEL_PADDING * 2 * shape.props.scale,
+-          isSelected,
+-          padding: 0,
+-          showTextOutline: this.options.showTextOutline,
+-          style: {
+-            transform: `translate(${labelPosition.box.center.x}px, ${labelPosition.box.center.y}px)`
++          shape.props.kind === "elbow" && import_editor.debugFlags.debugElbowArrows.get() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ElbowArrowDebug.ElbowArrowDebug, { arrow: shape })
++        ]
++      }),
++        showArrowLabel && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++          import_RichTextLabel.RichTextLabel,
++          {
++            shapeId: shape.id,
++            type: "arrow",
++            font: shape.props.font,
++            fontSize: (0, import_arrowLabel.getArrowLabelFontSize)(shape),
++            lineHeight: import_default_shape_constants.TEXT_PROPS.lineHeight,
++            align: "middle",
++            verticalAlign: "middle",
++            labelColor: (0, import_editor.getColorValue)(theme, shape.props.labelColor, "solid"),
++            richText: shape.props.richText,
++            textWidth: labelPosition.box.w - import_default_shape_constants.ARROW_LABEL_PADDING * 2 * shape.props.scale,
++            isSelected,
++            style: {
++              transform: `translate(${labelPosition.box.center.x}px, ${labelPosition.box.center.y}px)`
++            }
+           }
+-        }
+-      )
+-    ] });
++        )
++      ]
++    });
+   }
+   indicator(shape) {
+     const isEditing = (0, import_editor.useIsEditing)(shape.id);
+@@ -646,66 +648,70 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+     }
+     const clipStartArrowhead = !(info.start.arrowhead === "none" || info.start.arrowhead === "arrow");
+     const clipEndArrowhead = !(info.end.arrowhead === "none" || info.end.arrowhead === "arrow");
+-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
+-      includeClipPath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-        ArrowClipPath,
+-        {
+-          radius: 3.5 * shape.props.scale,
+-          hasText: !isEmpty,
+-          bounds,
+-          labelBounds,
+-          as: clipStartArrowhead && as ? as : "",
+-          ae: clipEndArrowhead && ae ? ae : ""
+-        }
+-      ) }),
++    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", {
++      children: [
++        includeClipPath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", {
++          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++            ArrowClipPath,
++            {
++              radius: 3.5 * shape.props.scale,
++              hasText: !isEmpty,
++              bounds,
++              labelBounds,
++              as: clipStartArrowhead && as ? as : "",
++              ae: clipEndArrowhead && ae ? ae : ""
++            }
++          )
++        }),
+       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+-        "g",
+-        {
+-          style: {
+-            clipPath: includeClipPath ? `url(#${clipPathId})` : void 0,
+-            WebkitClipPath: includeClipPath ? `url(#${clipPathId})` : void 0
+-          },
+-          children: [
+-            includeClipPath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-              "rect",
+-              {
+-                x: bounds.minX - 100,
+-                y: bounds.minY - 100,
+-                width: bounds.width + 200,
+-                height: bounds.height + 200,
+-                opacity: 0
+-              }
+-            ),
+-            (0, import_ArrowPath.getArrowBodyPath)(
+-              shape,
+-              info,
+-              shape.props.dash === "draw" ? {
+-                style: "draw",
+-                randomSeed: shape.id,
+-                strokeWidth: 1,
+-                passes: 1,
+-                offset: 0,
+-                roundness: strokeWidth * 2,
+-                props: { strokeWidth: void 0 }
+-              } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
+-            )
+-          ]
+-        }
+-      ),
+-      as && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: as }),
+-      ae && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: ae }),
+-      labelGeometry && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-        "rect",
+-        {
+-          x: (0, import_editor.toDomPrecision)(labelBounds.x),
+-          y: (0, import_editor.toDomPrecision)(labelBounds.y),
+-          width: labelBounds.w,
+-          height: labelBounds.h,
+-          rx: 3.5,
+-          ry: 3.5
+-        }
+-      )
+-    ] });
++          "g",
++          {
++            style: {
++              clipPath: includeClipPath ? `url(#${clipPathId})` : void 0,
++              WebkitClipPath: includeClipPath ? `url(#${clipPathId})` : void 0
++            },
++            children: [
++              includeClipPath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++                "rect",
++                {
++                  x: bounds.minX - 100,
++                  y: bounds.minY - 100,
++                  width: bounds.width + 200,
++                  height: bounds.height + 200,
++                  opacity: 0
++                }
++              ),
++              (0, import_ArrowPath.getArrowBodyPath)(
++                shape,
++                info,
++                shape.props.dash === "draw" ? {
++                  style: "draw",
++                  randomSeed: shape.id,
++                  strokeWidth: 1,
++                  passes: 1,
++                  offset: 0,
++                  roundness: strokeWidth * 2,
++                  props: { strokeWidth: void 0 }
++                } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
++              )
++            ]
++          }
++        ),
++        as && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: as }),
++        ae && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: ae }),
++        labelGeometry && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++          "rect",
++          {
++            x: (0, import_editor.toDomPrecision)(labelBounds.x),
++            y: (0, import_editor.toDomPrecision)(labelBounds.y),
++            width: labelBounds.w,
++            height: labelBounds.h,
++            rx: 3.5,
++            ry: 3.5
++          }
++        )
++      ]
++    });
+   }
+   onEditStart(shape) {
+     if ((0, import_richText.isEmptyRichText)(shape.props.richText)) {
+@@ -721,7 +727,19 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+     ctx.addExportDef((0, import_defaultStyleDefs.getFillDefForExport)(shape.props.fill));
+     const theme = (0, import_editor.getDefaultColorTheme)(ctx);
+     const scaleFactor = 1 / shape.props.scale;
+-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { transform: `scale(${scaleFactor})`, children: [
++    const isWebKit = typeof navigator !== "undefined" && /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
++    const webkitScale = isWebKit ? 1.5 : 1;
++    const labelBounds = (0, import_arrowLabel.getArrowLabelPosition)(this.editor, shape).box.clone().expandBy(-import_default_shape_constants.ARROW_LABEL_PADDING * shape.props.scale);
++    if (webkitScale !== 1) {
++      const cx = labelBounds.center.x;
++      const cy = labelBounds.center.y;
++      labelBounds.width *= webkitScale;
++      labelBounds.height *= webkitScale;
++      labelBounds.x = cx - labelBounds.width / 2;
++      labelBounds.y = cy - labelBounds.height / 2;
++    }
++    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", {
++      transform: `scale(${scaleFactor})`, children: [
+       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArrowSvg, { shape, shouldDisplayHandles: false }),
+       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+         import_RichTextLabel.RichTextSVG,
+@@ -732,12 +750,13 @@ class ArrowShapeUtil extends import_editor.ShapeUtil {
+           verticalAlign: "middle",
+           labelColor: (0, import_editor.getColorValue)(theme, shape.props.labelColor, "solid"),
+           richText: shape.props.richText,
+-          bounds: (0, import_arrowLabel.getArrowLabelPosition)(this.editor, shape).box.clone().expandBy(-import_default_shape_constants.ARROW_LABEL_PADDING * shape.props.scale),
++          bounds: labelBounds,
+           padding: 0,
+           showTextOutline: this.options.showTextOutline
+         }
+       )
+-    ] });
++      ]
++    });
+   }
+   getCanvasSvgDefs() {
+     return [
+@@ -813,18 +832,23 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
+   const labelPosition = (0, import_arrowLabel.getArrowLabelPosition)(editor, shape);
+   const clipStartArrowhead = !(info.start.arrowhead === "none" || info.start.arrowhead === "arrow");
+   const clipEndArrowhead = !(info.end.arrowhead === "none" || info.end.arrowhead === "arrow");
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("clipPath", { id: clipPathId, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-      ArrowClipPath,
+-      {
+-        radius: 3.5 * shape.props.scale,
+-        hasText: isEditing || !isEmpty,
+-        bounds,
+-        labelBounds: labelPosition.box,
+-        as: clipStartArrowhead && as ? as : "",
+-        ae: clipEndArrowhead && ae ? ae : ""
+-      }
+-    ) }) }),
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, {
++    children: [
++    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", {
++      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("clipPath", {
++        id: clipPathId, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++          ArrowClipPath,
++          {
++            radius: 3.5 * shape.props.scale,
++            hasText: isEditing || !isEmpty,
++            bounds,
++            labelBounds: labelPosition.box,
++            as: clipStartArrowhead && as ? as : "",
++            ae: clipEndArrowhead && ae ? ae : ""
++          }
++        )
++      })
++    }),
+     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+       "g",
+       {
+@@ -845,15 +869,15 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
+               },
+               children: [
+                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-                  "rect",
+-                  {
+-                    x: (0, import_editor.toDomPrecision)(bounds.minX - 100),
+-                    y: (0, import_editor.toDomPrecision)(bounds.minY - 100),
+-                    width: (0, import_editor.toDomPrecision)(bounds.width + 200),
+-                    height: (0, import_editor.toDomPrecision)(bounds.height + 200),
+-                    opacity: 0
+-                  }
+-                ),
++                "rect",
++                {
++                  x: (0, import_editor.toDomPrecision)(bounds.minX - 100),
++                  y: (0, import_editor.toDomPrecision)(bounds.minY - 100),
++                  width: (0, import_editor.toDomPrecision)(bounds.width + 200),
++                  height: (0, import_editor.toDomPrecision)(bounds.height + 200),
++                  opacity: 0
++                }
++              ),
+                 (0, import_ArrowPath.getArrowBodyPath)(shape, info, {
+                   style: shape.props.dash,
+                   strokeWidth,
+@@ -888,7 +912,8 @@ const ArrowSvg = (0, import_editor.track)(function ArrowSvg2({
+         ]
+       }
+     )
+-  ] });
++    ]
++  });
+ });
+ function ArrowClipPath({
+   radius,
+@@ -926,10 +951,12 @@ function ArrowheadDotDef() {
+ }
+ function ArrowheadCrossDef() {
+   const id = (0, import_editor.useSharedSafeId)("arrowhead-cross");
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("marker", { id, className: "tl-arrow-hint", refX: "3.0", refY: "3.0", orient: "auto", children: [
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("marker", {
++    id, className: "tl-arrow-hint", refX: "3.0", refY: "3.0", orient: "auto", children: [
+     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "1.5", y1: "1.5", x2: "4.5", y2: "4.5", strokeDasharray: "100%" }),
+     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("line", { x1: "1.5", y1: "4.5", x2: "4.5", y2: "1.5", strokeDasharray: "100%" })
+-  ] });
++    ]
++  });
+ }
+ function anglesAreApproximatelyParallel(a, b, tolerance = 1e-4) {
+   const diff = Math.abs(a - b);
+diff --git a/dist-cjs/lib/shapes/shared/RichTextLabel.js b/dist-cjs/lib/shapes/shared/RichTextLabel.js
+index 3f2fd97333a472abdf2b0eae06b5a64e2dca0d89..36f0a6ab64b100c6c91ec5c872918337e6882bf2 100644
+--- a/dist-cjs/lib/shapes/shared/RichTextLabel.js
++++ b/dist-cjs/lib/shapes/shared/RichTextLabel.js
+@@ -135,16 +135,22 @@ const RichTextLabel = import_react.default.memo(function RichTextLabel2({
+             height: textHeight ? Math.ceil(textHeight) : void 0
+           },
+           children: [
+-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: `${cssPrefix} tl-text tl-text-content`, dir: "auto", children: richText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
++            className: `${cssPrefix} tl-text tl-text-content`, dir: "auto", children: richText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+               "div",
+               {
+-                className: "tl-rich-text",
+-                "data-is-select-tool-active": selectToolActive,
+-                dangerouslySetInnerHTML: { __html: html || "" },
+-                onPointerDown: handlePointerDown,
+-                "data-is-ready-for-editing": isReadyForEditing
++                className: "tl-rich-text-wrapper",
++                style: { display: "flex", alignItems: "center", justifyContent: align === "middle" || align === "center" ? "center" : align, height: "100%", width: "100%" },
++                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
++                  className: "tl-rich-text",
++                  "data-is-select-tool-active": selectToolActive,
++                  dangerouslySetInnerHTML: { __html: html || "" },
++                  onPointerDown: handlePointerDown,
++                  "data-is-ready-for-editing": isReadyForEditing
++                })
+               }
+-            ) }),
++            )
++          }),
+             (isReadyForEditing || isSelected) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+               import_RichTextArea.RichTextArea,
+               {
+diff --git a/dist-cjs/lib/shapes/text/RichTextArea.js b/dist-cjs/lib/shapes/text/RichTextArea.js
+index 91435fc9f7d9fe767a8f2f072dec6011431703b8..21534d02211b3402d24a166c1e83dec9f9768145 100644
+--- a/dist-cjs/lib/shapes/text/RichTextArea.js
++++ b/dist-cjs/lib/shapes/text/RichTextArea.js
+@@ -188,6 +188,10 @@ const RichTextArea = import_react2.default.forwardRef(function RichTextArea2({
+       tabIndex: -1,
+       "data-testid": "rich-text-area",
+       className: "tl-rich-text tl-text tl-text-input",
++      // FIX: Safari WebKit bug - position:absolute + height:100% inside SVG foreignObject
++      // escapes the foreignObject and references the outer canvas (~408px).
++      // Inline style wins over any CSS rule and forces proper intrinsic sizing.
++      style: { position: 'relative', height: 'auto', width: '100%' },
+       onContextMenu: isEditing ? (e) => e.stopPropagation() : void 0,
+       onPointerDownCapture: (e) => e.stopPropagation(),
+       onTouchEnd: (e) => e.stopPropagation(),
+diff --git a/dist-cjs/lib/shapes/text/TextShapeUtil.js b/dist-cjs/lib/shapes/text/TextShapeUtil.js
+index cdda061a46072404ba8177194d0c9d1075af1fe0..e13a1ef29f768c0fbefcee320de80bdbc3ec3c54 100644
+--- a/dist-cjs/lib/shapes/text/TextShapeUtil.js
++++ b/dist-cjs/lib/shapes/text/TextShapeUtil.js
+@@ -131,10 +131,21 @@ class TextShapeUtil extends import_editor.ShapeUtil {
+   }
+   toSvg(shape, ctx) {
+     const bounds = this.editor.getShapeGeometry(shape).bounds;
+-    const width = bounds.width / (shape.props.scale ?? 1);
+-    const height = bounds.height / (shape.props.scale ?? 1);
++    const isWebKit = typeof navigator !== 'undefined' &&
++      /AppleWebKit/.test(navigator.userAgent) &&
++      !/Chrome/.test(navigator.userAgent);
++    const originalWidth = bounds.width / (shape.props.scale ?? 1);
++    const originalHeight = bounds.height / (shape.props.scale ?? 1);
++    const width = originalWidth * webkitScale;
++    const height = originalHeight * webkitScale;
++    let xOffset = 0;
++    if (webkitScale !== 1) {
++      if (shape.props.textAlign === 'middle') xOffset = -(width - originalWidth) / 2;
++      else if (shape.props.textAlign === 'end') xOffset = -(width - originalWidth);
++    }
++    const yOffset = webkitScale !== 1 ? -(height - originalHeight) / 2 : 0;
+     const theme = (0, import_editor.getDefaultColorTheme)(ctx);
+-    const exportBounds = new import_editor.Box(0, 0, width, height);
++    const exportBounds = new import_editor.Box(xOffset, yOffset, width, height);
+     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+       import_RichTextLabel.RichTextSVG,
+       {
+diff --git a/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs b/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
+index 260f93a1e6fc5a86814e732f4e362785d98fec27..7eac2782155f42b2c519acc2dc6d4575b5cc3c9a 100644
+--- a/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
++++ b/dist-esm/lib/shapes/arrow/ArrowShapeUtil.mjs
+@@ -599,8 +599,10 @@ class ArrowShapeUtil extends ShapeUtil {
+     const isSelected = shape.id === this.editor.getOnlySelectedShapeId();
+     const isEditing = this.editor.getEditingShapeId() === shape.id;
+     const showArrowLabel = isEditing || !isEmptyRichText(shape.props.richText);
+-    return /* @__PURE__ */ jsxs(Fragment, { children: [
+-      /* @__PURE__ */ jsxs(SVGContainer, { style: { minWidth: 50, minHeight: 50 }, children: [
++    return /* @__PURE__ */ jsxs(Fragment, {
++      children: [
++      /* @__PURE__ */ jsxs(SVGContainer, {
++        style: { minWidth: 50, minHeight: 50 }, children: [
+         /* @__PURE__ */ jsx(
+           ArrowSvg,
+           {
+@@ -608,30 +610,30 @@ class ArrowShapeUtil extends ShapeUtil {
+             shouldDisplayHandles: shouldDisplayHandles && onlySelectedShape?.id === shape.id
+           }
+         ),
+-        shape.props.kind === "elbow" && debugFlags.debugElbowArrows.get() && /* @__PURE__ */ jsx(ElbowArrowDebug, { arrow: shape })
+-      ] }),
+-      showArrowLabel && /* @__PURE__ */ jsx(
+-        RichTextLabel,
+-        {
+-          shapeId: shape.id,
+-          type: "arrow",
+-          font: shape.props.font,
+-          fontSize: getArrowLabelFontSize(shape),
+-          lineHeight: TEXT_PROPS.lineHeight,
+-          align: "middle",
+-          verticalAlign: "middle",
+-          labelColor: getColorValue(theme, shape.props.labelColor, "solid"),
+-          richText: shape.props.richText,
+-          textWidth: labelPosition.box.w - ARROW_LABEL_PADDING * 2 * shape.props.scale,
+-          isSelected,
+-          padding: 0,
+-          showTextOutline: this.options.showTextOutline,
+-          style: {
+-            transform: `translate(${labelPosition.box.center.x}px, ${labelPosition.box.center.y}px)`
++          shape.props.kind === "elbow" && debugFlags.debugElbowArrows.get() && /* @__PURE__ */ jsx(ElbowArrowDebug, { arrow: shape })
++        ]
++      }),
++        showArrowLabel && /* @__PURE__ */ jsx(
++          RichTextLabel,
++          {
++            shapeId: shape.id,
++            type: "arrow",
++            font: shape.props.font,
++            fontSize: getArrowLabelFontSize(shape),
++            lineHeight: TEXT_PROPS.lineHeight,
++            align: "middle",
++            verticalAlign: "middle",
++            labelColor: getColorValue(theme, shape.props.labelColor, "solid"),
++            richText: shape.props.richText,
++            textWidth: labelPosition.box.w - ARROW_LABEL_PADDING * 2 * shape.props.scale,
++            isSelected,
++            style: {
++              transform: `translate(${labelPosition.box.center.x}px, ${labelPosition.box.center.y}px)`
++            }
+           }
+-        }
+-      )
+-    ] });
++        )
++      ]
++    });
+   }
+   indicator(shape) {
+     const isEditing = useIsEditing(shape.id);
+@@ -664,66 +666,70 @@ class ArrowShapeUtil extends ShapeUtil {
+     }
+     const clipStartArrowhead = !(info.start.arrowhead === "none" || info.start.arrowhead === "arrow");
+     const clipEndArrowhead = !(info.end.arrowhead === "none" || info.end.arrowhead === "arrow");
+-    return /* @__PURE__ */ jsxs("g", { children: [
+-      includeClipPath && /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsx(
+-        ArrowClipPath,
+-        {
+-          radius: 3.5 * shape.props.scale,
+-          hasText: !isEmpty,
+-          bounds,
+-          labelBounds,
+-          as: clipStartArrowhead && as ? as : "",
+-          ae: clipEndArrowhead && ae ? ae : ""
+-        }
+-      ) }),
++    return /* @__PURE__ */ jsxs("g", {
++      children: [
++        includeClipPath && /* @__PURE__ */ jsx("defs", {
++          children: /* @__PURE__ */ jsx(
++            ArrowClipPath,
++            {
++              radius: 3.5 * shape.props.scale,
++              hasText: !isEmpty,
++              bounds,
++              labelBounds,
++              as: clipStartArrowhead && as ? as : "",
++              ae: clipEndArrowhead && ae ? ae : ""
++            }
++          )
++        }),
+       /* @__PURE__ */ jsxs(
+-        "g",
+-        {
+-          style: {
+-            clipPath: includeClipPath ? `url(#${clipPathId})` : void 0,
+-            WebkitClipPath: includeClipPath ? `url(#${clipPathId})` : void 0
+-          },
+-          children: [
+-            includeClipPath && /* @__PURE__ */ jsx(
+-              "rect",
+-              {
+-                x: bounds.minX - 100,
+-                y: bounds.minY - 100,
+-                width: bounds.width + 200,
+-                height: bounds.height + 200,
+-                opacity: 0
+-              }
+-            ),
+-            getArrowBodyPath(
+-              shape,
+-              info,
+-              shape.props.dash === "draw" ? {
+-                style: "draw",
+-                randomSeed: shape.id,
+-                strokeWidth: 1,
+-                passes: 1,
+-                offset: 0,
+-                roundness: strokeWidth * 2,
+-                props: { strokeWidth: void 0 }
+-              } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
+-            )
+-          ]
+-        }
+-      ),
+-      as && /* @__PURE__ */ jsx("path", { d: as }),
+-      ae && /* @__PURE__ */ jsx("path", { d: ae }),
+-      labelGeometry && /* @__PURE__ */ jsx(
+-        "rect",
+-        {
+-          x: toDomPrecision(labelBounds.x),
+-          y: toDomPrecision(labelBounds.y),
+-          width: labelBounds.w,
+-          height: labelBounds.h,
+-          rx: 3.5,
+-          ry: 3.5
+-        }
+-      )
+-    ] });
++          "g",
++          {
++            style: {
++              clipPath: includeClipPath ? `url(#${clipPathId})` : void 0,
++              WebkitClipPath: includeClipPath ? `url(#${clipPathId})` : void 0
++            },
++            children: [
++              includeClipPath && /* @__PURE__ */ jsx(
++                "rect",
++                {
++                  x: bounds.minX - 100,
++                  y: bounds.minY - 100,
++                  width: bounds.width + 200,
++                  height: bounds.height + 200,
++                  opacity: 0
++                }
++              ),
++              getArrowBodyPath(
++                shape,
++                info,
++                shape.props.dash === "draw" ? {
++                  style: "draw",
++                  randomSeed: shape.id,
++                  strokeWidth: 1,
++                  passes: 1,
++                  offset: 0,
++                  roundness: strokeWidth * 2,
++                  props: { strokeWidth: void 0 }
++                } : { style: "solid", strokeWidth: 1, props: { strokeWidth: void 0 } }
++              )
++            ]
++          }
++        ),
++        as && /* @__PURE__ */ jsx("path", { d: as }),
++        ae && /* @__PURE__ */ jsx("path", { d: ae }),
++        labelGeometry && /* @__PURE__ */ jsx(
++          "rect",
++          {
++            x: toDomPrecision(labelBounds.x),
++            y: toDomPrecision(labelBounds.y),
++            width: labelBounds.w,
++            height: labelBounds.h,
++            rx: 3.5,
++            ry: 3.5
++          }
++        )
++      ]
++    });
+   }
+   onEditStart(shape) {
+     if (isEmptyRichText(shape.props.richText)) {
+@@ -739,9 +745,22 @@ class ArrowShapeUtil extends ShapeUtil {
+     ctx.addExportDef(getFillDefForExport(shape.props.fill));
+     const theme = getDefaultColorTheme(ctx);
+     const scaleFactor = 1 / shape.props.scale;
+-    return /* @__PURE__ */ jsxs("g", { transform: `scale(${scaleFactor})`, children: [
+-      /* @__PURE__ */ jsx(ArrowSvg, { shape, shouldDisplayHandles: false }),
+-      /* @__PURE__ */ jsx(
++    const isWebKit = typeof navigator !== "undefined" && /AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
++    const webkitScale = isWebKit ? 1.5 : 1;
++    const labelBounds = getArrowLabelPosition(this.editor, shape).box.clone().expandBy(-ARROW_LABEL_PADDING * shape.props.scale);
++    if (webkitScale !== 1) {
++      const cx = labelBounds.center.x;
++      const cy = labelBounds.center.y;
++      labelBounds.width *= webkitScale;
++      labelBounds.height *= webkitScale;
++      // Recenter the scaled bounds
++      labelBounds.x = cx - labelBounds.width / 2;
++      labelBounds.y = cy - labelBounds.height / 2;
++    }
++    return /* @__PURE__ */ jsxs("g", {
++      transform: `scale(${scaleFactor})`, children: [
++			/* @__PURE__ */ jsx(ArrowSvg, { shape, shouldDisplayHandles: false }),
++			/* @__PURE__ */ jsx(
+         RichTextSVG,
+         {
+           fontSize: getArrowLabelFontSize(shape),
+@@ -750,12 +769,13 @@ class ArrowShapeUtil extends ShapeUtil {
+           verticalAlign: "middle",
+           labelColor: getColorValue(theme, shape.props.labelColor, "solid"),
+           richText: shape.props.richText,
+-          bounds: getArrowLabelPosition(this.editor, shape).box.clone().expandBy(-ARROW_LABEL_PADDING * shape.props.scale),
++          bounds: labelBounds,
+           padding: 0,
+           showTextOutline: this.options.showTextOutline
+         }
+       )
+-    ] });
++      ]
++    });
+   }
+   getCanvasSvgDefs() {
+     return [
+@@ -831,18 +851,23 @@ const ArrowSvg = track(function ArrowSvg2({
+   const labelPosition = getArrowLabelPosition(editor, shape);
+   const clipStartArrowhead = !(info.start.arrowhead === "none" || info.start.arrowhead === "arrow");
+   const clipEndArrowhead = !(info.end.arrowhead === "none" || info.end.arrowhead === "arrow");
+-  return /* @__PURE__ */ jsxs(Fragment, { children: [
+-    /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsx("clipPath", { id: clipPathId, children: /* @__PURE__ */ jsx(
+-      ArrowClipPath,
+-      {
+-        radius: 3.5 * shape.props.scale,
+-        hasText: isEditing || !isEmpty,
+-        bounds,
+-        labelBounds: labelPosition.box,
+-        as: clipStartArrowhead && as ? as : "",
+-        ae: clipEndArrowhead && ae ? ae : ""
+-      }
+-    ) }) }),
++  return /* @__PURE__ */ jsxs(Fragment, {
++    children: [
++    /* @__PURE__ */ jsx("defs", {
++      children: /* @__PURE__ */ jsx("clipPath", {
++        id: clipPathId, children: /* @__PURE__ */ jsx(
++          ArrowClipPath,
++          {
++            radius: 3.5 * shape.props.scale,
++            hasText: isEditing || !isEmpty,
++            bounds,
++            labelBounds: labelPosition.box,
++            as: clipStartArrowhead && as ? as : "",
++            ae: clipEndArrowhead && ae ? ae : ""
++          }
++        )
++      })
++    }),
+     /* @__PURE__ */ jsxs(
+       "g",
+       {
+@@ -863,15 +888,15 @@ const ArrowSvg = track(function ArrowSvg2({
+               },
+               children: [
+                 /* @__PURE__ */ jsx(
+-                  "rect",
+-                  {
+-                    x: toDomPrecision(bounds.minX - 100),
+-                    y: toDomPrecision(bounds.minY - 100),
+-                    width: toDomPrecision(bounds.width + 200),
+-                    height: toDomPrecision(bounds.height + 200),
+-                    opacity: 0
+-                  }
+-                ),
++                "rect",
++                {
++                  x: toDomPrecision(bounds.minX - 100),
++                  y: toDomPrecision(bounds.minY - 100),
++                  width: toDomPrecision(bounds.width + 200),
++                  height: toDomPrecision(bounds.height + 200),
++                  opacity: 0
++                }
++              ),
+                 getArrowBodyPath(shape, info, {
+                   style: shape.props.dash,
+                   strokeWidth,
+@@ -906,7 +931,8 @@ const ArrowSvg = track(function ArrowSvg2({
+         ]
+       }
+     )
+-  ] });
++    ]
++  });
+ });
+ function ArrowClipPath({
+   radius,
+@@ -944,10 +970,12 @@ function ArrowheadDotDef() {
+ }
+ function ArrowheadCrossDef() {
+   const id = useSharedSafeId("arrowhead-cross");
+-  return /* @__PURE__ */ jsxs("marker", { id, className: "tl-arrow-hint", refX: "3.0", refY: "3.0", orient: "auto", children: [
++  return /* @__PURE__ */ jsxs("marker", {
++    id, className: "tl-arrow-hint", refX: "3.0", refY: "3.0", orient: "auto", children: [
+     /* @__PURE__ */ jsx("line", { x1: "1.5", y1: "1.5", x2: "4.5", y2: "4.5", strokeDasharray: "100%" }),
+     /* @__PURE__ */ jsx("line", { x1: "1.5", y1: "4.5", x2: "4.5", y2: "1.5", strokeDasharray: "100%" })
+-  ] });
++    ]
++  });
+ }
+ function anglesAreApproximatelyParallel(a, b, tolerance = 1e-4) {
+   const diff = Math.abs(a - b);
+diff --git a/dist-esm/lib/shapes/shared/RichTextLabel.mjs b/dist-esm/lib/shapes/shared/RichTextLabel.mjs
+index 5db7a2adf61005bbbf3767ab03aca4b1d7b7651d..86d2722e18cba69a7234e4f25f96008e383e5a19 100644
+--- a/dist-esm/lib/shapes/shared/RichTextLabel.mjs
++++ b/dist-esm/lib/shapes/shared/RichTextLabel.mjs
+@@ -108,16 +108,22 @@ const RichTextLabel = React.memo(function RichTextLabel2({
+             height: textHeight ? Math.ceil(textHeight) : void 0
+           },
+           children: [
+-            /* @__PURE__ */ jsx("div", { className: `${cssPrefix} tl-text tl-text-content`, dir: "auto", children: richText && /* @__PURE__ */ jsx(
++            /* @__PURE__ */ jsx("div", {
++            className: `${cssPrefix} tl-text tl-text-content`, dir: "auto", children: richText && /* @__PURE__ */ jsx(
+               "div",
+               {
+-                className: "tl-rich-text",
+-                "data-is-select-tool-active": selectToolActive,
+-                dangerouslySetInnerHTML: { __html: html || "" },
+-                onPointerDown: handlePointerDown,
+-                "data-is-ready-for-editing": isReadyForEditing
++                className: "tl-rich-text-wrapper",
++                style: { display: "flex", alignItems: "center", justifyContent: align === "middle" || align === "center" ? "center" : align },
++                children: /* @__PURE__ */ jsx("div", {
++                  className: "tl-rich-text",
++                  "data-is-select-tool-active": selectToolActive,
++                  dangerouslySetInnerHTML: { __html: html || "" },
++                  onPointerDown: handlePointerDown,
++                  "data-is-ready-for-editing": isReadyForEditing
++                })
+               }
+-            ) }),
++            )
++          }),
+             (isReadyForEditing || isSelected) && /* @__PURE__ */ jsx(
+               RichTextArea,
+               {
+diff --git a/dist-esm/lib/shapes/text/RichTextArea.mjs b/dist-esm/lib/shapes/text/RichTextArea.mjs
+index 832e700186dfdcdee10ea197e8f759e0d4368721..372dbfebfd34715455c2068a7a9a78246a3e7254 100644
+--- a/dist-esm/lib/shapes/text/RichTextArea.mjs
++++ b/dist-esm/lib/shapes/text/RichTextArea.mjs
+@@ -162,6 +162,10 @@ const RichTextArea = React.forwardRef(function RichTextArea2({
+       tabIndex: -1,
+       "data-testid": "rich-text-area",
+       className: "tl-rich-text tl-text tl-text-input",
++      // FIX: Safari WebKit bug - position:absolute + height:100% inside SVG foreignObject
++      // escapes the foreignObject and references the outer canvas (~408px).
++      // Inline style wins over any CSS rule and forces proper intrinsic sizing.
++      style: { position: 'relative', height: 'auto', width: '100%' },
+       onContextMenu: isEditing ? (e) => e.stopPropagation() : void 0,
+       onPointerDownCapture: (e) => e.stopPropagation(),
+       onTouchEnd: (e) => e.stopPropagation(),
+diff --git a/dist-esm/lib/shapes/text/TextShapeUtil.mjs b/dist-esm/lib/shapes/text/TextShapeUtil.mjs
+index 04a7fb52266d5eee5def132c7fae59aaecc8fe5c..b2a69fb1a8fbfbb2f7dcf024badaf3e331ad2230 100644
+--- a/dist-esm/lib/shapes/text/TextShapeUtil.mjs
++++ b/dist-esm/lib/shapes/text/TextShapeUtil.mjs
+@@ -127,10 +127,22 @@ class TextShapeUtil extends ShapeUtil {
+   }
+   toSvg(shape, ctx) {
+     const bounds = this.editor.getShapeGeometry(shape).bounds;
+-    const width = bounds.width / (shape.props.scale ?? 1);
+-    const height = bounds.height / (shape.props.scale ?? 1);
++    const isWebKit = typeof navigator !== 'undefined' &&
++      /AppleWebKit/.test(navigator.userAgent) &&
++      !/Chrome/.test(navigator.userAgent);
++    const webkitScale = isWebKit ? 1.5 : 1;
++    const originalWidth = bounds.width / (shape.props.scale ?? 1);
++    const originalHeight = bounds.height / (shape.props.scale ?? 1);
++    const width = originalWidth * webkitScale;
++    const height = originalHeight * webkitScale;
++    let xOffset = 0;
++    if (webkitScale !== 1) {
++      if (shape.props.textAlign === 'middle') xOffset = -(width - originalWidth) / 2;
++      else if (shape.props.textAlign === 'end') xOffset = -(width - originalWidth);
++    }
++    const yOffset = webkitScale !== 1 ? -(height - originalHeight) / 2 : 0;
+     const theme = getDefaultColorTheme(ctx);
+-    const exportBounds = new Box(0, 0, width, height);
++    const exportBounds = new Box(xOffset, yOffset, width, height);
+     return /* @__PURE__ */ jsx(
+       RichTextSVG,
+       {

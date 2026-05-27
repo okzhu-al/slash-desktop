@@ -1,0 +1,51 @@
+diff --git a/dist/tiptap-markdown.es.js b/dist/tiptap-markdown.es.js
+index da5639e4626c582c1836cdd62799f481104019c2..68b267a066ceafd535b4df5d56f8544ce95a8a73 100644
+--- a/dist/tiptap-markdown.es.js
++++ b/dist/tiptap-markdown.es.js
+@@ -102,17 +102,10 @@ function trimEnd(text, delim, from, to) {
+   };
+ }
+ function trimInline(text, delim, from, to) {
+-  let state = {
+-    text,
+-    from,
+-    to
+-  };
+-  state = trimStart(state.text, delim, state.from, state.to);
+-  state = trimEnd(state.text, delim, state.from, state.to);
+-  if (state.to - state.from < delim.length + 1) {
+-    state.text = state.text.substring(0, state.from) + state.text.substring(state.to + delim.length);
+-  }
+-  return state.text;
++  // PATCHED: Disabled CommonMark flanking rules for CJK compatibility
++  // Chinese/Japanese/Korean characters are not recognized as word boundaries
++  // by scanDelims, causing bold/italic marks to be incorrectly stripped.
++  return text;
+ }
+ class MarkdownSerializerState extends MarkdownSerializerState$1 {
+   constructor(nodes, marks, options) {
+diff --git a/src/util/markdown.js b/src/util/markdown.js
+index 47b3621752fed81ef248b5e08afa41edabb4e6fd..e75ff39b3185f26894981a9efe85866498e67d20 100644
+--- a/src/util/markdown.js
++++ b/src/util/markdown.js
+@@ -39,18 +39,6 @@ function trimEnd(text, delim, from, to) {
+ }
+ 
+ export function trimInline(text, delim, from, to) {
+-    let state = {
+-        text,
+-        from,
+-        to,
+-    }
+-
+-    state = trimStart(state.text, delim, state.from, state.to);
+-    state = trimEnd(state.text, delim, state.from, state.to);
+-
+-    if(state.to - state.from < delim.length + 1) {
+-        state.text = state.text.substring(0, state.from) + state.text.substring(state.to + delim.length);
+-    }
+-
+-    return state.text;
++    // PATCHED: Disabled CommonMark flanking rules for CJK compatibility
++    return text;
+ }

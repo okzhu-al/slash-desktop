@@ -1,0 +1,321 @@
+diff --git a/dist-cjs/lib/exports/getSvgJsx.js b/dist-cjs/lib/exports/getSvgJsx.js
+index f7e0f1ebb0f4e9131d39b16e0cb3d052315dc965..0224190c300ce2f06de6783f042eb093743d00b5 100644
+--- a/dist-cjs/lib/exports/getSvgJsx.js
++++ b/dist-cjs/lib/exports/getSvgJsx.js
+@@ -88,9 +88,22 @@ function getExportDefaultBounds(editor, renderingShapes, padding, singleFrameSha
+   let isBoundedByContainer = false;
+   let bbox = null;
+   for (const { id } of renderingShapes) {
+-    const maskedPageBounds = editor.getShapeMaskedPageBounds(id);
++    let maskedPageBounds = editor.getShapeMaskedPageBounds(id);
+     if (!maskedPageBounds) continue;
+     const shape = editor.getShape(id);
++
++    // TIER 12 FIX: Expand text bounds for WebKit metric desync compensation
++    const isWebKit = typeof navigator !== 'undefined' && /WebKit/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
++    if (isWebKit && (shape.type === 'text' || shape.type === 'arrow' || shape.type === 'note' || shape.type === 'geo')) {
++      maskedPageBounds = maskedPageBounds.clone();
++      const originalW = maskedPageBounds.width;
++      const originalH = maskedPageBounds.height;
++      maskedPageBounds.width *= 1.5;
++      maskedPageBounds.height *= 1.5;
++      maskedPageBounds.x -= (maskedPageBounds.width - originalW) / 2;
++      maskedPageBounds.y -= (maskedPageBounds.height - originalH) / 2;
++    }
++
+     const isContainer = editor.getShapeUtil(shape).isExportBoundsContainer(shape);
+     if (bbox) {
+       if (isContainer && import_Box.Box.ContainsApproximately(maskedPageBounds, bbox)) {
+@@ -202,12 +215,14 @@ function SvgExport({
+             if (shapeMask) {
+               shapeDefs[shapeMaskId] = {
+                 pending: false,
+-                element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("clipPath", { id: shapeMaskId, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-                  "path",
+-                  {
+-                    d: `M${shapeMask.map(({ x, y }) => `${x / scale2},${y / scale2}`).join("L")}Z`
+-                  }
+-                ) })
++                element: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("clipPath", {
++                  id: shapeMaskId, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++                    "path",
++                    {
++                      d: `M${shapeMask.map(({ x, y }) => `${x / scale2},${y / scale2}`).join("L")}Z`
++                    }
++                  )
++                })
+               };
+             }
+             if (toSvgResult) {
+@@ -318,27 +333,31 @@ function SvgExport({
+       backgroundColor = theme.solid;
+     }
+   }
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_SvgExportContext.SvgExportContextProvider, { editor, context: exportContext, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+-    "svg",
+-    {
+-      preserveAspectRatio,
+-      direction: "ltr",
+-      width: bbox.width * scale,
+-      height: bbox.height * scale,
+-      viewBox: `${bbox.minX} ${bbox.minY} ${bbox.width} ${bbox.height}`,
+-      strokeLinecap: "round",
+-      strokeLinejoin: "round",
+-      style: { backgroundColor },
+-      "data-color-mode": isDarkMode ? "dark" : "light",
+-      className: `tl-container tl-theme__force-sRGB ${isDarkMode ? "tl-theme__dark" : "tl-theme__light"}`,
+-      children: [
+-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", { children: Object.entries(defsById).map(
+-          ([key, def]) => def.pending ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.Fragment, { children: def.element }, key)
+-        ) }),
+-        shapeElements
+-      ]
+-    }
+-  ) });
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_SvgExportContext.SvgExportContextProvider, {
++    editor, context: exportContext, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
++      "svg",
++      {
++        preserveAspectRatio,
++        direction: "ltr",
++        width: bbox.width * scale,
++        height: bbox.height * scale,
++        viewBox: `${bbox.minX} ${bbox.minY} ${bbox.width} ${bbox.height}`,
++        strokeLinecap: "round",
++        strokeLinejoin: "round",
++        style: { backgroundColor },
++        "data-color-mode": isDarkMode ? "dark" : "light",
++        className: `tl-container tl-theme__force-sRGB ${isDarkMode ? "tl-theme__dark" : "tl-theme__light"}`,
++        children: [
++        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("defs", {
++          children: Object.entries(defsById).map(
++            ([key, def]) => def.pending ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.Fragment, { children: def.element }, key)
++          )
++        }),
++          shapeElements
++        ]
++      }
++    )
++  });
+ }
+ function ForeignObjectShape({
+   shape,
+@@ -355,30 +374,32 @@ function ForeignObjectShape({
+   const bounds = editor.getShapeGeometry(shape.id).bounds;
+   const width = Math.max(bounds.width, 1);
+   const height = Math.max(bounds.height, 1);
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ErrorBoundary.ErrorBoundary, { fallback: () => null, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-    "foreignObject",
+-    {
+-      x: bbox.minX,
+-      y: bbox.minY,
+-      width: bbox.w,
+-      height: bbox.h,
+-      className: "tl-shape-foreign-object tl-export-embed-styles",
+-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+-        "div",
+-        {
+-          className,
+-          "data-shape-type": shape.type,
+-          style: {
+-            clipPath: editor.getShapeClipPath(shape.id),
+-            transform: transform.toCssString(),
+-            width,
+-            height,
+-            opacity
+-          },
+-          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Component, { shape, util })
+-        }
+-      )
+-    }
+-  ) });
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ErrorBoundary.ErrorBoundary, {
++    fallback: () => null, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++      "foreignObject",
++      {
++        x: bbox.minX,
++        y: bbox.minY,
++        width: bbox.w,
++        height: bbox.h,
++        className: "tl-shape-foreign-object tl-export-embed-styles",
++        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
++          "div",
++          {
++            className,
++            "data-shape-type": shape.type,
++            style: {
++              clipPath: editor.getShapeClipPath(shape.id),
++              transform: transform.toCssString(),
++              width,
++              height,
++              opacity
++            },
++            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Component, { shape, util })
++          }
++        )
++      }
++    )
++  });
+ }
+ //# sourceMappingURL=getSvgJsx.js.map
+diff --git a/dist-esm/lib/exports/getSvgJsx.mjs b/dist-esm/lib/exports/getSvgJsx.mjs
+index bdcc27e613c25ae6f5bdd6a75ad58b46453cf41d..da18643a417d5c5878074c356c3c960f448480de 100644
+--- a/dist-esm/lib/exports/getSvgJsx.mjs
++++ b/dist-esm/lib/exports/getSvgJsx.mjs
+@@ -75,9 +75,22 @@ function getExportDefaultBounds(editor, renderingShapes, padding, singleFrameSha
+   let isBoundedByContainer = false;
+   let bbox = null;
+   for (const { id } of renderingShapes) {
+-    const maskedPageBounds = editor.getShapeMaskedPageBounds(id);
++    let maskedPageBounds = editor.getShapeMaskedPageBounds(id);
+     if (!maskedPageBounds) continue;
+     const shape = editor.getShape(id);
++
++    // TIER 12 FIX: Expand text bounds for WebKit metric desync compensation
++    const isWebKit = typeof navigator !== 'undefined' && /WebKit/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
++    if (isWebKit && (shape.type === 'text' || shape.type === 'arrow' || shape.type === 'note' || shape.type === 'geo')) {
++      maskedPageBounds = maskedPageBounds.clone();
++      const originalW = maskedPageBounds.width;
++      const originalH = maskedPageBounds.height;
++      maskedPageBounds.width *= 1.5;
++      maskedPageBounds.height *= 1.5;
++      maskedPageBounds.x -= (maskedPageBounds.width - originalW) / 2;
++      maskedPageBounds.y -= (maskedPageBounds.height - originalH) / 2;
++    }
++
+     const isContainer = editor.getShapeUtil(shape).isExportBoundsContainer(shape);
+     if (bbox) {
+       if (isContainer && Box.ContainsApproximately(maskedPageBounds, bbox)) {
+@@ -189,12 +202,14 @@ function SvgExport({
+             if (shapeMask) {
+               shapeDefs[shapeMaskId] = {
+                 pending: false,
+-                element: /* @__PURE__ */ jsx("clipPath", { id: shapeMaskId, children: /* @__PURE__ */ jsx(
+-                  "path",
+-                  {
+-                    d: `M${shapeMask.map(({ x, y }) => `${x / scale2},${y / scale2}`).join("L")}Z`
+-                  }
+-                ) })
++                element: /* @__PURE__ */ jsx("clipPath", {
++                  id: shapeMaskId, children: /* @__PURE__ */ jsx(
++                    "path",
++                    {
++                      d: `M${shapeMask.map(({ x, y }) => `${x / scale2},${y / scale2}`).join("L")}Z`
++                    }
++                  )
++                })
+               };
+             }
+             if (toSvgResult) {
+@@ -305,27 +320,31 @@ function SvgExport({
+       backgroundColor = theme.solid;
+     }
+   }
+-  return /* @__PURE__ */ jsx(SvgExportContextProvider, { editor, context: exportContext, children: /* @__PURE__ */ jsxs(
+-    "svg",
+-    {
+-      preserveAspectRatio,
+-      direction: "ltr",
+-      width: bbox.width * scale,
+-      height: bbox.height * scale,
+-      viewBox: `${bbox.minX} ${bbox.minY} ${bbox.width} ${bbox.height}`,
+-      strokeLinecap: "round",
+-      strokeLinejoin: "round",
+-      style: { backgroundColor },
+-      "data-color-mode": isDarkMode ? "dark" : "light",
+-      className: `tl-container tl-theme__force-sRGB ${isDarkMode ? "tl-theme__dark" : "tl-theme__light"}`,
+-      children: [
+-        /* @__PURE__ */ jsx("defs", { children: Object.entries(defsById).map(
+-          ([key, def]) => def.pending ? null : /* @__PURE__ */ jsx(Fragment, { children: def.element }, key)
+-        ) }),
+-        shapeElements
+-      ]
+-    }
+-  ) });
++  return /* @__PURE__ */ jsx(SvgExportContextProvider, {
++    editor, context: exportContext, children: /* @__PURE__ */ jsxs(
++      "svg",
++      {
++        preserveAspectRatio,
++        direction: "ltr",
++        width: bbox.width * scale,
++        height: bbox.height * scale,
++        viewBox: `${bbox.minX} ${bbox.minY} ${bbox.width} ${bbox.height}`,
++        strokeLinecap: "round",
++        strokeLinejoin: "round",
++        style: { backgroundColor },
++        "data-color-mode": isDarkMode ? "dark" : "light",
++        className: `tl-container tl-theme__force-sRGB ${isDarkMode ? "tl-theme__dark" : "tl-theme__light"}`,
++        children: [
++        /* @__PURE__ */ jsx("defs", {
++          children: Object.entries(defsById).map(
++            ([key, def]) => def.pending ? null : /* @__PURE__ */ jsx(Fragment, { children: def.element }, key)
++          )
++        }),
++          shapeElements
++        ]
++      }
++    )
++  });
+ }
+ function ForeignObjectShape({
+   shape,
+@@ -342,31 +361,33 @@ function ForeignObjectShape({
+   const bounds = editor.getShapeGeometry(shape.id).bounds;
+   const width = Math.max(bounds.width, 1);
+   const height = Math.max(bounds.height, 1);
+-  return /* @__PURE__ */ jsx(ErrorBoundary, { fallback: () => null, children: /* @__PURE__ */ jsx(
+-    "foreignObject",
+-    {
+-      x: bbox.minX,
+-      y: bbox.minY,
+-      width: bbox.w,
+-      height: bbox.h,
+-      className: "tl-shape-foreign-object tl-export-embed-styles",
+-      children: /* @__PURE__ */ jsx(
+-        "div",
+-        {
+-          className,
+-          "data-shape-type": shape.type,
+-          style: {
+-            clipPath: editor.getShapeClipPath(shape.id),
+-            transform: transform.toCssString(),
+-            width,
+-            height,
+-            opacity
+-          },
+-          children: /* @__PURE__ */ jsx(Component, { shape, util })
+-        }
+-      )
+-    }
+-  ) });
++  return /* @__PURE__ */ jsx(ErrorBoundary, {
++    fallback: () => null, children: /* @__PURE__ */ jsx(
++      "foreignObject",
++      {
++        x: bbox.minX,
++        y: bbox.minY,
++        width: bbox.w,
++        height: bbox.h,
++        className: "tl-shape-foreign-object tl-export-embed-styles",
++        children: /* @__PURE__ */ jsx(
++          "div",
++          {
++            className,
++            "data-shape-type": shape.type,
++            style: {
++              clipPath: editor.getShapeClipPath(shape.id),
++              transform: transform.toCssString(),
++              width,
++              height,
++              opacity
++            },
++            children: /* @__PURE__ */ jsx(Component, { shape, util })
++          }
++        )
++      }
++    )
++  });
+ }
+ export {
+   getExportDefaultBounds,

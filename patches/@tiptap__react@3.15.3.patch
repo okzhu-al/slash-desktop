@@ -1,0 +1,23 @@
+diff --git a/dist/index.js b/dist/index.js
+index 1234567..abcdefg 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -676,9 +676,12 @@
+       this.element.classList.add(...className.split(" "));
+     }
+     if (this.editor.isInitialized) {
+-      flushSync(() => {
+-        this.render();
+-      });
++      // Avoid flushSync — it triggers console.error when called during
++      // React's commit phase (NodeView creation from ProseMirror state updates).
++      // queueMicrotask is safe and matches TipTap's own fallback path.
++      queueMicrotask(() => {
++        if (this.destroyed) {
++          return;
++        }
++        this.render();
++      });
+     } else {
+       queueMicrotask(() => {
+         if (this.destroyed) {

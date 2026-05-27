@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Knowledge Graph 最终配色方案 — 3档·黑白节点·彩色连线</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f0f2f5; color: #1a1a1a; padding: 32px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+  .row { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 32px; }
+  .card {
+    flex: 1; min-width: 460px; background: white; border-radius: 16px; padding: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .card.dark { background: #0d0d0d; color: #e5e5e5; }
+  .card-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .card.dark .card-title { color: #e5e5e5; }
+  .card-desc { font-size: 11px; color: #999; margin-bottom: 16px; }
+  .card.dark .card-desc { color: #555; }
+
+  .cat { margin-bottom: 20px; }
+  .cat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #bbb; margin-bottom: 8px; }
+  .card.dark .cat-label { color: #555; }
+
+  .tier-row { display: flex; align-items: center; gap: 10px; height: 36px; margin-bottom: 4px; }
+  .tier-label { width: 110px; font-size: 10px; color: #999; text-align: right; flex-shrink: 0; }
+  .card.dark .tier-label { color: #555; }
+
+  .hub { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: white; flex-shrink: 0; }
+  .node {
+    width: 110px; height: 28px; border-radius: 5px; display: flex; align-items: center;
+    font-size: 10px; font-weight: 600; flex-shrink: 0; position: relative; padding-left: 10px;
+  }
+  .node .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 5px 0 0 5px; }
+  .edge-line { flex: 1; height: 1px; flex-shrink: 0; }
+  .color-hex { font-size: 9px; color: #ccc; width: 80px; flex-shrink: 0; font-family: monospace; }
+  .card.dark .color-hex { color: #444; }
+
+  /* Graph preview */
+  .preview { position: relative; width: 100%; height: 220px; border-radius: 10px; margin-top: 12px; overflow: hidden; }
+  .preview.light-bg { background: #f8f9fb; }
+  .preview.dark-bg { background: #111; }
+  .pn { position: absolute; border-radius: 5px; display: flex; align-items: center; font-size: 10px; font-weight: 600; height: 26px; padding: 0 10px; }
+  .pn .pb { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 5px 0 0 5px; }
+  .ph { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: white; }
+  .pl { position: absolute; height: 1px; transform-origin: 0 0; }
+</style>
+</head>
+<body>
+
+<h1>最终配色方案 — 3档 · 黑白节点 · 彩色连线 · 零透明度</h1>
+<p class="subtitle">选中+1跳 = 最亮Tier1 · 2跳 = Tier2 · ≥3跳/未选中 = Tier3（最暗） · 线宽1px · 节点纯黑白</p>
+
+<div id="app"></div>
+
+<script>
+const CATS = {
+  project:  { label: 'Project',  base: [142, 71, 45] },  // #22c55e
+  area:     { label: 'Area',     base: [217, 91, 60] },  // #3b82f6
+  resource: { label: 'Resource', base: [271, 91, 65] },  // #a855f7
+  inbox:    { label: 'Inbox',    base: [38, 92, 50] },   // #f59e0b
+  archive:  { label: 'Archive',  base: [220, 9, 46] },   // #6b7280
+};
+
+const TIERS = [
+  { label: '选中 + 1跳 (Tier1)', key: 't1' },
+  { label: '2跳 (Tier2)',        key: 't2' },
+  { label: '≥3跳 / 未选中 (Tier3)', key: 't3' },
+];
+
+function hsl(h,s,l) { return `hsl(${h}, ${s}%, ${l}%)`; }
+
+// Light mode: 3 tiers from vivid → washed out
+function lightEdge(h, s, l) {
+  return [
+    hsl(h, s, l),                                    // T1: full color
+    hsl(h, Math.max(s - 20, 25), Math.min(l + 20, 75)), // T2: lighter
+    hsl(h, Math.max(s - 45, 10), Math.min(l + 35, 88)), // T3: very light
+  ];
+}
+// Dark mode: 3 tiers from bright → dim
+function darkEdge(h, s, l) {
+  return [
+    hsl(h, s, Math.min(l + 8, 62)),                    // T1: bright
+    hsl(h, Math.max(s - 15, 20), Math.max(l - 10, 30)), // T2: medium
+    hsl(h, Math.max(s - 35, 8), Math.max(l - 25, 16)),  // T3: very dim
+  ];
+}
+
+// Node colors (black/white, no transparency)
+const NODE_LIGHT = [
+  { bg: '#ffffff', text: '#1a1a1a', shadow: '0 1px 4px rgba(0,0,0,0.10)' },  // T1
+  { bg: '#f5f5f5', text: '#777777', shadow: '0 1px 3px rgba(0,0,0,0.06)' },  // T2
+  { bg: '#eeeeee', text: '#aaaaaa', shadow: '0 1px 2px rgba(0,0,0,0.04)' },  // T3
+];
+const NODE_DARK = [
+  { bg: '#232323', text: '#f0f0f0', shadow: '0 1px 4px rgba(0,0,0,0.5)' },   // T1
+  { bg: '#1a1a1a', text: '#888888', shadow: '0 1px 3px rgba(0,0,0,0.4)' },   // T2
+  { bg: '#141414', text: '#555555', shadow: '0 1px 2px rgba(0,0,0,0.3)' },   // T3
+];
+
+function renderCard(parent, isDark) {
+  const card = document.createElement('div');
+  card.className = isDark ? 'card dark' : 'card';
+  card.innerHTML = `
+    <div class="card-title">${isDark ? 'Dark Mode' : 'Light Mode'}</div>
+    <div class="card-desc">黑白节点 · 彩色连线/Hub · 3档亮度 · 零透明度</div>
+  `;
+
+  Object.entries(CATS).forEach(([key, cat]) => {
+    const [h, s, l] = cat.base;
+    const edgeTiers = isDark ? darkEdge(h, s, l) : lightEdge(h, s, l);
+    const nodeTiers = isDark ? NODE_DARK : NODE_LIGHT;
+
+    const catDiv = document.createElement('div');
+    catDiv.className = 'cat';
+    catDiv.innerHTML = `<div class="cat-label">${cat.label}</div>`;
+
+    TIERS.forEach((tier, i) => {
+      const n = nodeTiers[i];
+      const e = edgeTiers[i];
+      const row = document.createElement('div');
+      row.className = 'tier-row';
+      row.innerHTML = `
+        <div class="tier-label">${tier.label}</div>
+        <div class="hub" style="background:${e};">3</div>
+        <div class="node" style="background:${n.bg}; color:${n.text}; box-shadow:${n.shadow};">
+          <div class="bar" style="background:${e};"></div>
+          笔记标题
+        </div>
+        <div class="edge-line" style="background:${e};"></div>
+        <div class="color-hex">${e}</div>
+      `;
+      catDiv.appendChild(row);
+    });
+    card.appendChild(catDiv);
+  });
+
+  // Mini graph preview
+  const previewBg = isDark ? 'dark-bg' : 'light-bg';
+  const preview = document.createElement('div');
+  preview.className = `preview ${previewBg}`;
+
+  const [h, s, l] = CATS.area.base;
+  const eTiers = isDark ? darkEdge(h, s, l) : lightEdge(h, s, l);
+  const nTiers = isDark ? NODE_DARK : NODE_LIGHT;
+
+  const hubX = 200, hubY = 100;
+  const nodes = [
+    { x: 90,  y: 15,  label: '选中笔记',  tier: 0 },
+    { x: 310, y: 30,  label: '1跳笔记',   tier: 0 },
+    { x: 320, y: 130, label: '2跳笔记A',  tier: 1 },
+    { x: 40,  y: 155, label: '2跳笔记B',  tier: 1 },
+    { x: 10,  y: 75,  label: '≥3跳',      tier: 2 },
+    { x: 280, y: 190, label: '未选中',     tier: 2 },
+  ];
+
+  // Lines
+  nodes.forEach(n => {
+    const cx = n.x + 50, cy = n.y + 13;
+    const dx = cx - hubX, dy = cy - hubY;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    const line = document.createElement('div');
+    line.className = 'pl';
+    line.style.cssText = `left:${hubX}px;top:${hubY}px;width:${len}px;background:${eTiers[n.tier]};transform:rotate(${angle}deg);`;
+    preview.appendChild(line);
+  });
+
+  // Hub
+  const hub = document.createElement('div');
+  hub.className = 'ph';
+  hub.style.cssText = `left:${hubX-14}px;top:${hubY-14}px;width:28px;height:28px;background:${eTiers[0]};`;
+  hub.textContent = '6';
+  preview.appendChild(hub);
+
+  // Nodes
+  nodes.forEach(n => {
+    const nd = document.createElement('div');
+    nd.className = 'pn';
+    nd.style.cssText = `left:${n.x}px;top:${n.y}px;background:${nTiers[n.tier].bg};color:${nTiers[n.tier].text};box-shadow:${nTiers[n.tier].shadow};`;
+    nd.innerHTML = `<div class="pb" style="background:${eTiers[n.tier]};"></div><span style="margin-left:6px;">${n.label}</span>`;
+    preview.appendChild(nd);
+  });
+
+  card.appendChild(preview);
+  parent.appendChild(card);
+}
+
+const app = document.getElementById('app');
+const row = document.createElement('div');
+row.className = 'row';
+renderCard(row, false);
+renderCard(row, true);
+app.appendChild(row);
+</script>
+</body>
+</html>

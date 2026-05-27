@@ -1,0 +1,87 @@
+# dependencies
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# build outputs
+dist/
+build/
+target/
+**/target/
+src-tauri/target/
+dist-ssr
+*.local
+
+# logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+build-error.log
+undo_debug.log
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.mobileprovision
+secrets/
+
+# Tauri signing / updater
+tauri_private.key
+*.sig
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# temp / caches
+tmp/
+temp/
+tmp_*/
+temp_*/
+.cache/
+tmp_pm/
+
+# local test artifacts
+test_path/
+temp_skip/
+test/
+
+# ignore server data folder
+/apps/server/data/
+
+# Docker runtime data
+.docker-data/
+
+# SQLite databases and WAL logs
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Python build and testing caches
+.eggs/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/

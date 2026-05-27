@@ -1,0 +1,503 @@
+/**
+ * Drawing Extension Styles
+ * 
+ * Styles for the inline infinite canvas block.
+ * Dark mode is handled by CSS variables and Tldraw's built-in theme.
+ */
+
+/**
+ * LXGW WenKai (霞鹜文楷) - Chinese handwriting font
+ * Loaded via @font-face for Tldraw canvas rendering.
+ * FontManager embeds WOFF2 (7.9MB) into SVG exports for toImage() rendering.
+ */
+@font-face {
+    font-family: 'LXGW WenKai';
+    src: url('/fonts/LXGWWenKai-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: block;
+}
+
+/**
+ * Chinese font fallback for Tldraw
+ */
+.tl-container {
+    --tl-font-draw: 'tldraw_draw', 'LXGW WenKai', cursive !important;
+    --tl-font-sans: 'tldraw_sans', 'LXGW WenKai', 'PingFang SC', 'Microsoft YaHei', sans-serif !important;
+    --tl-font-serif: 'tldraw_serif', 'Noto Serif SC', 'STSong', serif !important;
+    --tl-font-mono: 'tldraw_mono', 'SF Mono', 'Menlo', monospace !important;
+}
+
+/* FIX: Prevent ProseMirror Custom Highlight API from bleeding into drawing container */
+.drawing-container::highlight(editor-selection),
+.drawing-container *::highlight(editor-selection) {
+    background-color: transparent !important;
+    color: inherit !important;
+}
+
+/* FIX: Tldraw internal text editing selection overrides.
+   By default, Tldraw sets the text selection foreground color to pure white (--tl-color-selected-contrast).
+   The user explicitly requested the text to NOT change to white. We override only the text color. 
+   We leave the background property alone so Tldraw's native CSS handles the blue highlight natively. */
+.drawing-container .tl-text-input::selection {
+    color: var(--color-text-primary, #1d1d1d) !important;
+    -webkit-text-fill-color: var(--color-text-primary, #1d1d1d) !important;
+    text-shadow: none !important;
+}
+
+/* FIX: Restrict ProseMirror native DOM selection bleed.
+   We physically block text selection on all static SVG nodes so ProseMirror can't paint them blue.
+   The active Tldraw textarea intrinsically bypasses this for its own content. */
+.drawing-container {
+    user-select: none;
+    -webkit-user-select: none;
+}
+.drawing-container .tl-text-input {
+    user-select: auto;
+    -webkit-user-select: auto;
+}
+
+/* FIX: Prevent Tailwind `.prose` from destroying Tldraw text measurements */
+.tl-container,
+.tl-container p,
+.tl-container div,
+.tl-container span,
+.tl-container textarea,
+.tl-container input,
+.tl-container [contenteditable] {
+    max-width: none !important; /* Overrides Tailwind .prose max-w-65ch */
+    outline: none !important;   /* Kill default browser or Tailwind focus rings */
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 
+ * FIX: Hide native Tldraw SVG shape selection indicator during text editing.
+ * Due to ProseMirror/Tailwind typographic differences, Tldraw's `measureText` 
+ * often computes a smaller `foreignObject` box than the rendered HTML text.
+ * Hiding the blue `.tl-shape-indicator` while editing prevents the text from 
+ * visually overflowing a tight, misaligned blue bounding box.
+ */
+.tl-container .tl-canvas .tl-shape-indicator {
+    display: none !important;
+}
+
+/* Container */
+/*
+ * FIX: Prevent native drag-and-drop from Tldraw canvas.
+ * Drawing arrows triggers mouse drag gestures that macOS/Tauri interprets
+ * as native drag-and-drop, generating a window screenshot (drag ghost image)
+ * and causing ~2s freeze. -webkit-user-drag: none prevents WebKit from
+ * initiating native drag at the engine level.
+ */
+.tldraw-editor-container,
+.tldraw-editor-container * {
+    -webkit-user-drag: none;
+}
+
+.drawing-container {
+    position: relative;
+    margin: 1rem 0;
+    border-radius: 0;
+    overflow: visible;
+    background: var(--color-bg-secondary, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    transition: box-shadow 0.2s, border-color 0.2s;
+    z-index: auto;
+}
+
+.drawing-container.is-selected {
+    border-color: var(--color-primary, #6366f1);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.drawing-container.is-editing,
+.drawing-container.is-editing.ProseMirror-selectednode {
+    border-color: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    /* isolation: isolate; */
+    pointer-events: auto;
+}
+
+/* Content area */
+.drawing-content {
+    width: 100%;
+    min-height: 200px;
+    position: relative;
+}
+
+/* Placeholder for new/empty drawing */
+.drawing-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    color: var(--color-text-muted, #94a3b8);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.drawing-placeholder:hover {
+    background-color: rgba(99, 102, 241, 0.05);
+}
+
+.drawing-placeholder-icon {
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+.drawing-placeholder-text {
+    font-size: 0.875rem;
+    opacity: 0.7;
+}
+
+/* Preview (view mode) */
+.drawing-preview {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.drawing-preview img {
+    max-width: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.drawing-preview-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.15);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.drawing-preview:hover .drawing-preview-overlay {
+    opacity: 1;
+}
+
+/* Resize handle */
+.drawing-resize-handle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 12px;
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.drawing-resize-grip {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border, #cbd5e1);
+    transition: background-color 0.2s;
+}
+
+.drawing-resize-handle:hover .drawing-resize-grip {
+    background: var(--color-primary, #6366f1);
+}
+
+/* Loading state */
+.drawing-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--color-text-muted, #94a3b8);
+    gap: 0.5rem;
+}
+
+.drawing-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--color-border, #e2e8f0);
+    border-top-color: var(--color-primary, #6366f1);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Tldraw Editor Container */
+.tldraw-editor-container {
+    width: 100%;
+    background: white;
+    position: relative;  /* Positioning context for .tldraw-header */
+    overflow: visible !important;  /* FIX: 允许 Tooltip、Popper 溢出画板可视区域渲染，防范边缘遮挡 */
+}
+
+.tldraw-editor-container.is-fullscreen {
+    position: fixed;
+    top: 32px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    border-radius: 0;
+    height: calc(100vh - 32px);
+    overflow: hidden !important;  /* FIX: 全屏模式下强制裁剪，避免出现滚动条 */
+}
+
+/* FIX: Hide editor status bar (word/link count) when Tldraw is fullscreen.
+   The status bar floats at the bottom of the editor view and peeks through
+   the fixed-position fullscreen canvas overlay. */
+body:has(.tldraw-editor-container.is-fullscreen) .editor-status-bar {
+    display: none !important;
+}
+
+/* Header overlay - floats inside the canvas at the top */
+.tldraw-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    height: 30px;
+    gap: 6px;
+    z-index: 100;  /* Above tldraw canvas, below menus */
+    pointer-events: none;  /* Let clicks pass through to canvas */
+}
+
+.tldraw-header > * {
+    pointer-events: auto;  /* Re-enable clicks on buttons */
+}
+
+/* Push Tldraw's style panel (color palette) below the header to avoid overlap */
+.tldraw-editor-container .tlui-style-panel__wrapper {
+    top: 36px !important;
+}
+
+/* Tldraw Toolbar - Compact */
+.tldraw-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    height: 30px;
+    background: var(--color-bg-tertiary, #f1f5f9);
+    border: 1px solid var(--color-border, #e2e8f0);
+    margin: -1px -1px 0 -1px;
+    gap: 6px;
+}
+
+.tldraw-toolbar-spacer {
+    flex: 1;
+}
+
+.tldraw-toolbar-hint {
+    font-size: 0.7rem;
+    color: var(--color-text-muted, #94a3b8);
+    opacity: 0.8;
+}
+
+/* Icon Buttons */
+.tldraw-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary, #64748b);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tldraw-icon-btn:hover {
+    background: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
+    color: var(--color-text, #334155);
+}
+
+.tldraw-icon-btn:active {
+    transform: scale(0.95);
+}
+
+.tldraw-icon-btn-cancel:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.tldraw-icon-btn-save {
+    background: var(--color-primary, #6366f1);
+    color: white;
+}
+
+.tldraw-icon-btn-save:hover {
+    background: var(--color-primary-hover, #4f46e5);
+    color: white;
+}
+
+/* Legacy text buttons (kept for compatibility) */
+.tldraw-btn {
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+}
+
+.tldraw-btn-cancel {
+    background: var(--color-bg-secondary, #e2e8f0);
+    color: var(--color-text, #475569);
+}
+
+.tldraw-btn-cancel:hover {
+    background: var(--color-bg-tertiary, #cbd5e1);
+}
+
+.tldraw-btn-save {
+    background: var(--color-primary, #6366f1);
+    color: white;
+}
+
+.tldraw-btn-save:hover {
+    background: var(--color-primary-hover, #4f46e5);
+}
+
+/* Tldraw Canvas */
+.tldraw-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 300px;
+    overflow: visible;
+}
+
+.tldraw-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 100;
+    color: var(--color-text-muted, #94a3b8);
+    font-size: 0.875rem;
+}
+
+.tldraw-canvas .tl-container {
+    border-radius: 0;
+}
+
+/* Tldraw's floating UI (popovers, menus, tooltips) */
+/* Tldraw 浮动 UI 的层级提升，严格限制在 Tldraw Portal 或 Tldraw 容器内，防范全局干扰（如斜杠命令菜单） */
+[data-radix-popper-content-wrapper]:has([class*="tl-"]),
+[data-radix-popper-content-wrapper]:has([class*="tlui-"]),
+.tl-container [class*="tlui-popover"],
+.tl-container [class*="tlui-menu"],
+.tl-container [class*="tlui-context-menu"],
+.tl-container .tlui-popover__content,
+.tl-container .tlui-menu,
+.tl-container .tlui-actions-menu {
+    z-index: 99999 !important;
+    pointer-events: auto !important;
+}
+
+/* Tldraw 专属 Tooltip 类名全局层级提升 */
+[class*="tlui-tooltip"],
+.tlui-button__hint {
+    z-index: 100000 !important;
+    pointer-events: none !important;
+}
+
+/* 通用属性选择器仍进行隔离，防范全局非 Tldraw 的 Tooltip 被误伤 */
+.tl-container [role="tooltip"],
+.tl-container [data-state="delayed-open"],
+.tl-container [data-state="instant-open"],
+[data-radix-popper-content-wrapper]:has([class*="tl-"]) [role="tooltip"],
+[data-radix-popper-content-wrapper]:has([class*="tl-"]) [data-state="instant-open"] {
+    z-index: 100000 !important;
+    pointer-events: none !important;
+}
+
+.tldraw-editor-container.is-fullscreen [data-radix-popper-content-wrapper],
+.tldraw-editor-container.is-fullscreen [class*="tlui-popover"],
+.tldraw-editor-container.is-fullscreen [class*="tlui-menu"] {
+    z-index: 100001 !important;
+}
+
+/* Hide non-functional edit-link button */
+button[data-testid="actions-menu.edit-link"] {
+    display: none !important;
+}
+
+/*
+ * FIX: Safari WebKit SVG foreignObject caret displacement & Multiline Truncation
+ *
+ * Problem: WebKit inflates contenteditable inside SVG foreignObject to ~299px.
+ * Using `max-height: 0` + `overflow: hidden` clipped multiline text on hitting Enter.
+ * Using `max-height: max-content` brought the 299px inflation bug back.
+ *
+ * Solution:
+ *   height: 100%         → Strictly anchors the wrapper to the explicit `<foreignObject height="...">`
+ *                          set dynamically by Tldraw. This starves WebKit's 299px inflation bug.
+ *   overflow: visible    → Prevents bounding box text cropping during mid-render calculations.
+ *   align-items: flex-start → Prevents vertical bouncing.
+ */
+.tl-container .tl-shape .tl-text-content__wrapper {
+    height: 100% !important;
+    overflow: visible !important;
+    align-items: flex-start !important;
+}
+
+/*
+ * Auxiliary: Normalize ProseMirror height inside all text wrappers.
+ */
+.tl-container .tl-text-content__wrapper .tiptap.ProseMirror {
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+/* Prevent Tooltip float from being clipped by the style panel itself */
+.tl-container .tlui-style-panel,
+.tl-container .tlui-style-panel__wrapper,
+.tl-container .tlui-style-panel__content {
+    overflow: visible !important;
+}
+
+/* Offset Tldraw's helper buttons (e.g. crop toolbar) upward to prevent blocking top resize/crop handles */
+.tl-container .tlui-helper-buttons,
+.tl-container [class*="tlui-helper-buttons"],
+.tl-container .tlui-crop-panel,
+.tl-container [class*="crop-panel"] {
+    margin-top: -16px !important;
+}
+
+
+

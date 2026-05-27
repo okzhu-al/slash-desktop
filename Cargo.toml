@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "apps/desktop/src-tauri",
+    "packages/slash-core",
+    "packages/slash-sync-proto"
+]
+resolver = "2"

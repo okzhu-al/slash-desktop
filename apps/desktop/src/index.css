@@ -1,0 +1,1669 @@
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+/* ── CJK 简体中文字体强制绑定 ──
+   macOS 等宽字体不含 CJK，系统回退会选择繁体/日文字体。
+   通过 @font-face + unicode-range 创建组合字体，确保 CJK 走 PingFang SC。 */
+@theme {
+  --font-sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Georgia", serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace;
+
+  /* Klein Blue Primary Theme (#002FA8) mapped to indigo */
+  --color-indigo-50: #eef4ff;
+  --color-indigo-100: #d9e6ff;
+  --color-indigo-200: #bcccff;
+  --color-indigo-300: #8faeff;
+  --color-indigo-400: #5a85ff;
+  --color-indigo-500: #002FA8;
+  --color-indigo-600: #002896;
+  --color-indigo-700: #001f78;
+  --color-indigo-800: #00175a;
+  --color-indigo-900: #001040;
+  --color-indigo-950: #000826;
+}
+
+@layer base {
+  html {
+    @apply font-sans antialiased tabular-nums slashed-zero;
+    font-feature-settings: "cv10" 1, "calt" 1; /* cv10 是 Inter 特有的更适合代码的 'g' 等字形 */
+    font-weight: 400;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── WebKit CJK 简体字形强制 ──
+     macOS WKWebView 会根据系统语言选择 CJK 字形变体。
+     -webkit-locale 直接控制 WebKit 文本引擎的 locale，优先级高于系统设置。 */
+  html[lang="zh-CN"] {
+    -webkit-locale: "zh_CN";
+  }
+  html[lang="zh-CN"] * {
+    -webkit-locale: "zh_CN";
+  }
+
+  body {
+    @apply bg-white dark:bg-[#161616] text-zinc-900 dark:text-zinc-200 overflow-hidden;
+
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  /* 💎 体验提升：自定义选中文本样式（编辑器外生效） */
+  ::selection {
+    @apply bg-indigo-500/20 text-indigo-900;
+  }
+  .dark ::selection {
+    background: rgba(99, 102, 241, 0.45) !important;
+    color: #fff !important;
+  }
+
+  /* 💎 编辑器内：禁用原生 ::selection，改用 SelectionHighlight 插件 */
+  /* 原因：WebKit 的 ::selection 只画 font metrics 高度，不覆盖 line-height */
+  /* 排除正在编辑的画板：当画板处于编辑状态时，需要使用原生的文字高亮 */
+  /* 排除 Tldraw 内部的 ProseMirror：Tldraw 4.x 内部嵌套了自己的 TipTap 实例，
+     其产生的 .ProseMirror 节点也会匹配此规则。由于内部 ProseMirror 不包含
+     .drawing-container.is-editing，:has() 排除条件对它无效，
+     导致选中背景被强制透明化。必须额外排除 .tl-rich-text 内部的 ProseMirror。 */
+  .ProseMirror:not(:has(.drawing-container.is-editing)):not(.tl-rich-text .ProseMirror)::selection,
+  .ProseMirror:not(:has(.drawing-container.is-editing)):not(.tl-rich-text .ProseMirror) ::selection,
+  .ProseMirror:not(:has(.drawing-container.is-editing)):not(.tl-rich-text .ProseMirror) *::selection {
+    background: transparent !important;
+    color: inherit !important;
+  }
+
+  /* 💎 体验提升：光标颜色 */
+  input, textarea, [contenteditable] {
+    @apply caret-indigo-600 dark:caret-indigo-400;
+  }
+
+  /* 💎 CJK 简体修复：等宽输入框的 placeholder 使用 sans-serif
+     避免 monospace 回退到日文/繁体 CJK 字形变体 */
+  .font-mono::placeholder {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* 💎 体验提升：链接样式优化 */
+  a {
+    text-underline-offset: 4px; /* 下划线远离文字 */
+    text-decoration-thickness: 1px;
+  }
+
+  /* 💎 防止滚动条出现/消失导致内容区宽度跳动 */
+  .slash-editor-zoom-area {
+    scrollbar-gutter: stable;
+  }
+
+  /* 💎 体验提升：编辑器底部呼吸空间 */
+  /* 让用户可以将正在编辑的行滚动到屏幕中央，减少底部压迫感 */
+  .ProseMirror {
+    padding-bottom: 50vh;
+    min-height: 100%;
+    cursor: text;
+    -webkit-font-smoothing: subpixel-antialiased;
+    letter-spacing: 0.02em;
+    font-optical-sizing: auto;
+    text-rendering: optimizeLegibility;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* 💎 TipTap Placeholder 样式 */
+  /* Placeholder 扩展注入 data-placeholder 和 is-empty 类，但需要用户提供 CSS */
+  /* 排除 heading 节点（它们有 hover ::before 显示 H1/H2 标记） */
+  .ProseMirror .is-empty:not(:is(h1,h2,h3,h4,h5,h6,ol,ul,li))::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    @apply text-zinc-400 dark:text-zinc-600;
+  }
+
+  /* 💎 禁用特殊块级节点内部或自身的占位符（防止操作手柄或选中空单元格时出现意外的提示文字） */
+  .ProseMirror td .is-empty::before,
+  .ProseMirror th .is-empty::before,
+  .ProseMirror blockquote .is-empty::before,
+  .ProseMirror blockquote.is-empty::before,
+  .ProseMirror .react-renderer .is-empty::before,
+  .react-renderer.is-empty::before {
+    content: none !important;
+  }
+
+
+
+  /* 💎 WebKit caret 修复：零宽字符锚点 */
+  /* 空节点仅含 <br>，WebKit 无法渲染 caret */
+  /* float: left 脱离行流，避免在 <br> 后创建新行（防止 heading 高度翻倍） */
+  .ProseMirror .is-empty::after {
+    content: '\feff';
+    float: left;
+    height: 0;
+  }
+
+  /* 💎 选中优化：禁止非内容元素被选中 */
+  /* 防止选中时出现杂乱的蓝色高亮 */
+  button, video, audio, svg, .task-checkbox, .task-capsule, 
+  .backlink-badge, .tag-badge, [draggable="true"],
+  input[type="checkbox"] {
+    user-select: none;
+  }
+
+  /* 💎 选中优化：结构性元素不显示选中背景（用于编辑器外的 fallback） */
+  table::selection,
+  thead::selection,
+  tbody::selection,
+  tr::selection,
+  th::selection,
+  td::selection,
+  .node-view::selection,
+  .image-view::selection,
+  .video-view::selection,
+  .video-view::selection,
+  .audio-view::selection,
+  .tiptap-table-wrapper::selection {
+    background: transparent !important;
+  }
+
+  /* 💎 代码块专属选中样式（Decoration 不覆盖的 fallback） */
+  .ProseMirror pre .selection-highlight {
+    background: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 图片可以被选中（显示边框而非背景色） */
+  img {
+    user-select: auto;
+  }
+
+  /* 💎 选中优化：隐藏 ProseMirror 默认的节点选中边框 */
+  /* 表格等块级元素在全选时不显示蓝色 outline */
+  .ProseMirror-selectednode {
+    outline: none !important;
+  }
+  
+  /* 保持表格自身的边框样式，不叠加选中边框 */
+  table.ProseMirror-selectednode,
+  .tiptap-table-wrapper.ProseMirror-selectednode {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 🔗 WikiLink 样式 */
+  .wiki-link {
+    @apply text-indigo-600 dark:text-indigo-400 cursor-pointer;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+  .wiki-link:hover {
+    @apply underline;
+    text-underline-offset: 3px;
+  }
+
+  /* 🔴 未解析的 WikiLink：虚线 + 灰色 */
+  .wiki-link-unresolved {
+    @apply text-zinc-400 dark:text-zinc-500;
+    text-decoration: underline dashed;
+    text-underline-offset: 3px;
+    text-decoration-color: currentColor;
+    opacity: 0.8;
+  }
+  .wiki-link-unresolved:hover {
+    @apply text-zinc-500 dark:text-zinc-400;
+    opacity: 1;
+  }
+
+}
+
+@layer utilities {
+  .prose {
+    font-feature-settings: "cv10" 1, "calt" 1;
+    @apply text-zinc-900 dark:text-zinc-200;
+  }
+
+  /* .prose em {
+    font-style: italic !important;
+    @apply text-orange-500 bg-orange-100/50 px-1 rounded;
+    } */
+
+  /* =========================================
+     1. 行内代码 (Inline Code)
+     样式目标：灰色背景 + 正常文字颜色（避免与 Link 混淆）
+     ========================================= */
+  .prose :where(code):not(:where(pre *)) {
+    /* 字体与排版 */
+    @apply font-mono text-sm font-medium;
+    
+    /* 颜色与背景：浅灰色背景 + 正常文字颜色 */
+    @apply bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200;
+    
+    /* 盒子模型：圆角 + 左右内边距 */
+    @apply px-1.5 py-0.5 rounded-md mx-0.5;
+    
+    /* 🚫 核心去毒：去掉 Tailwind 默认自带的烦人反引号 */
+    &::before { content: none !important; }
+    &::after { content: none !important; }
+  }
+
+  /* =========================================
+     2. 代码块 (Code Block)
+     样式目标：深色背景，沉浸式体验
+     ========================================= */
+
+  /* 🛡️ WebKit 帧合并修复：
+     问题：WebKit 将代码块高度变化和光标位置更新拆到两个渲染帧，
+     导致按 Enter 时先看到代码块增高、然后光标才跟上来。
+     修复：contain:content 建立独立渲染边界，强制内容变化和光标更新在同一帧完成。*/
+  .code-block-wrapper {
+    contain: content;
+  }
+
+  .prose pre {
+    /* 背景色：代码块采用深色背景 */
+    @apply bg-[#0d1117] text-[#c9d1d9];
+    
+    /* 边框与圆角 */
+    @apply rounded-xl border border-zinc-200/10 dark:border-zinc-800/50;
+    
+    /* 间距 */
+    @apply p-4 my-6 relative;
+    
+    /* 强制使用等宽字体 */
+    font-family: var(--font-mono);
+    line-height: 1.6;
+
+    /* 避免 overflow-x:auto 在高度变化时触发同步布局重计算 */
+    overflow-x: hidden;
+  }
+
+  .prose pre code {
+    display: block;
+    overflow-x: auto;
+  }
+
+  /* 💎 GitHub Dark 语法高亮方案 */
+  .hljs-comment, .hljs-quote { color: #8b949e; font-style: italic; }
+  .hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+  .hljs-string, .hljs-attr { color: #a5d6ff; }
+  .hljs-title, .hljs-section { color: #d2a8ff; font-weight: bold; }
+  .hljs-variable, .hljs-template-variable { color: #ffa657; }
+  .hljs-type, .hljs-built_in, .hljs-number { color: #ffa657; }
+  .hljs-operator, .hljs-punctuation { color: #79c0ff; }
+  .hljs-property { color: #79c0ff; }
+  .hljs-params { color: #c9d1d9; }
+  .hljs-function { color: #d2a8ff; }
+
+  /* 修复代码块内部的 code 标签 */
+  .prose pre code {
+    @apply bg-transparent p-0 m-0 text-inherit font-normal block;
+  }
+
+  /* Code block text selection - harmonize with normal text selection */
+  .prose pre::selection,
+  .prose pre *::selection {
+    background: rgba(99, 102, 241, 0.35); /* indigo with transparency for dark bg */
+    color: inherit;
+  }
+
+  /* CodeBlockComponent 语言选择器外观微调 */
+  .code-block select {
+    @apply transition-all duration-200 hover:scale-105 active:scale-95;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23888' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    background-size: 0.8rem;
+    padding-right: 1.5rem;
+  }
+
+  /* Fix: Ensure code block buttons are visible on hover */
+  .code-block {
+    @apply relative;
+    overflow: visible !important;
+  }
+  
+  /* Show toolbar on code block hover */
+  .code-block:hover .code-block-toolbar {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Mermaid block styles */
+  .mermaid-block {
+    @apply relative;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .mermaid-block:hover .mermaid-toolbar {
+    opacity: 1 !important;
+  }
+
+  .mermaid-container {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .mermaid-svg svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .prose p {
+    font-size: 18px;
+    line-height: 1.5; /* 27px line box gives tight optimal reading */
+    padding: 0;
+    margin-top: 0;
+    margin-bottom: 0.6rem; /* User's preferred baseline visual gap */
+  }
+
+  /* =========================================
+     3. 列表样式修复 (Lists)
+     目标：解决默认 Typography 插件间距过大的问题，与正文 p 保持一致
+     ========================================= */
+  
+  /* 列表容器：整体多进 18px (首层总计 42px) */
+  .prose ul, .prose ol {
+    @apply my-0;
+    padding-left: 42px !important; 
+    list-style-position: outside;
+  }
+
+  /* 嵌套列表内容：重置回原来的内部缩进尺寸 (ps-6 即 1.5rem/24px) */
+  .prose li ul, .prose li ol {
+    padding-left: 1.15rem !important;
+  }
+
+  /* 列表项间距 */
+  .prose li {
+    font-size: 18px;
+    line-height: 1.5;
+    padding: 0; 
+    margin-top: 0;
+    margin-bottom: 0.35rem; /* User's preferred list item visual gap */
+    @apply ps-0;
+  }
+
+  /* 💎 li 内 p：只清 margin，保留 padding（由 .prose p 统一提供） */
+  .ProseMirror li > p,
+  .prose li > p {
+    margin: 0 !important;
+  }
+  .task-content p {
+    margin: 0 !important;
+    padding-left: 2px;
+    margin-bottom: 0 !important; /* Override prose p margin inside tasks */
+  }
+  /* task-content 内部 wrapper div 也归零 */
+  .task-content > div,
+  .task-content > div > div {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+
+  /* 嵌套列表：消除底部间距，但保留顶部间距与同级 li 一致 */
+  .prose ul > li > ul, 
+  .prose ol > li > ol,
+  .prose ul > li > ol,
+  .prose ol > li > ul,
+  .prose ul > li > ul[data-type="taskList"],
+  .prose ol > li > ul[data-type="taskList"] {
+    margin-top: 0.35rem; /* 匹配 li margin-bottom，保证层级过渡间距一致 */
+    margin-bottom: 0;
+  }
+
+  /* 列表符号颜色优化 (可选，让符号没那么黑) */
+  .prose ul > li::marker,
+  .prose ol > li::marker {
+    @apply text-zinc-400 dark:text-zinc-500 font-normal;
+  }
+
+  /* =========================================
+     4. 待办列表 (Task Lists / Checkboxes)
+     目标：修复复选框与文字不对齐的问题
+     修复：
+     1. 针对 ul[data-type="taskList"] 去除默认 list-style，防止多余圆点
+     2. 使用更稳健的选择器确保 flex 布局生效
+     ========================================= */
+  
+  /* 列表容器：去除默认样式的圆点 */
+  .prose ul[data-type="taskList"] {
+    list-style: none;
+    @apply my-0; /* 嵌套时不需要额外垂直间距 */
+  }
+
+  /* Nested list inside task-content: match sibling item spacing */
+  .prose .task-content ul,
+  .prose .task-content ol {
+    margin-top: 0.35rem !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Ensure react-renderer wrapper inside nested taskList adds no extra spacing */
+  .task-content ul[data-type="taskList"] > .react-renderer {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* 列表项：区块布局对齐，放弃 Flex 以修复 WebKit 原生 ::selection 截断问题 */
+  /* 双重保险：同时匹配属性和结构 */
+  .prose li[data-type="taskItem"],
+  .prose ul[data-type="taskList"] > li {
+    list-style-type: none !important; /* 强制去掉前面的点 */
+    @apply ps-0 block relative; /* 使用 absolute 定位来对齐文本 */
+  }
+
+  /* 结构修正：确保内容 div 作为块级元素不受原生 flex 限制 */
+  .prose li[data-type="taskItem"] > div,
+  .prose ul[data-type="taskList"] > li > div {
+    display: block;
+    min-width: 0; 
+    margin: 0 !important; /* 清除可能存在的 margin */
+  }
+
+  /* 结构修正：checkbox 容器 */
+  .prose li[data-type="taskItem"] > label,
+  .prose ul[data-type="taskList"] > li > label {
+    margin: 0;
+    user-select: none;
+  }
+
+  /* 强制隐藏可能的 marker (针对某些浏览器/Tailwind Prose 的默认行为) */
+  .prose ul[data-type="taskList"] > li::marker {
+    display: none;
+    content: "";
+  }
+
+  /* 复选框微调 */
+  .prose li[data-type="taskItem"] input[type="checkbox"],
+  .prose ul[data-type="taskList"] > li input[type="checkbox"] {
+    @apply mt-[0.35em]; /* aligned with 1.625 line height (26px) */
+    @apply cursor-pointer;
+  }
+
+  .prose h1 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 36px; padding: 16px 0 8px; }
+  .prose h2 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 32px; padding: 12px 0 6px; }
+  .prose h3 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 28px; padding: 8px 0 4px; }
+  .prose h4 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 24px; padding: 6px 0 4px; }
+  .prose h5 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 21px; padding: 6px 0 2px; }
+  .prose h6 { @apply font-bold mt-0 mb-0 leading-normal; font-size: 18px; padding: 6px 0 2px; }
+
+  .prose :is(h1,h2,h3,h4,h5,h6) {
+    position: relative;
+    /* 凹版印刷：顶部暗影（凹入）+ 底部高光（边沿反光） */
+    text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.15), 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  .dark .prose :is(h1,h2,h3,h4,h5,h6) {
+    text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* 空 heading：始终显示 H-level 标记（caret 锚点由 ::after \feff 提供） */
+  .prose h1.is-empty::before { content: "H1"; }
+  .prose h2.is-empty::before { content: "H2"; }
+  .prose h3.is-empty::before { content: "H3"; }
+  .prose h4.is-empty::before { content: "H4"; }
+  .prose h5.is-empty::before { content: "H5"; }
+  .prose h6.is-empty::before { content: "H6"; }
+
+  /* 非空 heading：悬停时显示 H-level 标记 */
+  .prose h1:not(.is-empty):hover::before { content: "H1"; }
+  .prose h2:not(.is-empty):hover::before { content: "H2"; }
+  .prose h3:not(.is-empty):hover::before { content: "H3"; }
+  .prose h4:not(.is-empty):hover::before { content: "H4"; }
+  .prose h5:not(.is-empty):hover::before { content: "H5"; }
+  .prose h6:not(.is-empty):hover::before { content: "H6"; }
+
+  /* H-level 标记通用样式：绝对定位到左侧 */
+  .prose :is(h1,h2,h3,h4,h5,h6)::before {
+    @apply text-xs font-mono text-zinc-400 dark:text-zinc-500;
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    line-height: 1;
+    font-weight: 500;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+}
+
+/* ============================================
+   BACKLINK BADGE STYLES
+   ============================================ */
+
+/* Backlink Badge - inline count badge */
+.backlink-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 9px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+
+.backlink-badge:hover {
+  background: rgba(99, 102, 241, 0.2);
+  color: #4f46e5;
+}
+
+.dark .backlink-badge {
+  color: #a5b4fc;
+  background: rgba(165, 180, 252, 0.15);
+}
+
+.dark .backlink-badge:hover {
+  background: rgba(165, 180, 252, 0.25);
+  color: #c7d2fe;
+}
+
+/* Heading Backlink Badge - smaller size for inline with headings */
+.heading-backlink-badge {
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 8px;
+}
+
+/* Title Backlink Badge - for note title */
+.title-backlink-badge {
+  margin-left: 20px;
+}
+
+/* Backlink Popup */
+.backlink-popup {
+  min-width: 200px;
+  max-width: 300px;
+  padding: 8px 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.dark .backlink-popup {
+  background: #27272a;
+  border-color: #3f3f46;
+}
+
+.backlink-popup-header {
+  padding: 4px 12px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dark .backlink-popup-header {
+  color: #71717a;
+}
+
+.backlink-popup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.backlink-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.backlink-popup-item:hover {
+  background: #f3f4f6;
+}
+
+.dark .backlink-popup-item:hover {
+  background: #3f3f46;
+}
+
+.backlink-popup-icon {
+  font-size: 14px;
+}
+
+.backlink-popup-title {
+  flex: 1;
+  font-size: 13px;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark .backlink-popup-title {
+  color: #e5e7eb;
+}
+
+/* 滚动条保持不变，你的设置已经很好 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-zinc-200 rounded-full dark:bg-zinc-700; }
+::-webkit-scrollbar-thumb:hover { @apply bg-zinc-300 dark:bg-zinc-600; }
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light dark;
+  --graph-dot-color: rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --graph-dot-color: rgba(255, 255, 255, 0.04);
+}
+
+/* ============================================
+   REACTFLOW KNOWLEDGE GRAPH OVERRIDES
+   ============================================ */
+
+/* ReactFlow container dark mode bg */
+.dark .react-flow {
+  --xy-background-color: #0D0D0D;
+}
+
+/* FIX: Force Chrome to re-rasterize text at all zoom levels (prevents blurry text) */
+/* We only apply this to the Local Graph, so the Global Graph maintains high performance */
+.local-graph-flow .react-flow__viewport {
+  will-change: auto !important;
+}
+
+/* Controls panel styling */
+.react-flow .react-flow__controls button {
+  border: none;
+}
+.dark .react-flow .react-flow__controls button {
+  background-color: #27272a;
+  color: #a1a1aa;
+  border-bottom-color: #3f3f46;
+}
+.dark .react-flow .react-flow__controls button:hover {
+  background-color: #3f3f46;
+}
+
+/* Prevent individual node selection from changing stacking */
+.react-flow .react-flow__node {
+  z-index: 0 !important;
+}
+.react-flow .react-flow__node.selected {
+  box-shadow: none;
+  z-index: 0 !important;
+}
+
+/* ZoneDividerNode is a 50k×50k background node for zone labels.
+   ReactFlow's .react-flow__node { pointer-events: all } overrides the component's
+   inline pointer-events:none, causing this giant node to intercept ALL canvas events.
+   Force it transparent to events so edges and labels remain interactive. */
+.react-flow .react-flow__node-zoneDividerNode {
+  pointer-events: none !important;
+}
+
+/* ── Fix: Enable pointer-events on edge SVG wrappers ── */
+/* ReactFlow wraps each edge in its own <svg> with pointer-events:none.
+   We must re-enable it so the inner interaction paths can receive mouse events. */
+.react-flow .react-flow__edges svg {
+  pointer-events: auto !important;
+}
+
+/* ── Relational Edge Hover Effects (Pure CSS) ── */
+/* Ensure relational edges show pointer cursor and receive events */
+.react-flow__edge.edge-relational {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* On hover: boost the main edge path color + glow */
+.react-flow__edge.edge-relational:hover path.react-flow__edge-path {
+  stroke: #3b82f6 !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.7));
+  transition: stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+}
+.dark .react-flow__edge.edge-relational:hover path.react-flow__edge-path {
+  stroke: #60a5fa !important;
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.6));
+}
+
+/* On hover: all paths inside the edge get full opacity */
+.react-flow__edge.edge-relational:hover path {
+  opacity: 1 !important;
+}
+
+/* Edge interaction path (invisible hitbox) — pointer cursor + accept events */
+.react-flow__edge.edge-relational .react-flow__edge-interaction {
+  cursor: pointer;
+  pointer-events: stroke !important;
+}
+
+/* MiniMap node styling */
+.react-flow .react-flow__minimap-mask {
+  fill-opacity: 0.2;
+}
+
+/* ============================================
+   TAG BADGE STYLES (User vs AI)
+   ============================================ */
+
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 9999px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+/* User Tag: Solid dark background (confirmed) */
+.tag-badge--user {
+  background: #4f46e5;
+  color: white;
+}
+
+.tag-badge--user:hover {
+  background: #4338ca;
+}
+
+.dark .tag-badge--user {
+  background: #6366f1;
+}
+
+.dark .tag-badge--user:hover {
+  background: #818cf8;
+}
+
+/* AI Tag: Outline style with sparkle (suggestion) */
+.tag-badge--ai {
+  background: transparent;
+  border: 1px dashed #a5b4fc;
+  color: #6366f1;
+}
+
+.tag-badge--ai:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-style: solid;
+}
+
+.dark .tag-badge--ai {
+  border-color: #818cf8;
+  color: #a5b4fc;
+}
+
+.dark .tag-badge--ai:hover {
+  background: rgba(165, 180, 252, 0.15);
+}
+
+/* Sparkle icon for AI tags */
+.tag-badge__icon {
+  font-size: 10px;
+}
+
+/* Tag text */
+.tag-badge__text {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Remove button */
+.tag-badge__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.tag-badge__remove:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.tag-badge--user .tag-badge__remove {
+  color: white;
+}
+
+.tag-badge--user .tag-badge__remove:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tag-badge--ai .tag-badge__remove {
+  color: #6366f1;
+}
+
+.dark .tag-badge--ai .tag-badge__remove {
+  color: #a5b4fc;
+}
+
+/* ============================================
+   AI FLOWING GLOW ANIMATION
+   Applied to text when new AI content is available
+   ============================================ */
+
+/* Keyframe for flowing gradient animation */
+@keyframes ai-glow-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* Animated gradient text effect */
+.ai-text-glow {
+  background: linear-gradient(90deg, #8B5CF6, #6366F1, #3B82F6, #0EA5E9, #8B5CF6);
+  background-size: 200% 100%;
+  animation: ai-glow-flow 3s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================
+   MAGIC WAND BUTTON ANIMATION (UX v2)
+   Subtle invitation to click when AI is ready
+   ============================================ */
+
+/* Gentle wobble + glow for idle-ready state */
+@keyframes magic-wand-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-8deg); }
+  40% { transform: rotate(6deg); }
+  60% { transform: rotate(-4deg); }
+  80% { transform: rotate(2deg); }
+}
+
+@keyframes magic-wand-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(47, 39, 206, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(47, 39, 206, 0.35); }
+}
+
+.magic-wand-ready {
+  animation: magic-wand-wobble 2s ease-in-out 1, magic-wand-glow 3s ease-in-out infinite;
+}
+
+.dark .magic-wand-ready {
+  animation: magic-wand-wobble 2s ease-in-out 1, magic-wand-glow 3s ease-in-out infinite;
+  --tw-shadow-color: rgba(124, 115, 255, 0.3);
+}
+
+@keyframes magic-wand-glow-dark {
+  0%, 100% { box-shadow: 0 0 4px rgba(124, 115, 255, 0.2); }
+  50% { box-shadow: 0 0 12px rgba(124, 115, 255, 0.4); }
+}
+
+.dark .magic-wand-ready {
+  animation: magic-wand-wobble 2s ease-in-out 1, magic-wand-glow-dark 3s ease-in-out infinite;
+}
+
+/* Sparkle dot breathing animation */
+@keyframes magic-dot-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Title shimmer — AI thinking state (text-gradient approach) */
+@keyframes shimmer-flow {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.title-shimmer {
+  background: linear-gradient(
+    90deg,
+    #a1a1aa 0%,
+    #a1a1aa 25%,
+    #d4d4d8 40%,
+    #e4e4e7 50%,
+    #d4d4d8 60%,
+    #a1a1aa 75%,
+    #a1a1aa 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-flow 4s ease-in-out infinite;
+}
+
+:is(.dark) .title-shimmer {
+  background: linear-gradient(
+    90deg,
+    #52525b 0%,
+    #52525b 25%,
+    #a1a1aa 40%,
+    #d4d4d8 50%,
+    #a1a1aa 60%,
+    #52525b 75%,
+    #52525b 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* AI Skill loading shimmer — reuses shimmer-flow keyframes, faster cadence */
+.ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    #a1a1aa 0%,
+    #a1a1aa 25%,
+    #7c3aed 40%,
+    #a78bfa 50%,
+    #7c3aed 60%,
+    #a1a1aa 75%,
+    #a1a1aa 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-flow 2.5s ease-in-out infinite;
+}
+
+:is(.dark) .ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    #52525b 0%,
+    #52525b 25%,
+    #8b5cf6 40%,
+    #c4b5fd 50%,
+    #8b5cf6 60%,
+    #52525b 75%,
+    #52525b 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.magic-wand-dot {
+  animation: magic-dot-pulse 2s ease-in-out infinite;
+}
+
+/* Subtle always-on breathing for magic wand (no idle gating) */
+@keyframes wand-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.magic-wand-breathe {
+  animation: wand-breathe 3s ease-in-out infinite;
+}
+
+.magic-wand-breathe:hover {
+  opacity: 1;
+  animation: none;
+  color: #818cf8;
+  transition: color 0.2s ease;
+}
+
+:is(.dark) .magic-wand-breathe:hover {
+  color: #a5b4fc;
+}
+
+/* Typing reveal effect for AI results */
+@keyframes typing-reveal {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 100%; opacity: 1; }
+}
+.typing-reveal {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typing-reveal 0.8s ease-out forwards;
+}
+
+/* ============================================
+   DEEP SEARCH AI ANSWER STYLES
+   Search modal always has dark background,
+   so we force light text colors regardless of system theme
+   ============================================ */
+
+.deep-search-prose {
+  /* Always use light text for dark modal background */
+  color: #d4d4d8 !important; /* zinc-300 */
+}
+
+.deep-search-prose p,
+.deep-search-prose li,
+.deep-search-prose ul,
+.deep-search-prose ol,
+.deep-search-prose span,
+.deep-search-prose div {
+  /* color: inherit !important; */
+}
+
+/* Force strong/bold text to use a brighter color */
+.deep-search-prose strong,
+.deep-search-prose b {
+  color: #a78bfa !important; /* violet-400 - bright purple for emphasis */
+  font-weight: 600;
+}
+
+/* Force em/italic text */
+.deep-search-prose em,
+.deep-search-prose i {
+  color: #c4b5fd !important; /* violet-300 */
+}
+
+/* Ensure links and buttons are visible on dark background */
+.deep-search-prose button,
+.deep-search-prose a {
+  color: #a78bfa !important; /* violet-400 - bright purple for dark bg */
+}
+
+.deep-search-prose button:hover,
+.deep-search-prose a:hover {
+  color: #c4b5fd !important; /* violet-300 - lighter on hover */
+}
+
+/* Inline code */
+.deep-search-prose code {
+  color: #67e8f9 !important; /* cyan-300 */
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* List markers */
+.deep-search-prose li::marker {
+  color: #a1a1aa !important; /* zinc-400 */
+}
+
+/* ============================================
+   TIPPY.JS WIKI-LINK SUGGESTION POPUP
+   Remove tippy's default box styling so the
+   WikiLinkList component controls all visuals.
+   ============================================ */
+
+.tippy-box[data-theme~='wiki-link'] {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.tippy-box[data-theme~='wiki-link'] .tippy-content {
+  padding: 0;
+}
+
+/* ============================================
+   IN-NOTE SEARCH HIGHLIGHT STYLES
+   Used by Cmd+F find-in-note feature
+   ============================================ */
+
+/* All search matches - yellow highlight */
+.search-highlight {
+  background-color: rgba(250, 204, 21, 0.4); /* yellow-400 with alpha */
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+/* Current active match - orange highlight */
+.search-highlight-current {
+  background-color: rgba(251, 146, 60, 0.7); /* orange-400 with alpha */
+  border-radius: 2px;
+  padding: 1px 0;
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.3);
+}
+
+/* Dark mode adjustments */
+.dark .search-highlight {
+  background-color: rgba(250, 204, 21, 0.3);
+}
+
+.dark .search-highlight-current {
+  background-color: rgba(251, 146, 60, 0.6);
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.25);
+}
+
+/* ============================================
+   DIFF OVERLAY STYLES (IDE-Style v2)
+   Used by DiffOverlayExtension for PR review
+   ============================================ */
+
+/* ── Delete lines — red background (in-document) ── */
+.diff-delete {
+  background-color: rgba(239, 68, 68, 0.12);
+  border-left: 3px solid rgba(239, 68, 68, 0.6);
+  padding-left: 8px;
+  margin-left: -11px;
+  transition: background-color 0.2s ease;
+  position: relative;
+}
+
+.diff-delete:hover {
+  background-color: rgba(239, 68, 68, 0.20);
+}
+
+/* ── Block-level Diff v6: added (new block, green) ── */
+.diff-block-added {
+  background-color: rgba(34, 197, 94, 0.08);
+  box-shadow: inset 3px 0 0 rgba(34, 197, 94, 0.5);
+}
+
+.dark .diff-block-added {
+  background-color: rgba(34, 197, 94, 0.05);
+}
+
+/* ── Block-level Diff v6: changed (modified block, blue) ── */
+.diff-block-changed {
+  background-color: rgba(59, 130, 246, 0.06);
+  box-shadow: inset 3px 0 0 rgba(59, 130, 246, 0.4);
+}
+
+.dark .diff-block-changed {
+  background-color: rgba(59, 130, 246, 0.04);
+}
+
+/* ── Block-level Diff v6: deleted widget (red, markdown rendered) ── */
+.diff-block-deleted {
+  background-color: rgba(239, 68, 68, 0.06);
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, 0.4);
+  padding: 6px 12px;
+  margin: 4px 0;
+  border-radius: 4px;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.diff-block-deleted .diff-deleted-content {
+  color: rgba(239, 68, 68, 0.7);
+  text-decoration: line-through;
+  text-decoration-color: rgba(239, 68, 68, 0.3);
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+
+.diff-block-deleted .diff-deleted-content h1,
+.diff-block-deleted .diff-deleted-content h2,
+.diff-block-deleted .diff-deleted-content h3,
+.diff-block-deleted .diff-deleted-content h4 {
+  font-size: 0.95em;
+  font-weight: 600;
+  margin: 0 0 2px 0;
+}
+
+.diff-block-deleted .diff-deleted-content ul,
+.diff-block-deleted .diff-deleted-content ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.diff-block-deleted .diff-deleted-content li {
+  margin: 1px 0;
+}
+
+.diff-block-deleted .diff-deleted-content code {
+  background: rgba(239, 68, 68, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.diff-block-deleted .diff-deleted-content p {
+  margin: 0 0 2px 0;
+}
+
+.dark .diff-block-deleted {
+  background-color: rgba(239, 68, 68, 0.04);
+}
+
+.dark .diff-block-deleted .diff-deleted-content {
+  color: rgba(239, 68, 68, 0.6);
+}
+
+/* ── Summary bar (bottom floating panel) ── */
+.diff-summary-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 50;
+  font-size: 13px;
+}
+
+.dark .diff-summary-bar {
+  background: rgba(39, 39, 42, 0.85);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================
+   TLDRAW GLOBAL PORTAL STYLES
+   Tldraw uses Radix UI which renders tooltips/popovers
+   to body via portals. These need explicit z-index handling.
+   ============================================ */
+
+/* Radix Portal container - rendered directly to body */
+[data-radix-popper-content-wrapper] {
+  z-index: 99999 !important;
+}
+
+/* Tldraw tooltips - ensure they appear above everything
+   IMPORTANT: Scope to .tl-container to avoid blocking Tippy.js interactive popups */
+.tl-container .tlui-button__hint,
+.tl-container [role="tooltip"] {
+  z-index: 99999 !important;
+  pointer-events: none;
+}
+
+/* Tldraw action menus and popovers */
+.tlui-popover__content,
+.tlui-menu,
+.tlui-actions-menu {
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+/* FIX: Tldraw menu click capture layer intercepts clicks
+   This layer is used to close menus when clicking outside.
+   We need to let clicks pass through to menu items by ensuring
+   the menu content has higher stacking priority. */
+.tlui-menu-click-capture {
+  /* Don't change z-index, just ensure it doesn't block menu interactions */
+  pointer-events: all;
+}
+
+/* FIX: tl-container has overflow: clip which cuts off tooltips
+   Override to visible to allow tooltips to render outside container */
+.tl-container {
+  overflow: visible !important;
+}
+
+/* FIX: Tldraw tooltip z-index is 650, but Popover is 9999
+   Tooltip needs to be above Popover so it's not hidden by Actions Menu */
+.tlui-tooltip {
+  z-index: 100000 !important;
+}
+
+.tl-container [data-radix-popper-content-wrapper]:has(.tlui-tooltip) {
+  z-index: 100000 !important;
+}
+/* ── 快照预览：覆盖 prose 样式适配对话框环境 ── */
+.snapshot-prose {
+  /* heading 间距收紧（弹窗空间有限） */
+  h1 { @apply text-xl font-bold mt-4 mb-2; }
+  h2 { @apply text-lg font-semibold mt-3 mb-1.5; }
+  h3 { @apply text-base font-semibold mt-2 mb-1; }
+
+  /* 段落与列表 */
+  p  { @apply my-1.5 leading-relaxed; }
+  ul, ol { @apply my-1.5 pl-5; }
+  li { @apply my-0.5; }
+
+  /* 任务列表：隐藏 ::marker，展示 checkbox */
+  ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+  input[type="checkbox"] { @apply mr-2 accent-indigo-500; }
+
+  /* 链接 */
+  a { @apply text-indigo-500 hover:underline; }
+
+  /* 水平线 */
+  hr { @apply my-4 border-zinc-200 dark:border-zinc-700; }
+
+  /* blockquote */
+  blockquote {
+    @apply pl-3 border-l-2 border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 my-2;
+  }
+  .ProseMirror blockquote p::before {
+    content: "“";
+  }
+  .ProseMirror blockquote p::after {
+    content: "”";
+  }
+  /* 当 blockquote 内的段落为空时，使用绝对定位限制伪元素，避免换行并定位光标 */
+  .ProseMirror blockquote p.is-empty {
+    position: relative;
+    padding-left: 0.8em;
+  }
+  .ProseMirror blockquote p.is-empty::before {
+    content: "“" !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    line-height: inherit;
+  }
+  .ProseMirror blockquote p.is-empty::after {
+    content: "”" !important;
+    position: absolute;
+    left: 1.6em;
+    top: 0;
+    line-height: inherit;
+  }
+}
+
+/* ============================================
+   SNAPSHOT READONLY EDITOR OVERRIDES
+   快照只读预览专用覆盖，与主编辑器共享 .prose 排版，
+   仅去除编辑态特有的交互样式。
+   ============================================ */
+.snapshot-readonly.ProseMirror {
+  padding-bottom: 0 !important; /* 去掉 50vh 呼吸空间 */
+  min-height: auto !important;
+  cursor: default !important;
+}
+
+/* 去掉占位符 */
+.snapshot-readonly .is-empty::before {
+  content: none !important;
+}
+
+/* 去掉 heading 左侧的 H1/H2 标记 */
+.snapshot-readonly :is(h1,h2,h3,h4,h5,h6)::before {
+  content: none !important;
+}
+
+/* ── 原生 TipTap TaskItem 布局修复 ──
+   主编辑器使用 ReactNodeView（.slash-task-item + .task-checkbox），
+   快照编辑器使用原生 TipTap TaskItem，DOM 结构为：
+   <li data-type="taskItem" data-checked="true/false">
+     <label><input type="checkbox"></label>
+     <div>content</div>
+   </li>
+   需要独立的布局规则来对齐 checkbox 与文本。 */
+
+/* 容器：block + relative，与主编辑器一致 */
+.snapshot-readonly li[data-type="taskItem"] {
+  display: block !important;
+  position: relative !important;
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin-bottom: 0.35rem;
+  min-height: 27px;
+}
+
+/* checkbox label：绝对定位到左侧，与主编辑器 .task-checkbox 对齐 */
+.snapshot-readonly li[data-type="taskItem"] > label {
+  position: absolute;
+  left: -1.5rem;
+  top: 6.5px; /* (27px line-height - 14px checkbox) / 2 */
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+/* checkbox 本身的样式 */
+.snapshot-readonly li[data-type="taskItem"] > label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: 3px;
+  border: 1.5px solid #64748B;
+  cursor: default;
+  accent-color: #22C55E;
+  vertical-align: top;
+}
+
+/* content div：block 布局 */
+.snapshot-readonly li[data-type="taskItem"] > div {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0 !important;
+}
+
+/* 已完成任务：删除线 + 变灰 */
+.snapshot-readonly li[data-type="taskItem"][data-checked="true"] > div {
+  color: #9CA3AF;
+}
+.snapshot-readonly li[data-type="taskItem"][data-checked="true"] > div p {
+  text-decoration: line-through;
+  text-decoration-color: #9CA3AF;
+}
+.dark .snapshot-readonly li[data-type="taskItem"][data-checked="true"] > div {
+  color: #6B7280;
+}
+.dark .snapshot-readonly li[data-type="taskItem"][data-checked="true"] > div p {
+  text-decoration-color: #6B7280;
+}
+
+/* 隐藏 list marker */
+.snapshot-readonly ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 24px !important; /* 与主编辑器 taskItem 缩进一致 */
+}
+.snapshot-readonly ul[data-type="taskList"] > li::marker {
+  display: none;
+  content: "";
+}
+
+/* ── Premium Knowledge Graph Edge Animations ── */
+@keyframes edge-breathe {
+  0%, 100% { opacity: 0.1; }
+  50% { opacity: 1; }
+}
+/* ── Premium Smooth Liquid Edge Animations ── */
+@keyframes edge-liquid-forward {
+  from { stroke-dashoffset: 120; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes edge-liquid-reverse {
+  from { stroke-dashoffset: -120; }
+  to { stroke-dashoffset: 0; }
+}
+.edge-liquid-forward {
+  animation: edge-liquid-forward 6s linear infinite;
+}
+.edge-liquid-reverse {
+  animation: edge-liquid-reverse 6s linear infinite;
+}
+
+@keyframes node-halo-pulse {
+  0% { box-shadow: 0 0 0 0px var(--node-halo-color), 0 0 15px var(--node-halo-color); opacity: 0.8; transform: scale(1); }
+  50% { box-shadow: 0 0 0 4px var(--node-halo-color), 0 0 25px var(--node-halo-color); opacity: 1; transform: scale(1.02); }
+  100% { box-shadow: 0 0 0 0px var(--node-halo-color), 0 0 15px var(--node-halo-color); opacity: 0.8; transform: scale(1); }
+}
+.node-active-halo {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  animation: node-halo-pulse 3s ease-in-out infinite;
+}
+
+/* ============================================
+   MEDIA IMPORT PLACEHOLDER STYLES
+   Phase 6: 大文件导入即时反馈 skeleton UI
+   ============================================ */
+
+/* Base container — shared by importing / failed / syncing */
+.media-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  user-select: none;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Importing state: shimmer skeleton ── */
+.media-placeholder--importing {
+  background: linear-gradient(135deg, #f4f4f5 0%, #e4e4e7 100%);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.dark .media-placeholder--importing {
+  background: linear-gradient(135deg, #27272a 0%, #1e1e21 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Shimmer sweep overlay */
+.media-placeholder--importing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 40%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.35) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: media-shimmer-sweep 2s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.dark .media-placeholder--importing::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes media-shimmer-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Failed state: muted red ── */
+.media-placeholder--failed {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px dashed rgba(239, 68, 68, 0.25);
+}
+
+.dark .media-placeholder--failed {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* ── Syncing state: subtle pulse ── */
+.media-placeholder--syncing {
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px dashed rgba(99, 102, 241, 0.2);
+}
+
+.dark .media-placeholder--syncing {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+/* ── Icon containers ── */
+.media-placeholder__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.media-placeholder--importing .media-placeholder__icon {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.dark .media-placeholder--importing .media-placeholder__icon {
+  background: rgba(129, 140, 248, 0.12);
+  color: #818cf8;
+}
+
+.media-placeholder--failed .media-placeholder__icon {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.dark .media-placeholder--failed .media-placeholder__icon {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+
+.media-placeholder--syncing .media-placeholder__icon {
+  background: rgba(99, 102, 241, 0.08);
+  color: #818cf8;
+}
+
+/* ── Text ── */
+.media-placeholder__text {
+  position: relative;
+  z-index: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.media-placeholder--importing .media-placeholder__text {
+  color: #71717a;
+}
+
+.dark .media-placeholder--importing .media-placeholder__text {
+  color: #a1a1aa;
+}
+
+.media-placeholder--failed .media-placeholder__text {
+  color: #dc2626;
+}
+
+.dark .media-placeholder--failed .media-placeholder__text {
+  color: #f87171;
+}
+
+.media-placeholder--syncing .media-placeholder__text {
+  color: #71717a;
+}
+
+.dark .media-placeholder--syncing .media-placeholder__text {
+  color: #a1a1aa;
+}
+
+/* ── Spinner animation for importing icon ── */
+@keyframes media-spinner {
+  to { transform: rotate(360deg); }
+}
+
+.media-placeholder__spinner {
+  animation: media-spinner 1.2s linear infinite;
+}

@@ -1,0 +1,6 @@
+{
+    "sidecar_version": "0.1.0",
+    "min_app_version": "0.1.0",
+    "whisper_model": "tiny",
+    "build_date": "2026-05-21T08:40:09.557419"
+}

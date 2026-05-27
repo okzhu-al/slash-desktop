@@ -1,0 +1,22 @@
+/* AnnotationMark — 批注高亮样式 */
+.annotation-mark {
+    background-color: rgba(251, 191, 36, 0.15);
+    border-bottom: 2px solid #f59e0b;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background-color 0.15s ease;
+}
+
+.annotation-mark:hover {
+    background-color: rgba(251, 191, 36, 0.3);
+}
+
+/* Dark mode */
+.dark .annotation-mark {
+    background-color: rgba(251, 191, 36, 0.1);
+    border-bottom-color: #d97706;
+}
+
+.dark .annotation-mark:hover {
+    background-color: rgba(251, 191, 36, 0.2);
+}

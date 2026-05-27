@@ -1,0 +1,196 @@
+/* AIBubbleMenu.css — 选中文本浮出的批注工具条 */
+/* 风格与 AIRangeSelector toolbar 统一 */
+
+.ai-bubble-menu {
+    position: absolute;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
+    animation: ai-bubble-fade-in 0.15s ease-out;
+}
+
+@keyframes ai-bubble-fade-in {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* 按钮组横排 */
+.ai-bubble-buttons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: white;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(99, 102, 241, 0.1);
+    white-space: nowrap;
+}
+:is(.dark) .ai-bubble-buttons {
+    background: #27272a;
+    border-color: rgba(129, 140, 248, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(129, 140, 248, 0.15);
+}
+
+/* 💬 批注按钮 — 与 ai-range-toolbar-btn 风格统一 */
+.ai-bubble-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    font-size: 14px;
+    color: #6366f1;
+}
+.ai-bubble-trigger:hover {
+    background: rgba(99, 102, 241, 0.1);
+    transform: scale(1.05);
+}
+:is(.dark) .ai-bubble-trigger {
+    color: #a5b4fc;
+}
+:is(.dark) .ai-bubble-trigger:hover {
+    background: rgba(129, 140, 248, 0.15);
+}
+
+/* 活跃状态（批注面板展开时） */
+.ai-bubble-trigger--active {
+    background: #6366f1 !important;
+    color: white !important;
+}
+:is(.dark) .ai-bubble-trigger--active {
+    background: #818cf8 !important;
+    color: white !important;
+}
+
+/* 批注内联输入面板 */
+.ai-annotation-panel {
+    min-width: 240px;
+    max-width: 320px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: white;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(99, 102, 241, 0.08);
+    animation: ai-bubble-fade-in 0.12s ease-out;
+    margin-left: -4px;
+    margin-top: 4px;
+}
+:is(.dark) .ai-annotation-panel {
+    background: #27272a;
+    border-color: rgba(129, 140, 248, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(129, 140, 248, 0.12);
+}
+
+/* 被批注文本预览 */
+.ai-annotation-preview {
+    font-size: 11px;
+    color: var(--text-secondary, #71717a);
+    background: rgba(99, 102, 241, 0.06);
+    border-left: 2px solid #6366f1;
+    padding: 4px 8px;
+    border-radius: 0 6px 6px 0;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+:is(.dark) .ai-annotation-preview {
+    background: rgba(129, 140, 248, 0.08);
+    border-left-color: #818cf8;
+}
+
+/* 批注输入框 */
+.ai-annotation-input {
+    width: 100%;
+    resize: none;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 6px;
+    background: rgba(99, 102, 241, 0.03);
+    color: var(--text-primary, #18181b);
+    line-height: 1.5;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+}
+.ai-annotation-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+:is(.dark) .ai-annotation-input {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary, #e4e4e7);
+    border-color: rgba(129, 140, 248, 0.2);
+}
+:is(.dark) .ai-annotation-input:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.15);
+}
+
+/* 操作按钮行 */
+.ai-annotation-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+.ai-annotation-cancel {
+    font-size: 11px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #a1a1aa;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+.ai-annotation-cancel:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #71717a;
+}
+:is(.dark) .ai-annotation-cancel:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #a1a1aa;
+}
+
+.ai-annotation-submit {
+    font-size: 11px;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 6px;
+    background: #6366f1;
+    color: #fff;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.1s, transform 0.1s;
+}
+.ai-annotation-submit:hover {
+    background: #4f46e5;
+    transform: scale(1.02);
+}
+.ai-annotation-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* annotation:focus 定位高亮闪烁 */
+.annotation-mark--flash {
+    animation: annotation-focus-flash 1.2s ease-in-out;
+}
+
+@keyframes annotation-focus-flash {
+    0%   { background-color: rgba(251, 191, 36, 0.2); }
+    30%  { background-color: rgba(251, 191, 36, 0.7); }
+    100% { background-color: rgba(251, 191, 36, 0.2); }
+}

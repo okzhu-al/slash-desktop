@@ -1,0 +1,189 @@
+/* ============================================
+   AIRangeSelector — 范围选择器样式
+   
+   斜杠命令选择 AI 技能后，高亮目标段落并显示
+   可拖动的竖线手柄 + 确认/取消浮窗。
+   色系：与 AI shimmer 紫色统一。
+   ============================================ */
+
+/* ── 高亮 Decoration：使用 ProseMirror inline decoration ── */
+/* 由 Plugin 通过 class "ai-range-highlight" 注入 */
+.ai-range-highlight {
+    background: rgba(139, 92, 246, 0.12);
+    border-radius: 2px;
+    transition: background 0.15s ease;
+}
+:is(.dark) .ai-range-highlight {
+    background: rgba(139, 92, 246, 0.2);
+}
+
+/* ── Overlay 容器 ── */
+.ai-range-overlay {
+    position: absolute;
+    pointer-events: none; /* 子元素单独开启 */
+    z-index: 40;
+}
+
+/* ── 竖线手柄 ── */
+.ai-range-handle {
+    position: absolute;
+    pointer-events: auto;
+    cursor: col-resize;
+    /* 竖线本身用 ::before 绘制，handle div 扩展以容纳圆球 */
+    width: 20px; /* 宽点击区域，便于拖拽 */
+    margin-left: -10px; /* 居中到实际位置 */
+    z-index: 42;
+    overflow: visible;
+}
+
+/* 竖线本体 */
+.ai-range-handle::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #8b5cf6;
+    border-radius: 1.5px;
+    transition: background 0.1s ease, box-shadow 0.1s ease;
+}
+.ai-range-handle:hover::before,
+.ai-range-handle.dragging::before {
+    background: #7c3aed;
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+}
+
+/* 顶部圆球 */
+.ai-range-handle-dot-top,
+.ai-range-handle-dot-bottom {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #8b5cf6;
+    border: 1.5px solid white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s ease, background 0.1s ease;
+    z-index: 1;
+}
+.ai-range-handle-dot-top {
+    top: -4px;
+}
+.ai-range-handle-dot-bottom {
+    bottom: -4px;
+}
+.ai-range-handle:hover .ai-range-handle-dot-top,
+.ai-range-handle:hover .ai-range-handle-dot-bottom,
+.ai-range-handle.dragging .ai-range-handle-dot-top,
+.ai-range-handle.dragging .ai-range-handle-dot-bottom {
+    background: #7c3aed;
+    transform: translateX(-50%) scale(1.2);
+}
+
+:is(.dark) .ai-range-handle::before {
+    background: #a78bfa;
+}
+:is(.dark) .ai-range-handle:hover::before,
+:is(.dark) .ai-range-handle.dragging::before {
+    background: #c4b5fd;
+    box-shadow: 0 0 8px rgba(196, 181, 253, 0.5);
+}
+:is(.dark) .ai-range-handle-dot-top,
+:is(.dark) .ai-range-handle-dot-bottom {
+    background: #a78bfa;
+    border-color: #27272a;
+}
+:is(.dark) .ai-range-handle:hover .ai-range-handle-dot-top,
+:is(.dark) .ai-range-handle:hover .ai-range-handle-dot-bottom,
+:is(.dark) .ai-range-handle.dragging .ai-range-handle-dot-top,
+:is(.dark) .ai-range-handle.dragging .ai-range-handle-dot-bottom {
+    background: #c4b5fd;
+}
+
+/* ── 确认/取消浮窗 ── */
+.ai-range-toolbar {
+    position: absolute;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: white;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(139, 92, 246, 0.1);
+    z-index: 43;
+    white-space: nowrap;
+    animation: ai-range-toolbar-in 0.15s ease-out;
+}
+:is(.dark) .ai-range-toolbar {
+    background: #27272a;
+    border-color: rgba(167, 139, 250, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(167, 139, 250, 0.15);
+}
+
+@keyframes ai-range-toolbar-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-range-toolbar-skill {
+    font-size: 12px;
+    font-weight: 500;
+    color: #8b5cf6;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+:is(.dark) .ai-range-toolbar-skill {
+    color: #c4b5fd;
+}
+
+.ai-range-toolbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    font-size: 14px;
+}
+
+/* 确认按钮 */
+.ai-range-toolbar-confirm {
+    background: #8b5cf6;
+    color: white;
+}
+.ai-range-toolbar-confirm:hover {
+    background: #7c3aed;
+    transform: scale(1.05);
+}
+
+/* 取消按钮 */
+.ai-range-toolbar-cancel {
+    background: transparent;
+    color: #a1a1aa;
+}
+.ai-range-toolbar-cancel:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #71717a;
+}
+:is(.dark) .ai-range-toolbar-cancel:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #a1a1aa;
+}
+
+/* ── 拖拽时全局覆盖层（防止选中文字） ── */
+.ai-range-drag-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    cursor: col-resize;
+}

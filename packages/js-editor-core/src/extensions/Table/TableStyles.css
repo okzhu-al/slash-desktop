@@ -1,0 +1,93 @@
+/* src/features/editor/extensions/Table/TableStyles.css */
+/* SuperTable 样式 - 配合 TableNodeView */
+/* IME FIX: Removed position: relative from td/th cells */
+
+/* =========================================
+   1. 表格基础布局
+   ========================================= */
+
+/* Override prose/ProseMirror table defaults - force left alignment */
+.ProseMirror table,
+.prose table,
+.tiptap-table-wrapper {
+  border-collapse: collapse;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  /* FIX: Force left alignment with prose text */
+  margin-left: 0 !important;
+  margin-right: auto;
+  /* FIX: Constrain table to reading area width */
+  width: 100%;
+  max-width: 100%;
+  /* Fixed layout: columns share width evenly, content wraps */
+  table-layout: fixed;
+}
+
+
+/* =========================================
+   2. 单元格样式
+   ========================================= */
+.ProseMirror td,
+.ProseMirror th,
+.tiptap-table-wrapper td,
+.tiptap-table-wrapper th {
+  /* position: relative; */  /* REMOVED - causes IME issue in WebKit */
+  box-sizing: border-box;
+  vertical-align: top;
+  border: 1px solid #e4e4e7 !important;
+  padding: 8px 12px !important;
+  min-width: 60px;
+  background-color: white;
+  /* FIX: Wrap long content instead of expanding table */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.ProseMirror th,
+.tiptap-table-wrapper th {
+  font-weight: 600;
+  text-align: left;
+  background-color: #f4f4f5 !important;
+}
+
+.ProseMirror td > p,
+.ProseMirror th > p,
+.tiptap-table-wrapper td > p,
+.tiptap-table-wrapper th > p {
+  margin: 0 !important;
+}
+
+/* =========================================
+   3. 选中单元格高亮 (simplified without absolute positioning)
+   ========================================= */
+.selectedCell {
+  background-color: #dbeafe !important; /* Tailwind blue-100 */
+}
+
+/* 💎 Forcefully hide ProseMirror's default overlay elements to prevent the dark outline effect */
+.selectedCell::after,
+.selectedCell::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* =========================================
+   4. 深色模式
+   ========================================= */
+.dark .ProseMirror td,
+.dark .ProseMirror th,
+.dark .tiptap-table-wrapper td,
+.dark .tiptap-table-wrapper th {
+  border-color: #3f3f46 !important;
+  background-color: #18181b;
+}
+
+.dark .ProseMirror th,
+.dark .tiptap-table-wrapper th {
+  background-color: #27272a !important;
+}
+
+.dark .selectedCell {
+  background-color: rgba(30, 58, 138, 0.4) !important; /* Tailwind blue-900/40 */
+}

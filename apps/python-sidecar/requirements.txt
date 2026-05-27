@@ -1,0 +1,7 @@
+markitdown[pdf,docx,pptx,xlsx,xls,outlook]
+markdownify<0.14
+fastapi>=0.115
+uvicorn[standard]>=0.34
+python-multipart>=0.0.18
+openai>=1.50.0
+faster-whisper>=1.1.0

@@ -1,0 +1,120 @@
+/**
+ * DiffOverlay CSS — IDE 风格原位 Diff 装饰
+ *
+ * 设计原则（参照 VS Code / JetBrains）:
+ *   - 仅靠背景色区分新增/删除，不使用删除线或前缀符号
+ *   - 节点装饰和 Widget 注入使用相同的视觉语言
+ *   - Widget 融入编辑器，不添加额外边框或间距
+ *
+ * 新增 = 绿色背景（#10b981 系）
+ * 删除 = 红色背景（#f43f5e 系）
+ */
+
+/* ================================================================
+   节点装饰（内容在文档中，直接标色）
+   ================================================================ */
+
+/* 新增行 — 绿色背景 */
+.diff-insert {
+    background: rgba(16, 185, 129, 0.13);
+    border-left: 3px solid rgba(16, 185, 129, 0.6);
+    transition: background 0.15s ease;
+}
+.diff-insert:hover {
+    background: rgba(16, 185, 129, 0.22);
+}
+
+/* 删除行 — 红色背景，无删除线 */
+.diff-delete {
+    background: rgba(244, 63, 94, 0.1);
+    border-left: 3px solid rgba(244, 63, 94, 0.5);
+    opacity: 0.75;
+    transition: background 0.15s ease;
+}
+.diff-delete:hover {
+    background: rgba(244, 63, 94, 0.18);
+}
+
+/* ================================================================
+   Widget 装饰（内容不在文档中，注入显示，融入编辑器）
+   ================================================================ */
+
+/* Widget 新增块 — 与节点装饰相同视觉 */
+.diff-widget-insert {
+    background: rgba(16, 185, 129, 0.13);
+    border-left: 3px solid rgba(16, 185, 129, 0.6);
+    user-select: none;
+    pointer-events: none;
+}
+.diff-insert-line {
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.75;
+    padding: 0 24px;
+}
+
+/* Widget 删除块 — 与节点装饰相同视觉 */
+.diff-widget-delete {
+    background: rgba(244, 63, 94, 0.1);
+    border-left: 3px solid rgba(244, 63, 94, 0.5);
+    opacity: 0.75;
+    user-select: none;
+    pointer-events: none;
+}
+.diff-delete-line {
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.75;
+    padding: 0 24px;
+}
+
+/* ================================================================
+   审阅工具栏
+   ================================================================ */
+
+.diff-review-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 0.875rem;
+}
+
+.diff-review-bar .diff-file-name {
+    font-weight: 600;
+    color: var(--tw-prose-headings, #1e293b);
+    flex: 1;
+}
+:is(.dark) .diff-review-bar .diff-file-name {
+    color: #e2e8f0;
+}
+:is(.dark) .diff-review-bar {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.25);
+}
+
+.diff-review-bar .diff-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+.diff-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.diff-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+.diff-legend-dot.insert { background: rgba(16, 185, 129, 0.5); }
+.diff-legend-dot.delete { background: rgba(244, 63, 94, 0.4); }
