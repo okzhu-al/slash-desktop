@@ -22,7 +22,7 @@ if [ -d "$FRAMEWORK_DIR" ]; then
 fi
 
 echo "Step 1: Sign Mach-O files, dylibs, and shared libraries"
-find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+find "$SIDECAR_DIR" -type f -not -path "*/.framework/*" | while IFS= read -r file; do
   base="$(basename "$file")"
 
   if file "$file" | grep -q "Mach-O"; then
@@ -47,7 +47,7 @@ echo "Step 3: Sign sidecar directory container if codesign accepts it"
 codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$SIDECAR_DIR" || true
 
 echo "Step 4: Verify important signatures"
-find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+find "$SIDECAR_DIR" -type f -not -path "*/.framework/*" | while IFS= read -r file; do
   if file "$file" | grep -q "Mach-O"; then
     echo "Verifying Mach-O: $file"
     codesign --verify --verbose=2 "$file"
