@@ -142,6 +142,10 @@ jobs:
 
           echo "Step 1: Sign Mach-O files, dylibs, and shared libraries"
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            if [[ "$file" == *".framework"* ]]; then
+              continue
+            fi
+
             base="$(basename "$file")"
 
             if file "$file" | grep -q "Mach-O"; then
@@ -167,6 +171,10 @@ jobs:
 
           echo "Step 4: Verify important signatures"
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            if [[ "$file" == *".framework"* ]]; then
+              continue
+            fi
+
             if file "$file" | grep -q "Mach-O"; then
               echo "Verifying Mach-O: $file"
               codesign --verify --verbose=2 "$file"
