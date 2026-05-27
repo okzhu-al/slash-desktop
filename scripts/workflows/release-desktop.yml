@@ -127,6 +127,48 @@ jobs:
       - name: Install Node.js dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Recursively Codesign macOS Python Sidecar
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SIDECAR_DIR="apps/desktop/src-tauri/binaries/slash-sidecar-${{ matrix.target }}"
+          SIGN_IDENTITY="Developer ID Application: Jasper Zhu (H83XQSDL83)"
+
+          echo "Signing macOS sidecar directory: $SIDECAR_DIR"
+
+          if [ ! -d "$SIDECAR_DIR" ]; then
+            echo "ERROR: sidecar directory not found: $SIDECAR_DIR"
+            exit 1
+          fi
+
+          echo "=== Step 1: Sign all physical Mach-O binaries ==="
+          find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            # 1. 严格排除软链接，防止触发 ambiguous 报错
+            if [ -L "$file" ]; then
+              echo "⏭️ Skipping symlink: $file"
+              continue
+            fi
+
+            # 2. 只针对真实的 Mach-O 物理二进制执行强代码签名（含安全时间戳与运行时 Hardened Runtime）
+            if file "$file" | grep -q "Mach-O"; then
+              echo "🔒 Signing physical Mach-O: $file"
+              codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$file"
+            fi
+          done
+
+          echo "=== Step 2: Verify physical signatures ==="
+          find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
+            if [ -L "$file" ]; then
+              continue
+            fi
+            if file "$file" | grep -q "Mach-O"; then
+              echo "Verifying: $file"
+              codesign --verify --verbose=2 "$file"
+            fi
+          done
+
       - name: Build Tauri Desktop App
         working-directory: apps/desktop
         shell: bash
