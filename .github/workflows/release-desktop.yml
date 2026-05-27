@@ -143,6 +143,11 @@ jobs:
             exit 1
           fi
 
+          # 🎯 物理外科手术式斩首：抹除导致 codesign 格式模糊和苹果 Notarize 失败的唯一两个多余软链/伪物理文件
+          echo "🧹 [Physical Excision] Removing redundant link files: Python & Python.framework/Python"
+          rm -f "$SIDECAR_DIR/_internal/Python"
+          rm -f "$SIDECAR_DIR/_internal/Python.framework/Python"
+
           echo "=== Step 1: Sign all physical Mach-O binaries ==="
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
             # 1. 严格排除软链接，防止触发 ambiguous 报错
