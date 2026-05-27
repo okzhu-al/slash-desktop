@@ -151,7 +151,15 @@ jobs:
               continue
             fi
 
-            # 2. 只针对真实的 Mach-O 物理二进制执行强代码签名（含安全时间戳与运行时 Hardened Runtime）
+            # 2. 严格跳过所有处于 *.framework 内部、但不在 *.framework/Versions 目录下的文件
+            # 为什么？因为这些文件在正统 Framework 结构中均是软链接，实体化后会触发 codesign 顽固的 ambiguous bundle 格式报错！
+            # 真实的物理二进制绝对位于 Versions/ 子目录下！
+            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* ]]; then
+              echo "⏭️ Skipping non-Versions framework file to prevent ambiguous error: $file"
+              continue
+            fi
+
+            # 3. 只针对真实的 Mach-O 物理二进制执行强代码签名（含安全时间戳与运行时 Hardened Runtime）
             if file "$file" | grep -q "Mach-O"; then
               echo "🔒 Signing physical Mach-O: $file"
               codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$file"
@@ -161,6 +169,9 @@ jobs:
           echo "=== Step 2: Verify physical signatures ==="
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
             if [ -L "$file" ]; then
+              continue
+            fi
+            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* ]]; then
               continue
             fi
             if file "$file" | grep -q "Mach-O"; then
