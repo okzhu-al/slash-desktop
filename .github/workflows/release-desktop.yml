@@ -193,19 +193,32 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install dmgbuild ds-store mac-alias
 
-          echo "=== 2. Diagnose dmgbuild Visibility ==="
+          echo "=== 2. Resolve pip Script paths dynamically and Add to GITHUB_PATH ==="
+          # 动态获取当前激活 Python 环境的 Script bin 目录以及用户自定义的 bin 目录，正统追加进系统的 $GITHUB_PATH
+          SYS_BIN_DIR=$(python3 -c "import sys, os; print(os.path.join(sys.prefix, 'bin'))")
+          USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
+          echo "$SYS_BIN_DIR" >> $GITHUB_PATH
+          echo "$USER_BIN_DIR" >> $GITHUB_PATH
+          echo "Added $SYS_BIN_DIR and $USER_BIN_DIR to GITHUB_PATH"
+
+          echo "=== 3. Diagnose dmgbuild Visibility (with temporary local PATH) ==="
+          # 为了在当前 Step 内立即可用，手动将其导出至 PATH 中
+          export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
+          which dmgbuild || true
+          dmgbuild --version || true
           python3 -m pip show dmgbuild || true
           python3 -c "import dmgbuild; print(dmgbuild.__file__)" || true
           which python3
           python3 --version
           which osascript || true
 
-          echo "=== 3. Verify dmg-background image files ==="
+          echo "=== 4. Verify dmg-background image files ==="
           ls -lh apps/desktop/src-tauri/icons/dmg-background.png
           file apps/desktop/src-tauri/icons/dmg-background.png
 
-          echo "=== 4. Verify tauri.conf.json DMG section ==="
+          echo "=== 5. Verify tauri.conf.json DMG section ==="
           cat apps/desktop/src-tauri/tauri.conf.json | grep -A 20 '"dmg"'
+
 
       - name: Build Tauri Desktop App
         working-directory: apps/desktop
