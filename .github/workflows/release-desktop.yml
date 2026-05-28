@@ -236,6 +236,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          # 🎯 强力抹除 Windows 环境下多行私钥中可能被系统转义注入的 \r (CRLF) 换行符，确保 Tauri CLI/minisign 能 100% 解析成功并生成 zip 升级包
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            export TAURI_SIGNING_PRIVATE_KEY=$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r')
+          fi
+
           # 显式且硬性地重新注入正确的 scripts 路径到本地 PATH 中，确保 tauri build 查找环境无懈可击
           SYS_BIN_DIR=$(python3 -c "import sys, os; print(os.path.join(sys.prefix, 'bin'))")
           USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
