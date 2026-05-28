@@ -213,10 +213,8 @@ jobs:
           which osascript || true
 
           echo "=== 4. Test Run dmgbuild CLI directly to catch runtime dependency crashes ==="
-          cat << 'EOF' > test_settings.py
-filename = 'test_output.dmg'
-volume_name = 'TestVolume'
-EOF
+          echo "filename = 'test_output.dmg'" > test_settings.py
+          echo "volume_name = 'TestVolume'" >> test_settings.py
           dmgbuild -s test_settings.py 'TestVolume' test_output.dmg || true
           ls -la test_output.dmg || true
 
