@@ -185,6 +185,28 @@ jobs:
             fi
           done
 
+      - name: Diagnose macOS Environment and Install Global dmgbuild
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          echo "=== 1. Upgrade pip and Install Global dmgbuild ==="
+          python3 -m pip install --upgrade pip
+          python3 -m pip install dmgbuild ds-store mac-alias
+
+          echo "=== 2. Diagnose dmgbuild Visibility ==="
+          python3 -m pip show dmgbuild || true
+          python3 -c "import dmgbuild; print(dmgbuild.__file__)" || true
+          which python3
+          python3 --version
+          which osascript || true
+
+          echo "=== 3. Verify dmg-background image files ==="
+          ls -lh apps/desktop/src-tauri/icons/dmg-background.png
+          file apps/desktop/src-tauri/icons/dmg-background.png
+
+          echo "=== 4. Verify tauri.conf.json DMG section ==="
+          cat apps/desktop/src-tauri/tauri.conf.json | grep -A 20 '"dmg"'
+
       - name: Build Tauri Desktop App
         working-directory: apps/desktop
         shell: bash
