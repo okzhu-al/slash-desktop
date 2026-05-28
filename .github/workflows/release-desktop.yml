@@ -235,8 +235,10 @@ jobs:
           import os
           key = os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "")
           cleaned = key.replace("\r", "")
-          with open(os.environ["GITHUB_ENV"], "a") as f:
-              f.write("TAURI_SIGNING_PRIVATE_KEY<<EOF\n" + cleaned + "\nEOF\n")
+          # 🎯 采用绝对的物理二进制模式 \"ab\" 写入，彻底粉碎 Windows 平台下 Python 自动将 \\n 转译为 \\r\\n 的底层干扰！
+          data = ("TAURI_SIGNING_PRIVATE_KEY<<EOF\n" + cleaned + "\nEOF\n").encode("utf-8")
+          with open(os.environ["GITHUB_ENV"], "ab") as f:
+              f.write(data)
           '
 
       - name: Build Tauri Desktop App
