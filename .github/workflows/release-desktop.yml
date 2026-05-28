@@ -298,19 +298,38 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          # 动态重试机制，若 release 刚创建时遇到 API 延迟，循环重试 5 次
           echo "🚀 Creating release strictly and idempotently using GitHub CLI..."
-          gh release create "${{ github.ref_name }}" \
-            --title "Slash ${{ github.ref_name }}" \
-            --prerelease \
-            --notes "Slash Premium Beta Release with beautified macOS installer and native online updates." \
-            || echo "ℹ️ Release already exists, proceeding to asset upload."
+          for i in {1..5}; do
+            gh release create "${{ github.ref_name }}" \
+              --title "Slash ${{ github.ref_name }}" \
+              --prerelease \
+              --notes "Slash Premium Beta Release with beautified macOS installer and native online updates." \
+              && break || echo "ℹ️ Release creation returned or already exists (attempt $i), checking existence..."
+            
+            # 验证 release 是否真的可见了
+            if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+              echo "✅ Release is visible now!"
+              break
+            fi
+            echo "⏳ Release not visible yet, sleeping 5s..."
+            sleep 5
+          done
 
           echo "🚀 Listing and uploading matching release assets with --clobber..."
-          # 使用 --clobber 选项强制覆盖已存在资产，规避并发和重复上传冲突，且通过 grep 强力过滤保证跨 Windows/macOS 平台 bundle 文件夹完美适配并滤除 build 垃圾
+          # 上传时同样加入重试机制以对抗 GitHub API 暂时性的 404/502 分布式延迟
           find target -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.exe.sig" -o -name "*.tar.gz" -o -name "*.tar.gz.sig" -o -name "*.zip" -o -name "*.zip.sig" \) 2>/dev/null | grep -E "/bundle/|\\\\bundle\\\\" | while read -r file; do
             if [ -f "$file" ]; then
               echo "⬆️ Uploading asset: $file ..."
-              gh release upload "${{ github.ref_name }}" "$file" --clobber
+              for attempt in {1..5}; do
+                if gh release upload "${{ github.ref_name }}" "$file" --clobber; then
+                  echo "✅ Uploaded successfully: $file"
+                  break
+                else
+                  echo "⚠️ Upload failed (attempt $attempt), release might be syncing on GitHub side. Sleeping 5s..."
+                  sleep 5
+                fi
+              done
             fi
           done
           echo "✅ All available assets successfully uploaded and finalized!"
