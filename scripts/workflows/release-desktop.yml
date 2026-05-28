@@ -311,8 +311,8 @@ jobs:
             || echo "ℹ️ Release already exists, proceeding to asset upload."
 
           echo "🚀 Listing and uploading matching release assets with --clobber..."
-          # 使用 --clobber 选项强制覆盖已存在资产，规避并发和重复上传冲突，且限定只扫描 bundle 下的最终打包成果，完美滤除 rust 编译中间件 exe
-          find target -path "*/bundle/*" -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.tar.gz" -o -name "*.tar.gz.sig" -o -name "*.zip" -o -name "*.zip.sig" \) | while read -r file; do
+          # 使用 --clobber 选项强制覆盖已存在资产，规避并发和重复上传冲突，且通过 grep 强力过滤保证跨 Windows/macOS 平台 bundle 文件夹完美适配并滤除 build 垃圾
+          find target -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.tar.gz" -o -name "*.tar.gz.sig" -o -name "*.zip" -o -name "*.zip.sig" \) 2>/dev/null | grep -E "/bundle/|\\\\bundle\\\\" | while read -r file; do
             if [ -f "$file" ]; then
               echo "⬆️ Uploading asset: $file ..."
               gh release upload "${{ github.ref_name }}" "$file" --clobber
