@@ -143,6 +143,11 @@ jobs:
             exit 1
           fi
 
+          # 🎯 物理外科手术式实体化：在 codesign 前，强行将软链转换为物理二进制以确保其拥有合法独立的物理签名
+          echo "📦 [Physical Realization] Converting symlinks to physical binaries..."
+          cp -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.12/Python" "$SIDECAR_DIR/_internal/Python"
+          cp -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.12/Python" "$SIDECAR_DIR/_internal/Python.framework/Python"
+
           echo "=== Step 1: Sign all physical Mach-O binaries ==="
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
             # 1. 严格排除软链接，防止触发 ambiguous 报错
@@ -152,9 +157,8 @@ jobs:
             fi
 
             # 2. 严格跳过所有处于 *.framework 内部、但不在 *.framework/Versions 目录下的文件
-            # 为什么？因为这些文件在正统 Framework 结构中均是软链接，实体化后会触发 codesign 顽固的 ambiguous bundle 格式报错！
-            # 真实的物理二进制绝对位于 Versions/ 子目录下！
-            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* ]]; then
+            # 排除 Python.framework/Python 物理实体，以确保它能被正确签名！
+            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* && ! "$file" == */Python.framework/Python ]]; then
               echo "⏭️ Skipping non-Versions framework file to prevent ambiguous error: $file"
               continue
             fi
@@ -171,7 +175,7 @@ jobs:
             if [ -L "$file" ]; then
               continue
             fi
-            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* ]]; then
+            if [[ "$file" == */*.framework/* && ! "$file" == */*.framework/Versions/* && ! "$file" == */Python.framework/Python ]]; then
               continue
             fi
             if file "$file" | grep -q "Mach-O"; then
