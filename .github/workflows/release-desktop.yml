@@ -72,6 +72,8 @@ jobs:
         run: |
           curl -L -o minisign.zip https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-macos.zip
           unzip minisign.zip
+          chmod +x ./minisign
+          xattr -d com.apple.quarantine ./minisign || true
           echo "$PRIVATE_KEY" > tauri.key
           ./minisign -p tauri.pub -s tauri.key -P "$PRIVATE_KEY_PASSWORD"
           echo "=== CORRECT PUBLIC KEY IS ==="
