@@ -144,10 +144,11 @@ jobs:
           fi
 
           # 🎯 物理外科手术式实体化：在 codesign 前，强行仅将外部引导入口 _internal/Python 转换为物理二进制以确保其拥有合法独立的物理签名
-          # 🎯 坚决不能碰 Python.framework/Python 顶级嵌套，以防止触发 bundle format is ambiguous 报错！
-          echo "📦 [Physical Realization] Converting external symlink to physical binary..."
+          # 🎯 彻底物理抹除 Python.framework/Python 顶级嵌套，彻底断绝其由于 Tauri 实体化而产生签名 invalid 导致公证失败的可能！
+          echo "📦 [Physical Realization & Excision] Realizing external symlink and removing redundant framework entry..."
           rm -f "$SIDECAR_DIR/_internal/Python"
           cp -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.12/Python" "$SIDECAR_DIR/_internal/Python"
+          rm -f "$SIDECAR_DIR/_internal/Python.framework/Python"
 
           echo "=== Step 1: Sign all physical Mach-O binaries ==="
           find "$SIDECAR_DIR" -type f | while IFS= read -r file; do
