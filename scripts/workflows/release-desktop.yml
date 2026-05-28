@@ -241,8 +241,14 @@ jobs:
           USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
           export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
 
-          # 包含动态嵌入 sidecar 配置参数进行构建打包
-          pnpm tauri build --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundle }} --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
+          # 🎯 针对 macOS 强行仅构建 app 格式（绕过 Tauri 默认 DMG 并保护代码签名及公证过的 Slash.app 不被 Clean）
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            echo "🍏 macOS platform detected. Forcing Tauri bundle to 'app' only to preserve physical Slash.app..."
+            pnpm tauri build --target ${{ matrix.rust-target }} --bundles app --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
+          else
+            echo "💻 Non-macOS platform. Building default bundle: ${{ matrix.bundle }}"
+            pnpm tauri build --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundle }} --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
+          fi
 
       - name: Rebuild Beautified DMG with dmgbuild (macOS only)
         if: matrix.platform == 'macos'
@@ -254,21 +260,24 @@ jobs:
           APP_PATH="target/aarch64-apple-darwin/release/bundle/macos/Slash.app"
           DMG_DIR="target/aarch64-apple-darwin/release/bundle/dmg"
           
-          # 动态匹配现有的 DMG 文件名（保持与 Tauri 命名一致）
-          ORIGINAL_DMG=$(ls $DMG_DIR/*.dmg | head -n 1)
+          # 确保目标输出目录存在
+          mkdir -p "$DMG_DIR"
+          
+          # 计算规范的 DMG 文件名（保持与原 Tauri 产物命名一字不差）
+          # 在 GitHub Actions push Tag 时，github.ref_name 对应版本号（如 v0.1.1-beta.22）
+          # 我们提取出纯版本号（去除 v 前缀）以完全还原规范命名
+          VERSION_NUM=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          TARGET_DMG="$DMG_DIR/Slash_${VERSION_NUM}_aarch64.dmg"
+          
           echo "🎯 Target App Path: $APP_PATH"
-          echo "🎯 Target DMG Path: $ORIGINAL_DMG"
+          echo "🎯 Target DMG Path: $TARGET_DMG"
           
           if [ ! -d "$APP_PATH" ]; then
             echo "❌ Error: Slash.app not found at $APP_PATH"
             exit 1
           fi
           
-          # 2. 彻底移除 Tauri 默认生成的那个简陋版 DMG 文件
-          echo "🧹 Removing original simple DMG..."
-          rm -f "$ORIGINAL_DMG"
-          
-          # 3. 动态导出并强力调用 Python CLI 里的 dmgbuild
+          # 2. 动态导出并强力调用 Python CLI 里的 dmgbuild
           SYS_BIN_DIR=$(python3 -c "import sys, os; print(os.path.join(sys.prefix, 'bin'))")
           USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
           export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
@@ -278,14 +287,14 @@ jobs:
             -D app_path="$APP_PATH" \
             -D background_path="apps/desktop/src-tauri/icons/dmg-background.png" \
             "Slash" \
-            "$ORIGINAL_DMG"
+            "$TARGET_DMG"
           
-          echo "✨ Premium DMG generated successfully at $ORIGINAL_DMG"
+          echo "✨ Premium DMG generated successfully at $TARGET_DMG"
           
-          # 4. 对全新生成的完美 DMG 容器重做安全时间戳和代码签名
+          # 3. 对全新生成的完美 DMG 容器重做安全时间戳和代码签名
           SIGN_IDENTITY="Developer ID Application: Jasper Zhu (H83XQSDL83)"
           echo "🔒 Signing the new beautified DMG..."
-          codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$ORIGINAL_DMG"
+          codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$TARGET_DMG"
           
           echo "✅ DMG rebuild and codesign flow COMPLETED!"
 
