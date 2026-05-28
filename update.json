@@ -1,15 +1,15 @@
 {
-  "version": "0.1.1-beta.39",
+  "version": "0.1.1-beta.40",
   "notes": "Slash Premium Beta Release with beautified macOS installer and native online updates.",
-  "pub_date": "2026-05-28T15:05:00Z",
+  "pub_date": "2026-05-28T15:30:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTaHliSlRvaURjb3dRRkNYV1I0U2c0UlRpalNMbEtuVUc3bklIM0hIV3ZDMkxSa3Q5Z2ZGMjAzN2pTQ0FSc0pNV1pGbXY1WDNtNjZVSFM0VkRjbDJpaDR3VHFKOVRLZFE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5OTgxNTYzCWZpbGU6U2xhc2guYXBwLnRhci5negphbDBCbWl1YVFabnNlMTdaL1cvQmdQRG5FNFBGeHBiQ01hMEIzbjdGR3pwQVZ4T3BWWGtQdmh6Nmd3QjJaRndXZmlsSEJDa2pIcW0xUEZiSkhOaVVDdz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.39/Slash.app.tar.gz"
+      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.40/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTaHliSlRvaURjb3dHMVRLTUxFN1NFUmwzQnFEVEVFSXVZbDRWRWYwTVcyT3ZHYUdEWTk5RDErRWRydVova3h4eTZJRkd1WWJYd1BOL0tZU2tsTU40b2t6VGNxS0NpR1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5OTgxODY5CWZpbGU6U2xhc2hfMC4xLjEtYmV0YS4zOV94NjQtc2V0dXAuZXhlCkJqTjhGVFFHaU9sc1RxWU9PZWZId2k0VndvQTJBUzl0eFJmTjZ0Q3haWnJmM3YxSlV2TVdrbzNVQVlabU9tOFphazI3QkNIRWdGZ3BJVmhKRHc3U0FBPT0K",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.39/Slash_0.1.1-beta.39_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.40/Slash_0.1.1-beta.40_x64-setup.exe"
     }
   }
 }

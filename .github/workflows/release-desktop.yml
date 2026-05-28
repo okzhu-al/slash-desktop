@@ -64,6 +64,20 @@ jobs:
           security import $RUNNER_TEMP/certificate.p12 -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+      - name: Extract Public Key using Minisign CLI (macOS only)
+        if: matrix.platform == 'macos'
+        env:
+          PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          brew install minisign
+          echo "$PRIVATE_KEY" > tauri.key
+          minisign -p tauri.pub -s tauri.key -P "$PRIVATE_KEY_PASSWORD"
+          echo "=== CORRECT PUBLIC KEY IS ==="
+          cat tauri.pub
+          echo "============================="
+          rm -f tauri.key tauri.pub
+
       - name: Build Python Sidecar
         working-directory: apps/python-sidecar
         env:

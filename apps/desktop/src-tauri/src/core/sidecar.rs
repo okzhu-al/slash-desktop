@@ -232,6 +232,40 @@ impl SidecarManager {
         let binary = Self::find_sidecar_binary()
             .ok_or_else(|| "Sidecar binary not found".to_string())?;
 
+        // macOS 动态修复嵌套 Python Framework 软链，治愈 codesign 物理抹除导致的启动缺陷
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(sidecar_dir) = binary.parent() {
+                let framework_dir = sidecar_dir.join("_internal").join("Python.framework");
+                let framework_python_link = framework_dir.join("Python");
+                let target_python_binary = framework_dir.join("Versions").join("3.12").join("Python");
+                
+                if target_python_binary.exists() {
+                    let needs_create = if framework_python_link.exists() {
+                        if let Ok(metadata) = std::fs::symlink_metadata(&framework_python_link) {
+                            !metadata.file_type().is_symlink()
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    };
+
+                    if needs_create {
+                        log::info!("🔧 [Sidecar] Dynamically creating macOS Python.framework/Python relative symlink...");
+                        if framework_python_link.exists() || framework_python_link.is_symlink() {
+                            let _ = std::fs::remove_file(&framework_python_link);
+                        }
+                        if let Err(e) = std::os::unix::fs::symlink("Versions/3.12/Python", &framework_python_link) {
+                            log::error!("❌ [Sidecar] Failed to create dynamic symlink: {}", e);
+                        } else {
+                            log::info!("✅ [Sidecar] Dynamic symlink created successfully!");
+                        }
+                    }
+                }
+            }
+        }
+
         // 缓存二进制路径，供 try_restart 复用
         if let Ok(mut bp) = self.shared.binary_path.lock() {
             *bp = Some(binary.clone());
