@@ -226,21 +226,6 @@ jobs:
           cat apps/desktop/src-tauri/tauri.conf.json | grep -A 20 '"dmg"'
 
 
-      - name: Standardize and Clean Private Key
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          python3 -c '
-          import os
-          key = os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "")
-          cleaned = key.replace("\r", "")
-          # 🎯 采用绝对的物理二进制模式 \"ab\" 写入，彻底粉碎 Windows 平台下 Python 自动将 \\n 转译为 \\r\\n 的底层干扰！
-          data = ("TAURI_SIGNING_PRIVATE_KEY<<EOF\n" + cleaned + "\nEOF\n").encode("utf-8")
-          with open(os.environ["GITHUB_ENV"], "ab") as f:
-              f.write(data)
-          '
-
       - name: Build Tauri Desktop App
         working-directory: apps/desktop
         shell: bash
@@ -248,21 +233,17 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RUST_TARGET: ${{ matrix.rust-target }}
+          TARGET_PLATFORM: ${{ matrix.target }}
         run: |
           # 显式且硬性地重新注入正确的 scripts 路径到本地 PATH 中，确保 tauri build 查找环境无懈可击
           SYS_BIN_DIR=$(python3 -c "import sys, os; print(os.path.join(sys.prefix, 'bin'))")
           USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
           export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
 
-          # 🎯 针对 macOS 强行仅构建 app 格式（绕过 Tauri 默认 DMG 并保护代码签名及公证过的 Slash.app 不被 Clean）
-          if [ "${{ matrix.platform }}" = "macos" ]; then
-            echo "🍏 macOS platform detected. Forcing Tauri bundle to 'app' only to preserve physical Slash.app..."
-            pnpm tauri build --target ${{ matrix.rust-target }} --bundles app --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
-          else
-            echo "💻 Non-macOS platform. Building default bundle natively to auto-generate zip updater packages..."
-            pnpm tauri build --target ${{ matrix.rust-target }} --config '{"bundle":{"active":true,"targets":["nsis"],"createUpdaterArtifacts":true,"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
-          fi
+          node build-wrapper.js
 
       - name: Rebuild Beautified DMG with dmgbuild (macOS only)
         if: matrix.platform == 'macos'

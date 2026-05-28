@@ -38,6 +38,7 @@ rsync -av \
   --exclude='scripts/dev' \
   --exclude='node_modules' \
   --exclude='target' \
+  --exclude='scratch' \
   --exclude='tmp' \
   --exclude='tmp_*' \
   --exclude='temp' \
