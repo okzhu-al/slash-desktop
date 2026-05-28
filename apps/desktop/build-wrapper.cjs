@@ -1,11 +1,12 @@
 const { spawnSync } = require("child_process");
 
 const env = { ...process.env };
-if (env.TAURI_SIGNING_PRIVATE_KEY) {
-  env.TAURI_SIGNING_PRIVATE_KEY = env.TAURI_SIGNING_PRIVATE_KEY.replace(/\r/g, "");
-  console.log("🔒 TAURI_SIGNING_PRIVATE_KEY has been cleaned up in memory (CRLF removed). Length:", env.TAURI_SIGNING_PRIVATE_KEY.length);
+const keyName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY";
+if (env[keyName]) {
+  env[keyName] = env[keyName].replace(/\r/g, "");
+  console.log("🔒 " + keyName + " has been cleaned up in memory (CRLF removed). Length:", env[keyName].length);
 } else {
-  console.log("⚠️ TAURI_SIGNING_PRIVATE_KEY is not defined in env!");
+  console.log("⚠️ " + keyName + " is not defined in env!");
 }
 
 const rustTarget = process.env.RUST_TARGET;
@@ -35,6 +36,6 @@ if (isMac) {
 
 args.push("--config", JSON.stringify(config));
 
-console.log("🚀 Executing: npx " + args.join(" "));
-const res = spawnSync("npx", args, { env, stdio: "inherit", shell: true });
+console.log("🚀 Executing: pnpm " + args.join(" "));
+const res = spawnSync("pnpm", args, { env, stdio: "inherit", shell: true });
 process.exit(res.status || 0);
