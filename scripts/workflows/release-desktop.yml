@@ -308,3 +308,7 @@ jobs:
           files: |
             target/**/bundle/dmg/*.dmg
             target/**/bundle/nsis/*.exe
+            target/**/bundle/macos/*.app.tar.gz
+            target/**/bundle/macos/*.app.tar.gz.sig
+            target/**/bundle/nsis/*.zip
+            target/**/bundle/nsis/*.zip.sig

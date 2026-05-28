@@ -1,0 +1,15 @@
+{
+  "version": "0.1.1-beta.23",
+  "notes": "Slash Premium Beta Release with beautified macOS installer and native online updates.",
+  "pub_date": "2026-05-28T04:12:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.23/Slash_0.1.1-beta.23_aarch64.app.tar.gz"
+    },
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.23/Slash_0.1.1-beta.23_x64-setup.nsis.zip"
+    }
+  }
+}
