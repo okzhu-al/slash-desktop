@@ -5,8 +5,22 @@ const path = require("path");
 const env = { ...process.env };
 const keyName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY";
 if (env[keyName]) {
-  env[keyName] = env[keyName].replace(/\r/g, "");
-  console.log("🔒 " + keyName + " has been cleaned up in memory (CRLF removed). Length:", env[keyName].length);
+  let rawKey = env[keyName].trim();
+  // 1. 统一去除 CRLF 干扰
+  rawKey = rawKey.replace(/\r/g, "");
+  
+  // 2. 检查并智能修复可能被 CI/CD 压扁成单行的多行私钥
+  const prefix = "untrusted comment: rsign encrypted secret key";
+  if (rawKey.startsWith(prefix)) {
+    let remaining = rawKey.substring(prefix.length).trim();
+    rawKey = prefix + "\n" + remaining;
+  }
+  
+  env[keyName] = rawKey;
+  console.log("🔒 " + keyName + " has been normalized and cleaned up in memory. Length:", env[keyName].length);
+  if (rawKey.length > 50) {
+    console.log("🔒 Key Sample: " + rawKey.substring(0, 45).replace(/\n/g, "[LF]") + " ... " + rawKey.substring(rawKey.length - 20));
+  }
 } else {
   console.log("⚠️ " + keyName + " is not defined in env!");
 }
