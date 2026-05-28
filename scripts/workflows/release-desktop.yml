@@ -298,17 +298,24 @@ jobs:
           
           echo "✅ DMG rebuild and codesign flow COMPLETED!"
 
-      - name: Create & Upload GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Slash ${{ github.ref_name }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'beta') }}
-          files: |
-            target/**/bundle/dmg/*.dmg
-            target/**/bundle/nsis/*.exe
-            target/**/bundle/macos/*.app.tar.gz
-            target/**/bundle/macos/*.app.tar.gz.sig
-            target/**/bundle/nsis/*.zip
-            target/**/bundle/nsis/*.zip.sig
+      - name: Create & Upload GitHub Release (Idempotent via gh CLI)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "🚀 Creating release strictly and idempotently using GitHub CLI..."
+          gh release create "${{ github.ref_name }}" \
+            --title "Slash ${{ github.ref_name }}" \
+            --prerelease \
+            --notes "Slash Premium Beta Release with beautified macOS installer and native online updates." \
+            || echo "ℹ️ Release already exists, proceeding to asset upload."
+
+          echo "🚀 Listing and uploading matching release assets with --clobber..."
+          # 使用 --clobber 选项强制覆盖已存在资产，规避并发和重复上传冲突
+          find target -name "*.dmg" -o -name "*.exe" -o -name "*.tar.gz" -o -name "*.tar.gz.sig" -o -name "*.zip" -o -name "*.zip.sig" | while read -r file; do
+            if [ -f "$file" ]; then
+              echo "⬆️ Uploading asset: $file ..."
+              gh release upload "${{ github.ref_name }}" "$file" --clobber
+            fi
+          done
+          echo "✅ All available assets successfully uploaded and finalized!"
