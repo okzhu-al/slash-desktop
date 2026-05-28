@@ -455,7 +455,7 @@ impl SidecarManager {
         None
     }
 
-    /// 递归复制目录
+    /// 递归复制目录 (完备处理 Unix 软链接，防止 std::fs::copy 实体化污染)
     fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
         std::fs::create_dir_all(dst)
             .map_err(|e| format!("Failed to create directory {:?}: {}", dst, e))?;
@@ -468,11 +468,33 @@ impl SidecarManager {
             let src_path = entry.path();
             let dst_path = dst.join(entry.file_name());
 
-            if src_path.is_dir() {
+            // 使用 symlink_metadata 获取元数据，不追踪软链接
+            let metadata = std::fs::symlink_metadata(&src_path)
+                .map_err(|e| format!("Failed to read metadata for {:?}: {}", src_path, e))?;
+
+            if metadata.file_type().is_symlink() {
+                #[cfg(unix)]
+                {
+                    let target = std::fs::read_link(&src_path)
+                        .map_err(|e| format!("Failed to read symlink target for {:?}: {}", src_path, e))?;
+                    // 如果目标软链已经存在，删除它以防冲突
+                    if dst_path.exists() || dst_path.is_symlink() {
+                        let _ = std::fs::remove_file(&dst_path);
+                    }
+                    std::os::unix::fs::symlink(&target, &dst_path)
+                        .map_err(|e| format!("Failed to create symlink {:?} → {:?}: {}", dst_path, target, e))?;
+                }
+                #[cfg(not(unix))]
+                {
+                    // 非 Unix 平台 fallback 物理复制
+                    std::fs::copy(&src_path, &dst_path)
+                        .map_err(|e| format!("Failed to copy legacy symlink {:?} → {:?}: {}", src_path, dst_path, e))?;
+                }
+            } else if src_path.is_dir() {
                 Self::copy_dir_recursive(&src_path, &dst_path)?;
             } else {
                 std::fs::copy(&src_path, &dst_path)
-                    .map_err(|e| format!("Failed to copy {:?} → {:?}: {}", src_path, dst_path, e))?;
+                    .map_err(|e| format!("Failed to copy file {:?} → {:?}: {}", src_path, dst_path, e))?;
             }
         }
 
