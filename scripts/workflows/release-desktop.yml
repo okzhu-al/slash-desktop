@@ -212,11 +212,19 @@ jobs:
           python3 --version
           which osascript || true
 
-          echo "=== 4. Verify dmg-background image files ==="
+          echo "=== 4. Test Run dmgbuild CLI directly to catch runtime dependency crashes ==="
+          cat << 'EOF' > test_settings.py
+filename = 'test_output.dmg'
+volume_name = 'TestVolume'
+EOF
+          dmgbuild -s test_settings.py 'TestVolume' test_output.dmg || true
+          ls -la test_output.dmg || true
+
+          echo "=== 5. Verify dmg-background image files ==="
           ls -lh apps/desktop/src-tauri/icons/dmg-background.png
           file apps/desktop/src-tauri/icons/dmg-background.png
 
-          echo "=== 5. Verify tauri.conf.json DMG section ==="
+          echo "=== 6. Verify tauri.conf.json DMG section ==="
           cat apps/desktop/src-tauri/tauri.conf.json | grep -A 20 '"dmg"'
 
 
@@ -230,6 +238,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          # 显式且硬性地重新注入正确的 scripts 路径到本地 PATH 中，确保 tauri build 查找环境无懈可击
+          SYS_BIN_DIR=$(python3 -c "import sys, os; print(os.path.join(sys.prefix, 'bin'))")
+          USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
+          export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
+
           # 包含动态嵌入 sidecar 配置参数进行构建打包
           pnpm tauri build --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundle }} --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
 
