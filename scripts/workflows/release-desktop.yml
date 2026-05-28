@@ -145,6 +145,8 @@ jobs:
 
           # 🎯 物理外科手术式实体化：在 codesign 前，强行将软链转换为物理二进制以确保其拥有合法独立的物理签名
           echo "📦 [Physical Realization] Converting symlinks to physical binaries..."
+          rm -f "$SIDECAR_DIR/_internal/Python"
+          rm -f "$SIDECAR_DIR/_internal/Python.framework/Python"
           cp -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.12/Python" "$SIDECAR_DIR/_internal/Python"
           cp -f "$SIDECAR_DIR/_internal/Python.framework/Versions/3.12/Python" "$SIDECAR_DIR/_internal/Python.framework/Python"
 
