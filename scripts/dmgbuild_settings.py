@@ -29,9 +29,8 @@ text_size = 12
 
 # 完美居中贴合坐标 (x, y) - 基于窗口左上角
 # 宽 660, 高 400，中间对称。
-# Y 坐标从 tauri.conf.json 的 170 微调到 205
-#（因为 Finder 图标渲染包含了文字空间，向下平移能防止文字贴紧边缘，使其处于背景图金色弧线和箭头的完美几何中心点！）
+# Y 坐标设为 170（完美对齐背景图的灰色引导箭头中心线！）
 icon_locations = {
-    os.path.basename(app_path): (180, 205),
-    'Applications': (480, 205)
+    os.path.basename(app_path): (180, 170),
+    'Applications': (480, 170)
 }
