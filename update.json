@@ -4,11 +4,11 @@
   "pub_date": "2026-05-28T13:07:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTaHliSlRvaURjbzVrOGU1bDRWZGhMc2VhVTRMR051V3RmU1EwMGZtWGhwK1VmeFVKWnJVSGlxT2JUNUQ1T0pES0EwM2QrUkNNcXBBajZVTDRGa21FUDNWaUFYcnAyOWc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5OTc0Mzc4CWZpbGU6U2xhc2guYXBwLnRhci5negpXVk8xTWUyUXBMNnJ6bVl0aCttTmF3NHNiMHZtSGc2b2YrY1ZxZExkSVVJYlhJbWljZjB3YzZwTWNuUTRET2xVWVFSbUNhYmJ3UHp2b01kREY3bERDZz09Cg==",
       "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.34/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTaHliSlRvaURjb3dVUGt3Um9uSm9OMVl3c2dlL0ZXaHRPZE1mSDk4RSs4bk5VTjVjd0J3aDc5WW9EdEUvOE5PL1lqQ2tPVmU4a09ERkh0Qk1jVWtlWElSKzVGNnlIR1FJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5OTc0NzQ3CWZpbGU6U2xhc2hfMC4xLjEtYmV0YS4zNF94NjQtc2V0dXAuZXhlCks0UXAyUTF2QXE5cXJaZDNYNXBDb1hlOExabnNoUmp6S3UvUW1vY0xhNnZZUXVGY3pLdWtsWCtWOEtUOWErYzVFbGVnMmFLa1JGd2dRRGRXN1JEU0F3PT0K",
       "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.34/Slash_0.1.1-beta.34_x64-setup.exe"
     }
   }
