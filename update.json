@@ -5,7 +5,7 @@
   "platforms": {
     "darwin-aarch64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTaHliSlRvaURjbzdQYUFoR2gzMTV0eTVXMFFqZS9GTHZEK2NYYjIwSUFQWHJsQzhIRldYQjUxQTB5RW03bWJXNXhaQUp4ZnFiQkxkV0poMHdJc05QVS91M0N6anl4V0F3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5OTQ5MDE1CWZpbGU6U2xhc2guYXBwLnRhci5negoxSDNtb3A5MDRpTFUzbkREWXBoQkNERWErTHNXOVVQdjl4d2Q2ZzhrM1V6TDkxeVdLdjVBZElQWHBraVNaZEQvdTNUUCtrMUczZ3pwZWhZZ0xsU3BDQT09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.24/Slash_0.1.1-beta.24_aarch64.app.tar.gz"
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.1-beta.24/Slash.app.tar.gz"
     },
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIHNpZ25hdHVyZQ==",

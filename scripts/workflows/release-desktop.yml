@@ -246,8 +246,8 @@ jobs:
             echo "🍏 macOS platform detected. Forcing Tauri bundle to 'app' only to preserve physical Slash.app..."
             pnpm tauri build --target ${{ matrix.rust-target }} --bundles app --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
           else
-            echo "💻 Non-macOS platform. Building default bundle: ${{ matrix.bundle }}"
-            pnpm tauri build --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundle }} --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
+            echo "💻 Non-macOS platform. Building default bundle natively to auto-generate zip updater packages..."
+            pnpm tauri build --target ${{ matrix.rust-target }} --config '{"bundle":{"resources":["binaries/slash-sidecar-${{ matrix.target }}"]}}'
           fi
 
       - name: Rebuild Beautified DMG with dmgbuild (macOS only)
