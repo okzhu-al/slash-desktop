@@ -35,6 +35,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
     const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
     const { checked } = node.attrs;
     const { t } = useTranslation();
+    const domRef = useRef<HTMLLIElement>(null);
 
     const teamMembers = useMemo(() => {
         return (window as any).__slashTeamMembers || [];
@@ -122,7 +123,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
     // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
     // force a repaint by refocusing after the DOM is fully stable.
     // 🚀 三重焦点保活防线 (20ms, 100ms, 250ms)
-    // 完美抵抗 React 渲染/WebKit 排版过程中所有网络/CPU抖动导致异步夺取焦点或物理 Selection 闪隐的问题！
+    // 结合物理 DOM 选区 Range 修复，完美抵抗 React 异步协调与 WebKit 选区丢弃导致物理 Selection 悬空或自动丢焦的问题！
     useEffect(() => {
         const pos = typeof getPos === 'function' ? getPos() : null;
         if (pos !== null && pos !== undefined) {
@@ -136,6 +137,37 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                             const { selection: currentSel } = editor.state;
                             // 只有当光标确实依然在当前 taskItem 内部时才保活 focus，避免抢夺其它位置的焦点
                             if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
+                                // 1. WebKit 物理 DOM 选区 (Selection) 强制锚定修复
+                                if (domRef.current) {
+                                    try {
+                                        // 寻找 task-content 容器内的段落元素
+                                        const pEl = domRef.current.querySelector('.task-content p') || domRef.current.querySelector('.task-content');
+                                        if (pEl) {
+                                            const sel = window.getSelection();
+                                            if (sel) {
+                                                const isAlreadyInside = sel.anchorNode && pEl.contains(sel.anchorNode);
+                                                // 仅在物理选区不在此段落内部时才强行重置，避免打断输入法组词状态
+                                                if (!isAlreadyInside) {
+                                                    const range = document.createRange();
+                                                    if (pEl.firstChild) {
+                                                        range.setStart(pEl.firstChild, 0);
+                                                        range.setEnd(pEl.firstChild, 0);
+                                                    } else {
+                                                        range.setStart(pEl, 0);
+                                                        range.setEnd(pEl, 0);
+                                                    }
+                                                    sel.removeAllRanges();
+                                                    sel.addRange(range);
+                                                    console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Physical selection range anchored to paragraph DOM successfully.`);
+                                                }
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.warn(`[Bug 2] Failed to restore physical Selection:`, err);
+                                    }
+                                }
+
+                                // 2. 调度 ProseMirror 级别的 focus 并保持选区
                                 const beforeFocusElement = document.activeElement;
                                 editor.commands.focus(currentSel.from, { scrollIntoView: false });
                                 console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Refocus complete. activeElement before:`, beforeFocusElement, ` -> after:`, document.activeElement);
@@ -354,6 +386,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
 
     return (
         <NodeViewWrapper
+            ref={domRef}
             as="li"
             className={`slash-task-item ${checked ? 'is-done' : ''}`}
             data-type="taskItem"
