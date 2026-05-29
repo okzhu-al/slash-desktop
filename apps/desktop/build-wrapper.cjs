@@ -8,13 +8,54 @@ const pwName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY_PASSWORD";
 
 const keyPath = path.join(__dirname, "tauri.key");
 
-// 🚀 终极降维打击 3.0：物理还原写回本地临时文件，将 env 指向其绝对路径以 100% 免疫 shell 换行符损坏天坑！
-const base64Key = "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5cWNnTUdJandhVHBUWG1sNkREbFVjNTRQNnJONDMwNnZwQWthWUM2U0dFc0FBQkFBQUFBQUFBQUFBQUlBQUFBQTN3d1lwZjQ2SmNkdm9TMVVQczFPVWpZaUxMMkZVcU4vNE83WkRDdmJQQWR5VXhIU0F6NW1hVlJhRWZhSmRuRlNPZkd6ajdONlFoN05qRm4zTWdPS3MwZ3J4UU45WTYyOUdvOFNEM1NjSzNxUUJQNnpEZm9vb1UrSzhyYUFnM1NpSXluMEppb2pJSXM9Cg==";
-fs.writeFileSync(keyPath, Buffer.from(base64Key, "base64"), { mode: 0o600 });
-console.log("📝 Physical private key successfully written to:", keyPath);
+// 🚀 降维打击 4.0：物理还原写回本地临时文件，无缝与 GitHub Secrets 保持 100% 动态同步，并完美处理平台换行兼容性！
+const rawKey = process.env.TAURI_SIGNING_PRIVATE_KEY;
+
+if (!rawKey) {
+  console.error("❌ TAURI_SIGNING_PRIVATE_KEY is missing in environment variables!");
+  process.exit(1);
+}
+
+try {
+  let finalKeyContent = "";
+  // 1. 判断是否是 Base64 编码格式
+  if (rawKey.includes("untrusted comment")) {
+    finalKeyContent = rawKey;
+  } else {
+    // 尝试作为 Base64 解码
+    const decoded = Buffer.from(rawKey.trim(), "base64").toString("utf8");
+    if (decoded.includes("untrusted comment")) {
+      finalKeyContent = decoded;
+    } else {
+      // 回退直接作为明文处理
+      finalKeyContent = rawKey;
+    }
+  }
+
+  // 2. 标准化处理换行符，清除首尾空格，强行以标准的 Unix 换行符 \n 组装以绝对免疫任何转义或压扁天坑
+  const lines = finalKeyContent
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length < 2) {
+    throw new Error("Invalid minisign private key format: must have at least 2 lines (comment and content).");
+  }
+
+  const cleanKey = lines.join("\n") + "\n";
+
+  fs.writeFileSync(keyPath, cleanKey, { mode: 0o600 });
+  console.log("📝 Physical private key dynamic restore SUCCESS!");
+  console.log("   First line verification:", lines[0]);
+  console.log("   Key data length verified:", lines[1].length);
+
+} catch (err) {
+  console.error("❌ Failed to parse or write physical private key:", err);
+  process.exit(1);
+}
 
 env[keyName] = keyPath;
-env[pwName] = "Antigravity2026!";
+env[pwName] = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || "Antigravity2026!";
 
 const rustTarget = process.env.RUST_TARGET;
 const targetPlatform = process.env.TARGET_PLATFORM;
