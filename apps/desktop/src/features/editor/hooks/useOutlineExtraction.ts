@@ -50,6 +50,7 @@ export function useOutlineExtraction(editor: Editor | null, activeNoteId: string
 
         // Listen for doc changes → update headings
         editor.on('update', updateOutline);
+        editor.on('selectionUpdate', updateOutline); // ⚡ Added: selectionUpdate guarantees outline rebuild on programmatically quiet note switches (setContent)
 
         // Listen for selection/cursor changes → update active heading
         editor.on('selectionUpdate', updateActiveHeading);
@@ -60,6 +61,7 @@ export function useOutlineExtraction(editor: Editor | null, activeNoteId: string
         return () => {
             if (!editor.isDestroyed) {
                 editor.off('update', updateOutline);
+                editor.off('selectionUpdate', updateOutline);
                 editor.off('selectionUpdate', updateActiveHeading);
             }
         };

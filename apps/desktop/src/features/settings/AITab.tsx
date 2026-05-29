@@ -764,7 +764,12 @@ const WhisperModelPanel = () => {
         try {
             const { getWhisperModels } = await import('@/services/WhisperService');
             const data = await getWhisperModels();
-            setModels(data.models);
+            // Defense-in-depth: enforce active only if downloaded (shields from old cached sidecar binary returning true)
+            const sanitizedModels = (data.models || []).map((m: any) => ({
+                ...m,
+                active: m.active && m.downloaded
+            }));
+            setModels(sanitizedModels);
             setSidecarReady(true);
         } catch (e) {
             console.error('Failed to load whisper models:', e);

@@ -87,6 +87,23 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         };
     }, []);
 
+    // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
+    // force a repaint by refocusing after the DOM is fully stable.
+    useEffect(() => {
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        if (pos !== null && pos !== undefined) {
+            const { selection } = editor.state;
+            const nodeEnd = pos + node.nodeSize;
+            if (selection.from >= pos && selection.from <= nodeEnd) {
+                setTimeout(() => {
+                    if (editor && !editor.isDestroyed) {
+                        editor.commands.focus(selection.from, { scrollIntoView: false });
+                    }
+                }, 20);
+            }
+        }
+    }, [editor, getPos, node.nodeSize]);
+
     // Get insert position (end of paragraph inside taskItem)
     const getInsertPosition = useCallback(() => {
         const pos = typeof getPos === 'function' ? getPos() : null;

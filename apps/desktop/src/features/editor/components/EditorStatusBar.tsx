@@ -285,10 +285,12 @@ export const EditorStatusBar = ({ editor, incomingLinksCount, notePath }: Editor
 
         // Listen for document updates
         editor.on('update', updateStats);
+        editor.on('selectionUpdate', updateStats); // ⚡ Added: selectionUpdate guarantees statistics rebuild on programmatically quiet note switches (setContent)
 
         return () => {
             if (!editor.isDestroyed) {
                 editor.off('update', updateStats);
+                editor.off('selectionUpdate', updateStats);
             }
         };
     }, [editor]);

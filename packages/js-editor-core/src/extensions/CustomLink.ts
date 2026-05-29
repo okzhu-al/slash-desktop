@@ -6,11 +6,11 @@ import { TextSelection } from '@tiptap/pm/state';
 // Helper to check if we're inside code or math
 const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): boolean => {
     const $pos = state.doc.resolve(pos);
-    // Check for code or math marks on current position
+    // 1. Check for code or math marks on current position
     const marks = $pos.marks();
     if (marks.some((m: any) => m.type.name === 'code')) return true;
 
-    // Check parent for code block
+    // 2. Check parent for code block
     for (let d = $pos.depth; d > 0; d--) {
         const node = $pos.node(d);
         if (node.type.name === 'codeBlock' || node.type.name === 'math') {
@@ -18,46 +18,8 @@ const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): bool
         }
     }
 
-    // Check if the matched text itself starts with a backtick or dollar sign
-    if (matchedText && (matchedText.startsWith('`') || matchedText.startsWith('$'))) {
-        return true;
-    }
-
-    // Check if character right before pos is a backtick or dollar sign
-    if (pos > 0) {
-        const charBefore = state.doc.textBetween(pos - 1, pos);
-        if (charBefore === '`' || charBefore === '$') {
-            return true;
-        }
-    }
-
-    // Check for unclosed backticks or dollar signs in the text before cursor
-    const textBefore = state.doc.textBetween(0, pos, '\n');
-
-    // Count backticks - odd count means we're inside inline code
-    let backtickCount = 0;
-    for (let i = 0; i < textBefore.length; i++) {
-        if (textBefore[i] === '`') {
-            backtickCount++;
-        }
-    }
-    if (backtickCount % 2 === 1) {
-        return true;
-    }
-
-    // Count $ for inline math - odd count means we're inside math
-    let dollarCount = 0;
-    for (let i = 0; i < textBefore.length; i++) {
-        if (textBefore[i] === '$') {
-            // Skip double dollars ($$)
-            if (i + 1 < textBefore.length && textBefore[i + 1] === '$') {
-                i++;
-                continue;
-            }
-            dollarCount++;
-        }
-    }
-    if (dollarCount % 2 === 1) {
+    // 3. Check if the matched text itself contains a backtick or dollar sign
+    if (matchedText && (matchedText.includes('`') || matchedText.includes('$'))) {
         return true;
     }
 
