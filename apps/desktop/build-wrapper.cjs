@@ -17,42 +17,12 @@ if (!rawKey) {
 }
 
 try {
-  let finalKeyContent = "";
-  // 1. 判断是否是 Base64 编码格式
-  if (rawKey.includes("untrusted comment")) {
-    finalKeyContent = rawKey;
-  } else {
-    // 尝试作为 Base64 解码
-    const decoded = Buffer.from(rawKey.trim(), "base64").toString("utf8");
-    if (decoded.includes("untrusted comment")) {
-      finalKeyContent = decoded;
-    } else {
-      // 回退直接作为明文处理
-      finalKeyContent = rawKey;
-    }
-  }
-
-  // 2. 标准化处理换行符，清除首尾空格
-  const lines = finalKeyContent
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
-
-  if (lines.length < 2) {
-    throw new Error("Invalid minisign private key format: must have at least 2 lines (comment and content).");
-  }
-
-  // 🎯 降维打击 5.0 核心逻辑：
-  // 第一行作为 untrusted comment，剩下的所有行全部强行合并为一条连贯的单行 Base64 密文，彻底清除中间任何换行符！
-  const commentLine = lines[0];
-  const secretDataLine = lines.slice(1).join("");
-
-  const cleanKey = commentLine + "\n" + secretDataLine + "\n";
-
+  // 🚀 终极返璞归真 6.0：原封不动、分毫不差地将 Secrets 里的私钥单行字符串写回临时物理文件！
+  // 彻底杜绝任何画蛇添足的解码与拼接，完美镜像本地通过 generate 产生的原始单行私钥文件！
+  const cleanKey = rawKey.trim();
   fs.writeFileSync(keyPath, cleanKey, { mode: 0o600 });
-  console.log("📝 Physical private key dynamic restore (v5.0) SUCCESS!");
-  console.log("   First line verification:", commentLine);
-  console.log("   Key data line verified length:", secretDataLine.length);
+  console.log("📝 Physical private key dynamic restore (v6.0) SUCCESS!");
+  console.log("   Key data length verified:", cleanKey.length);
 
 } catch (err) {
   console.error("❌ Failed to parse or write physical private key:", err);
