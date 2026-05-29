@@ -653,7 +653,9 @@ export const MixedTaskItem = TaskItem.extend({
 
     // Use React NodeView for rich interaction
     addNodeView() {
-        return ReactNodeViewRenderer(TaskItemComponent);
+        return ReactNodeViewRenderer(TaskItemComponent, {
+            as: 'li',
+        });
     },
 });
 

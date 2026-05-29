@@ -299,7 +299,6 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
     return (
         <NodeViewWrapper
             ref={domRef}
-            as="li"
             className={`slash-task-item ${checked ? 'is-done' : ''}`}
             data-type="taskItem"
             data-checked={checked}
