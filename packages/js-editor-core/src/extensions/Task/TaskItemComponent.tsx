@@ -179,6 +179,78 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         }
     }, [editor, getPos, node.nodeSize]);
 
+    // 🛡️ WebKit 假丢焦原生拦截卫兵 (500ms 黄金保活拦截门)
+    // 专门捕获并高优先级拦截 WebKit 在 DOM 重组后抛出的假 blur，彻底消灭 Selection 悬空触发的原生丢焦
+    useEffect(() => {
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        if (pos === null || pos === undefined) return;
+
+        const { selection } = editor.state;
+        const nodeEnd = pos + node.nodeSize;
+        if (selection.from >= pos && selection.from <= nodeEnd) {
+            let isGuardActive = true;
+            const guardTimer = setTimeout(() => {
+                isGuardActive = false;
+            }, 500);
+
+            const handleBlurIntercept = (e: FocusEvent) => {
+                if (!isGuardActive) return;
+
+                // 校验：如果 relatedTarget 是一个外部的可聚焦元素（说明用户在切焦），我们安全放行
+                if (e.relatedTarget instanceof HTMLElement) {
+                    return;
+                }
+
+                // 校验：确保最新选区依然在当前 taskItem 内部
+                const { selection: currentSel } = editor.state;
+                if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+
+                    setTimeout(() => {
+                        if (editor && !editor.isDestroyed) {
+                            if (domRef.current) {
+                                try {
+                                    const pEl = domRef.current.querySelector('.task-content p') || domRef.current.querySelector('.task-content');
+                                    if (pEl) {
+                                        const sel = window.getSelection();
+                                        if (sel) {
+                                            const isAlreadyInside = sel.anchorNode && pEl.contains(sel.anchorNode);
+                                            if (!isAlreadyInside) {
+                                                const range = document.createRange();
+                                                if (pEl.firstChild) {
+                                                    range.setStart(pEl.firstChild, 0);
+                                                    range.setEnd(pEl.firstChild, 0);
+                                                } else {
+                                                    range.setStart(pEl, 0);
+                                                    range.setEnd(pEl, 0);
+                                                }
+                                                sel.removeAllRanges();
+                                                sel.addRange(range);
+                                            }
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.warn(`[Bug 2 Blur Guard] Failed to restore physical Selection:`, err);
+                                }
+                            }
+                            editor.commands.focus(currentSel.from, { scrollIntoView: false });
+                            console.info(`🛡️ [Bug 2 Blur Guard] Successfully intercepted WebKit fake blur event and restored caret selection!`);
+                        }
+                    }, 0);
+                }
+            };
+
+            const editorDom = editor.view.dom;
+            editorDom.addEventListener('blur', handleBlurIntercept, true);
+
+            return () => {
+                clearTimeout(guardTimer);
+                editorDom.removeEventListener('blur', handleBlurIntercept, true);
+            };
+        }
+    }, [editor, getPos, node.nodeSize]);
+
     // Get insert position (end of paragraph inside taskItem)
     const getInsertPosition = useCallback(() => {
         const pos = typeof getPos === 'function' ? getPos() : null;
