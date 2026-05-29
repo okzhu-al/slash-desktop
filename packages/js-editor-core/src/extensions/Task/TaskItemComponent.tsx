@@ -118,9 +118,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
             }
         }
         console.groupEnd();
-    }, [editor, getPos, node, node.nodeSize]);
-
-    // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
+    }, [editor, getPos, node, node.nodeSize])    // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
     // force a repaint by refocusing after the DOM is fully stable.
     // 🚀 三重焦点保活防线 (20ms, 100ms, 250ms)
     // 结合物理 DOM 选区 Range 修复，完美抵抗 React 异步协调与 WebKit 选区丢弃导致物理 Selection 悬空或自动丢焦的问题！
@@ -137,6 +135,23 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                             const { selection: currentSel } = editor.state;
                             // 只有当光标确实依然在当前 taskItem 内部时才保活 focus，避免抢夺其它位置的焦点
                             if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
+                                let isFirstScreen = false;
+
+                                // 🌟 核心防线：WebKit 第一屏（scrollTop === 0）Caret 物理重绘 Bug 强力突破
+                                if (domRef.current) {
+                                    try {
+                                        const scrollContainer = domRef.current.closest('.overflow-y-auto');
+                                        if (scrollContainer && scrollContainer.scrollTop === 0) {
+                                            isFirstScreen = true;
+                                            // 强制微调 1 像素，打破 WebKit 在滚动为 0 时的 Caret 投影坐标重叠 Bug
+                                            scrollContainer.scrollTop = 1;
+                                            console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] First screen scroll Matrix bypassed via 1px offset.`);
+                                        }
+                                    } catch (scrollErr) {
+                                        console.warn(`[Bug 2] Failed to adjust scroll offset:`, scrollErr);
+                                    }
+                                }
+
                                 // 1. WebKit 物理 DOM 选区 (Selection) 强制锚定修复
                                 if (domRef.current) {
                                     try {
@@ -146,8 +161,8 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                                             const sel = window.getSelection();
                                             if (sel) {
                                                 const isAlreadyInside = sel.anchorNode && pEl.contains(sel.anchorNode);
-                                                // 仅在物理选区不在此段落内部时才强行重置，避免打断输入法组词状态
-                                                if (!isAlreadyInside) {
+                                                // 如果在第一屏，或者物理选区不在当前段落内部，则强制强刷 Selection
+                                                if (isFirstScreen || !isAlreadyInside) {
                                                     const range = document.createRange();
                                                     if (pEl.firstChild) {
                                                         range.setStart(pEl.firstChild, 0);
@@ -158,7 +173,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                                                     }
                                                     sel.removeAllRanges();
                                                     sel.addRange(range);
-                                                    console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Physical selection range anchored to paragraph DOM successfully.`);
+                                                    console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Physical selection range anchored to paragraph DOM successfully. FirstScreen=${isFirstScreen}`);
                                                 }
                                             }
                                         }
@@ -209,6 +224,21 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
 
                     setTimeout(() => {
                         if (editor && !editor.isDestroyed) {
+                            let isFirstScreen = false;
+
+                            // 🌟 第一屏 scrollTop 1px 微调
+                            if (domRef.current) {
+                                try {
+                                    const scrollContainer = domRef.current.closest('.overflow-y-auto');
+                                    if (scrollContainer && scrollContainer.scrollTop === 0) {
+                                        isFirstScreen = true;
+                                        scrollContainer.scrollTop = 1;
+                                    }
+                                } catch (scrollErr) {
+                                    console.warn(`[Bug 2 Blur Guard] Failed to adjust scroll offset:`, scrollErr);
+                                }
+                            }
+
                             if (domRef.current) {
                                 try {
                                     const pEl = domRef.current.querySelector('.task-content p') || domRef.current.querySelector('.task-content');
@@ -216,7 +246,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                                         const sel = window.getSelection();
                                         if (sel) {
                                             const isAlreadyInside = sel.anchorNode && pEl.contains(sel.anchorNode);
-                                            if (!isAlreadyInside) {
+                                            if (isFirstScreen || !isAlreadyInside) {
                                                 const range = document.createRange();
                                                 if (pEl.firstChild) {
                                                     range.setStart(pEl.firstChild, 0);
@@ -235,7 +265,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                                 }
                             }
                             editor.commands.focus(currentSel.from, { scrollIntoView: false });
-                            console.info(`🛡️ [Bug 2 Blur Guard] Successfully intercepted WebKit fake blur event and restored caret selection!`);
+                            console.info(`🛡️ [Bug 2 Blur Guard] Successfully intercepted WebKit fake blur event and restored caret selection! FirstScreen=${isFirstScreen}`);
                         }
                     }, 0);
                 }
