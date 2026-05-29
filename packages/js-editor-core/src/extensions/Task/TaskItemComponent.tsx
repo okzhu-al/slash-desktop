@@ -45,19 +45,18 @@ const safelyAnchorSelectionToDOM = (container: HTMLElement) => {
             textNode = walk.currentNode;
         }
 
-        // 💡 物理黑科技：第一屏空行下，手动注入一个 TEXT_NODE 级别的零宽文本节点
-        if (!textNode) {
-            const br = pEl.querySelector('br');
-            if (br) br.remove(); // 剔除 BR 占位符干扰
-            
-            textNode = document.createTextNode('\u200B');
-            pEl.appendChild(textNode);
-            console.info(`💡 [Bug 2 Caret Telemetry] Injected Zero-Width Text Node to empty paragraph.`);
-        }
-
         if (textNode) {
             range.setStart(textNode, 0);
             range.setEnd(textNode, 0);
+        } else {
+            // 如果段落中暂时没有物理文本（即刚刚回车，是空任务列表，此时可能只有一个 <br class="ProseMirror-trailingBreak">）
+            if (pEl.firstChild) {
+                range.setStartBefore(pEl.firstChild);
+                range.setEndBefore(pEl.firstChild);
+            } else {
+                range.setStart(pEl, 0);
+                range.setEnd(pEl, 0);
+            }
         }
 
         sel.removeAllRanges();
@@ -200,59 +199,11 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
 
     // 🛡️ WebKit 假丢焦原生拦截卫兵 (500ms 黄金保活拦截门)
     // 专门捕获并高优先级拦截 WebKit 在 DOM 重组后抛出的假 blur，彻底消灭 Selection 悬空触发的原生丢焦
+    // 🛡️ WebKit 假丢焦原生拦截卫兵 (500ms 黄金保活拦截门)
+    // 🌟 步骤 1：根据验证要求，临时完全禁用 Blur Guard 逻辑以进行排查
     useEffect(() => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos === null || pos === undefined) return;
-
-        const { selection } = editor.state;
-        const nodeEnd = pos + node.nodeSize;
-        if (selection.from >= pos && selection.from <= nodeEnd) {
-            let isGuardActive = true;
-            const guardTimer = setTimeout(() => {
-                isGuardActive = false;
-            }, 500);
-
-            const handleBlurIntercept = (e: FocusEvent) => {
-                if (!isGuardActive) return;
-
-                // 校验：如果 relatedTarget 是一个外部的可聚焦元素（说明用户在切焦），我们安全放行
-                if (e.relatedTarget instanceof HTMLElement) {
-                    return;
-                }
-
-                // 校验：确保最新选区依然在当前 taskItem 内部
-                const { selection: currentSel } = editor.state;
-                if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-
-                    setTimeout(() => {
-                        if (editor && !editor.isDestroyed) {
-                            // 1. 🌟 有条件降噪 Refocus：只有当编辑器失焦时才执行 refocus
-                            const editorDom = editor.view.dom;
-                            if (editorDom && document.activeElement !== editorDom) {
-                                editor.commands.focus(currentSel.from, { scrollIntoView: false });
-                            }
-
-                            // 2. 🌟 物理 DOM 选区强力锚定
-                            if (domRef.current) {
-                                safelyAnchorSelectionToDOM(domRef.current);
-                            }
-                            console.info(`🛡️ [Bug 2 Blur Guard] Successfully intercepted WebKit fake blur event and restored caret selection!`);
-                        }
-                    }, 0);
-                }
-            };
-
-            const editorDom = editor.view.dom;
-            editorDom.addEventListener('blur', handleBlurIntercept, true);
-
-            return () => {
-                clearTimeout(guardTimer);
-                editorDom.removeEventListener('blur', handleBlurIntercept, true);
-            };
-        }
-    }, [editor, getPos, node.nodeSize]);
+        // Blur Guard is temporarily disabled.
+    }, []);
 
     // Get insert position (end of paragraph inside taskItem)
     const getInsertPosition = useCallback(() => {
