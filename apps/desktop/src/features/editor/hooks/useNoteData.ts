@@ -45,7 +45,7 @@ interface UseNoteDataReturn {
 
 export function useNoteData(): UseNoteDataReturn {
     // Get noteId and title from context (with refs for async callbacks)
-    const { noteId, noteIdRef, title } = useNoteContext();
+    const { noteId, noteIdRef, title, titleRef } = useNoteContext();
     // AI Data State
     const [aiTags, setAiTags] = useState<string[]>([]);
     const [aiSummary, setAiSummary] = useState<string | undefined>(undefined);
@@ -69,8 +69,9 @@ export function useNoteData(): UseNoteDataReturn {
     }, []);
 
     // Fetch AI data
-    const fetchAIData = useCallback(async () => {
-        if (!noteId) return;
+    const fetchAIData = useCallback(async (forcedNoteId?: string) => {
+        const activeNoteId = forcedNoteId || noteIdRef.current || noteId;
+        if (!activeNoteId) return;
 
 
         try {
@@ -83,7 +84,7 @@ export function useNoteData(): UseNoteDataReturn {
                 ai_title: string | null;
                 user_title: string | null;
                 has_title_suggestion: boolean;
-            }>('get_note_ai_data', { notePath: noteId });
+            }>('get_note_ai_data', { notePath: activeNoteId });
 
 
             const newTags = data.ai_tags || [];
@@ -121,14 +122,15 @@ export function useNoteData(): UseNoteDataReturn {
         } catch (e) {
             console.warn('[useNoteData] Failed to fetch AI data:', e);
         }
-    }, [noteId]);
+    }, [noteId, noteIdRef]);
 
     // Fetch backlinks
-    const fetchBacklinks = useCallback(async () => {
-        if (!title || !isMountedRef.current) return;
+    const fetchBacklinks = useCallback(async (forcedTitle?: string) => {
+        const activeTitle = forcedTitle || titleRef.current || title;
+        if (!activeTitle || !isMountedRef.current) return;
 
         try {
-            const result = await invoke<Record<string, BacklinkItem[]>>('get_note_backlinks_by_section', { noteName: title });
+            const result = await invoke<Record<string, BacklinkItem[]>>('get_note_backlinks_by_section', { noteName: activeTitle });
 
             if (isMountedRef.current) {
                 const wholeNoteBacklinks = result[''] || [];
@@ -138,7 +140,7 @@ export function useNoteData(): UseNoteDataReturn {
         } catch (e) {
             console.warn('[useNoteData] Failed to fetch backlinks:', e);
         }
-    }, [title]);
+    }, [title, titleRef]);
 
 
 
@@ -156,13 +158,18 @@ export function useNoteData(): UseNoteDataReturn {
 
     // ⚡ Added: Listen to content loaded custom event to immediately trigger data & backlink refetching
     useEffect(() => {
-        const handleContentLoaded = () => {
-            fetchAIData();
-            fetchBacklinks();
+        const handleContentLoaded = (e: Event) => {
+            const detail = (e as CustomEvent)?.detail;
+            const currentNoteId = detail?.noteId || noteIdRef.current;
+            if (currentNoteId) {
+                fetchAIData(currentNoteId);
+                const calculatedTitle = currentNoteId.split(/[\\/]/).pop()?.replace(/\.md$/i, '') || '';
+                fetchBacklinks(titleRef.current || calculatedTitle);
+            }
         };
         window.addEventListener('slash:editor-content-loaded', handleContentLoaded);
         return () => window.removeEventListener('slash:editor-content-loaded', handleContentLoaded);
-    }, [fetchAIData, fetchBacklinks]);
+    }, [fetchAIData, fetchBacklinks, noteIdRef, titleRef]);
 
     // Listen for AI completion events to auto-refresh
     // Note: We only listen for ai:note-updated, not ai:generating

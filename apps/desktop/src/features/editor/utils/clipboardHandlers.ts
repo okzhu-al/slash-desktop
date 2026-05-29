@@ -211,11 +211,10 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
                 const linkMarkType = state.schema.marks.link;
                 if (linkMarkType) {
                     if (selection.empty) {
-                        // Paste raw URL as clickable text
-                        const node = state.schema.text(plainText.trim(), [
-                            linkMarkType.create({ href })
-                        ]);
-                        tr.replaceSelectionWith(node);
+                        const { from } = selection;
+                        tr.insertText(plainText.trim());
+                        const to = from + plainText.trim().length;
+                        tr.addMark(from, to, linkMarkType.create({ href }));
                     } else {
                         // Wrap selection text with the link mark
                         const { from, to } = selection;

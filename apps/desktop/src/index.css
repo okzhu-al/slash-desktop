@@ -1342,7 +1342,7 @@
 /* blockquote */
 .prose blockquote, .ProseMirror blockquote {
   border-left-color: #006540 !important;
-  border-left-width: 2px !important;
+  border-left-width: 4px !important;
   @apply pl-3 text-zinc-500 dark:text-zinc-400 my-2;
 }
 .ProseMirror blockquote p::before {

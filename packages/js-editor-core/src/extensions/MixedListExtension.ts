@@ -3,10 +3,8 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TextSelection, Selection, Plugin, PluginKey } from '@tiptap/pm/state';
 import { mergeAttributes, InputRule, Extension, Editor } from '@tiptap/core';
-
+import { ReactNodeViewRenderer } from '@tiptap/react';
 import { TaskItemComponent } from './Task/TaskItemComponent';
-import { createRoot } from 'react-dom/client';
-import React from 'react';
 
 // Import task styles
 import './Task/TaskItemStyles.css';
@@ -653,78 +651,9 @@ export const MixedTaskItem = TaskItem.extend({
         ];
     },
 
-    // Use Native Bridge NodeView to fundamentally prevent WebKit caret loss
+    // Use React NodeView for rich interaction
     addNodeView() {
-        return (props) => {
-            const { node, editor, getPos } = props as any;
-            const updateAttributes = (attrs: any) => {
-                if (typeof getPos === 'function') {
-                    const pos = getPos();
-                    if (pos !== undefined && pos !== null) {
-                        const { tr } = editor.view.state;
-                        const currentNode = editor.state.doc.nodeAt(pos);
-                        if (currentNode) {
-                            editor.view.dispatch(
-                                tr.setNodeMarkup(pos, undefined, {
-                                    ...currentNode.attrs,
-                                    ...attrs
-                                })
-                            );
-                        }
-                    }
-                }
-            };
-            
-            const dom = document.createElement('li');
-            dom.className = `slash-task-item ${node.attrs.checked ? 'is-done' : ''}`;
-            dom.setAttribute('data-type', 'taskItem');
-            dom.setAttribute('data-checked', String(node.attrs.checked));
-
-            // React Checkbox & Popups render container
-            const reactEl = document.createElement('div');
-            reactEl.style.display = 'inline';
-            dom.appendChild(reactEl);
-
-            // Pure contentDOM for ProseMirror (Synchronous & Static)
-            const contentDOM = document.createElement('div');
-            contentDOM.className = 'task-content';
-            dom.appendChild(contentDOM);
-
-            const root = createRoot(reactEl);
-            root.render(
-                React.createElement(TaskItemComponent, {
-                    node,
-                    updateAttributes,
-                    editor,
-                    getPos,
-                })
-            );
-
-            return {
-                dom,
-                contentDOM,
-                update(updatedNode) {
-                    if (updatedNode.type !== node.type) return false;
-                    dom.className = `slash-task-item ${updatedNode.attrs.checked ? 'is-done' : ''}`;
-                    dom.setAttribute('data-checked', String(updatedNode.attrs.checked));
-                    
-                    root.render(
-                        React.createElement(TaskItemComponent, {
-                            node: updatedNode,
-                            updateAttributes,
-                            editor,
-                            getPos,
-                        })
-                    );
-                    return true;
-                },
-                destroy() {
-                    setTimeout(() => {
-                        root.unmount();
-                    }, 0);
-                }
-            };
-        };
+        return ReactNodeViewRenderer(TaskItemComponent);
     },
 });
 
