@@ -188,11 +188,26 @@ export const EditorView = (props: EditorContainerState) => {
 
         // 3. 监听编辑器 Focus/Blur
         const handleFocus = () => console.log('🔥 [Bug 2 Focus] Editor DOM focused');
-        const handleBlur = () => console.log('💤 [Bug 2 Focus] Editor DOM blurred');
+        const handleBlur = (e: FocusEvent) => {
+            console.group('💤 [Bug 2 Focus] Editor DOM blurred');
+            console.log('- event.target:', e.target);
+            console.log('- event.relatedTarget:', e.relatedTarget);
+            console.log('- document.activeElement:', document.activeElement);
+            if (document.activeElement) {
+                console.log('  - tagName:', document.activeElement.tagName);
+                console.log('  - className:', document.activeElement.className);
+                console.log('  - role:', document.activeElement.getAttribute('role'));
+                console.log('  - type:', (document.activeElement as any).type);
+            }
+            if (typeof e.composedPath === 'function') {
+                console.log('- event.composedPath():', e.composedPath());
+            }
+            console.groupEnd();
+        };
 
         document.addEventListener('selectionchange', handleSelectionChange);
         dom.addEventListener('focus', handleFocus);
-        dom.addEventListener('blur', handleBlur);
+        dom.addEventListener('blur', handleBlur, true);
 
         return () => {
             observer.disconnect();
