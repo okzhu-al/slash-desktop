@@ -325,7 +325,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                 </span>
             </span>
 
-            <NodeViewContent as="div" className="task-content-wrapper" />
+            <NodeViewContent as="div" className="slash-task-content" />
 
             {menuMode === 'main' && createPortal(
                 <div

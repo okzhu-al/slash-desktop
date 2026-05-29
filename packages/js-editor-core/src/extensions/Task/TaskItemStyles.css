@@ -26,37 +26,37 @@ ul[data-type="taskList"] {
     min-height: 27px; /* 18px * 1.5 = 27px */
 }
 
-.slash-task-item.is-done > .task-content-wrapper {
+.slash-task-item.is-done > .slash-task-content {
     /* Color only applied at this level */
     color: #9CA3AF; /* gray-400 */
 }
 
 /* Reset: unchecked items inherit prose text color */
-.slash-task-item:not(.is-done) > .task-content-wrapper {
+.slash-task-item:not(.is-done) > .slash-task-content {
     color: inherit;
 }
 
-.dark .slash-task-item:not(.is-done) > .task-content-wrapper {
+.dark .slash-task-item:not(.is-done) > .slash-task-content {
     color: inherit;
 }
 
-/* Strikethrough on the actual paragraph element (TipTap v3 DOM: .task-content-wrapper > div[data-node-view-content-react] > p) */
-.slash-task-item.is-done > .task-content-wrapper > div > p {
+/* Strikethrough on the actual paragraph element (TipTap v3 DOM: .slash-task-content > div[data-node-view-content-react] > p) */
+.slash-task-item.is-done > .slash-task-content > div > p {
     text-decoration: line-through;
     text-decoration-color: #9CA3AF;
 }
 
 /* Force all inline elements (bold, italic, links, code) to inherit completed style */
-.slash-task-item.is-done > .task-content-wrapper > div > p * {
+.slash-task-item.is-done > .slash-task-content > div > p * {
     color: inherit !important;
 }
 
 /* Dark mode completed task */
-.dark .slash-task-item.is-done > .task-content-wrapper {
+.dark .slash-task-item.is-done > .slash-task-content {
     color: #6B7280; /* gray-500 for dark mode */
 }
 
-.dark .slash-task-item.is-done > .task-content-wrapper > div > p {
+.dark .slash-task-item.is-done > .slash-task-content > div > p {
     text-decoration-color: #6B7280;
 }
 
@@ -104,7 +104,7 @@ ul[data-type="taskList"] {
 }
 
 /* 🌟 右侧稳定 block 内容区 */
-.task-content-wrapper {
+.slash-task-content {
     flex: 1 !important;
     min-width: 0 !important;
     display: block !important;
@@ -113,7 +113,7 @@ ul[data-type="taskList"] {
 }
 
 /* 🌟 空段落设置 min-height 保障光标 Y 轴高度并撑开排版 */
-.task-content-wrapper p {
+.slash-task-content p {
     margin: 0 !important;
     min-height: 1.5em !important;
     line-height: 1.5 !important;
