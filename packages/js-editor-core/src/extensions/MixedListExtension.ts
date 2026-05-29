@@ -374,7 +374,7 @@ export const MixedTaskItem = TaskItem.extend({
                     chain()
                         .deleteRange(range)
                         .toggleTaskList()
-                        .focus()
+                        .focus(null, { scrollIntoView: false })
                         .run();
                 },
             }),
@@ -386,7 +386,7 @@ export const MixedTaskItem = TaskItem.extend({
                         .deleteRange(range)
                         .toggleTaskList()
                         .updateAttributes('taskItem', { checked: true })
-                        .focus()
+                        .focus(null, { scrollIntoView: false })
                         .run();
                 },
             }),
@@ -397,7 +397,7 @@ export const MixedTaskItem = TaskItem.extend({
                     chain()
                         .deleteRange(range)
                         .toggleTaskList()
-                        .focus()
+                        .focus(null, { scrollIntoView: false })
                         .run();
                 },
             }),
@@ -409,7 +409,7 @@ export const MixedTaskItem = TaskItem.extend({
                         .deleteRange(range)
                         .toggleTaskList()
                         .updateAttributes('taskItem', { checked: true })
-                        .focus()
+                        .focus(null, { scrollIntoView: false })
                         .run();
                 },
             }),
