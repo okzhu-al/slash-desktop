@@ -140,9 +140,9 @@ pub fn get_note_backlinks_by_section(
 
     let mut stmt = conn.prepare(
         "SELECT source_path, target_anchor FROM links 
-         WHERE target_anchor = ?1 
-            OR target_anchor LIKE ?2 
-            OR target_anchor LIKE ?3",
+         WHERE LOWER(target_anchor) = LOWER(?1) 
+            OR LOWER(target_anchor) LIKE LOWER(?2) 
+            OR LOWER(target_anchor) LIKE LOWER(?3)",
     )?;
 
     let rows = stmt.query_map(

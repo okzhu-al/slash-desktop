@@ -207,7 +207,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 size={32} className="animate-spin text-[#002FA7]" />
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.downloading_update', '正在下载更新包')}</h3>
-                            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium tabular-nums">{downloadedSize} / {totalSize}</p>
+                            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums min-w-[200px] mx-auto text-center">{downloadedSize} / {totalSize}</p>
                         </div>
 
                         {/* Premium Progress Bar */}

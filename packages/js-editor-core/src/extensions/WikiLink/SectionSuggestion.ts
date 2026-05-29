@@ -184,7 +184,11 @@ export const SectionSuggestion = Extension.create({
                             }
 
                             // Read note content
-                            const absolutePath = `${vaultPath}/${matchedNote.path}`;
+                            const isWindows = vaultPath.includes('\\');
+                            const separator = isWindows ? '\\' : '/';
+                            const cleanVault = vaultPath.replace(/[\\/]+$/, '');
+                            const cleanPath = matchedNote.path.replace(/^[\\/]+/, '');
+                            const absolutePath = `${cleanVault}${separator}${isWindows ? cleanPath.replace(/\//g, '\\') : cleanPath.replace(/\\/g, '/')}`;
                             const content = await readFileContent(absolutePath);
 
                             // Parse headings
@@ -207,7 +211,7 @@ export const SectionSuggestion = Extension.create({
 
                             // Calculate position for popup
                             const matchStart = from - match[2].length - 1; // Position after #
-                            showPopup(headings.slice(0, 10), view, matchStart);
+                            showPopup(headings, view, matchStart);
 
                         } catch (e) {
                             console.warn('[SectionSuggestion] Error:', e);

@@ -3,6 +3,80 @@ import { InputRule } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 
+// Helper to check if we're inside code or math
+const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): boolean => {
+    const $pos = state.doc.resolve(pos);
+    // Check for code or math marks on current position
+    const marks = $pos.marks();
+    if (marks.some((m: any) => m.type.name === 'code')) return true;
+
+    // Check parent for code block
+    for (let d = $pos.depth; d > 0; d--) {
+        const node = $pos.node(d);
+        if (node.type.name === 'codeBlock' || node.type.name === 'math') {
+            return true;
+        }
+    }
+
+    // Check if the matched text itself starts with a backtick or dollar sign
+    if (matchedText && (matchedText.startsWith('`') || matchedText.startsWith('$'))) {
+        return true;
+    }
+
+    // Check if character right before pos is a backtick or dollar sign
+    if (pos > 0) {
+        const charBefore = state.doc.textBetween(pos - 1, pos);
+        if (charBefore === '`' || charBefore === '$') {
+            return true;
+        }
+    }
+
+    // Check for unclosed backticks or dollar signs in the text before cursor
+    const textBefore = state.doc.textBetween(0, pos, '\n');
+
+    // Count backticks - odd count means we're inside inline code
+    let backtickCount = 0;
+    for (let i = 0; i < textBefore.length; i++) {
+        if (textBefore[i] === '`') {
+            backtickCount++;
+        }
+    }
+    if (backtickCount % 2 === 1) {
+        return true;
+    }
+
+    // Count $ for inline math - odd count means we're inside math
+    let dollarCount = 0;
+    for (let i = 0; i < textBefore.length; i++) {
+        if (textBefore[i] === '$') {
+            // Skip double dollars ($$)
+            if (i + 1 < textBefore.length && textBefore[i + 1] === '$') {
+                i++;
+                continue;
+            }
+            dollarCount++;
+        }
+    }
+    if (dollarCount % 2 === 1) {
+        return true;
+    }
+
+    return false;
+};
+
+// Helper to determine if a string looks like a valid URL to auto-link
+const isUrl = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (/\s/.test(trimmed)) return false;
+    if (/^(https?:\/\/|mailto:)/i.test(trimmed)) return true;
+    try {
+        const url = new URL('https://' + trimmed);
+        return url.hostname.includes('.') && url.hostname.split('.').pop()!.length >= 2;
+    } catch {
+        return false;
+    }
+};
+
 export interface CustomLinkOptions {
     openOnClick: boolean;
     autolink: boolean;
@@ -69,67 +143,6 @@ export const CustomLink = Mark.create<CustomLinkOptions>({
     },
 
     addInputRules() {
-        // Helper to check if we're inside code or math
-        const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): boolean => {
-            const $pos = state.doc.resolve(pos);
-            // Check for code or math marks on current position
-            const marks = $pos.marks();
-            if (marks.some((m: any) => m.type.name === 'code')) return true;
-
-            // Check parent for code block
-            for (let d = $pos.depth; d > 0; d--) {
-                const node = $pos.node(d);
-                if (node.type.name === 'codeBlock' || node.type.name === 'math') {
-                    return true;
-                }
-            }
-
-            // Check if the matched text itself starts with a backtick or dollar sign
-            if (matchedText && (matchedText.startsWith('`') || matchedText.startsWith('$'))) {
-                return true;
-            }
-
-            // Check if character right before pos is a backtick or dollar sign
-            if (pos > 0) {
-                const charBefore = state.doc.textBetween(pos - 1, pos);
-                if (charBefore === '`' || charBefore === '$') {
-                    return true;
-                }
-            }
-
-            // Check for unclosed backticks or dollar signs in the text before cursor
-            const textBefore = state.doc.textBetween(0, pos, '\n');
-
-            // Count backticks - odd count means we're inside inline code
-            let backtickCount = 0;
-            for (let i = 0; i < textBefore.length; i++) {
-                if (textBefore[i] === '`') {
-                    backtickCount++;
-                }
-            }
-            if (backtickCount % 2 === 1) {
-                return true;
-            }
-
-            // Count $ for inline math - odd count means we're inside math
-            let dollarCount = 0;
-            for (let i = 0; i < textBefore.length; i++) {
-                if (textBefore[i] === '$') {
-                    // Skip double dollars ($$)
-                    if (i + 1 < textBefore.length && textBefore[i + 1] === '$') {
-                        i++;
-                        continue;
-                    }
-                    dollarCount++;
-                }
-            }
-            if (dollarCount % 2 === 1) {
-                return true;
-            }
-
-            return false;
-        };
-
         return [
             // Match [text](url) pattern and convert to link
             new InputRule({
@@ -141,14 +154,20 @@ export const CustomLink = Mark.create<CustomLinkOptions>({
                     const text = match[1];
                     let url = match[2];
 
-                    // Validate URL - 支持 http://, https://, mailto:, www.
+                    // Validate URL - 支持 http://, https://, mailto:, www., 域名
                     if (!url) return;
                     // www. 开头自动补全 https://
                     if (url.startsWith('www.')) {
                         url = 'https://' + url;
                     }
+                    // If it doesn't have a protocol prefix but looks like a domain name
                     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('mailto:')) {
-                        return;
+                        // Check if it looks like a domain or a URL path (e.g., has a '.', no spaces, and starts with alphanumeric character)
+                        if (/^[a-zA-Z0-9]/i.test(url) && url.includes('.') && !/\s/.test(url)) {
+                            url = 'https://' + url;
+                        } else {
+                            return;
+                        }
                     }
 
                     chain()
@@ -260,6 +279,43 @@ export const CustomLink = Mark.create<CustomLinkOptions>({
 
                         return false;
                     },
+                    handlePaste: (view, event) => {
+                        const text = event.clipboardData?.getData('text/plain');
+                        if (text && isUrl(text)) {
+                            const { state } = view;
+                            const { selection } = state;
+                            
+                            // Skip if inside code or math block
+                            if (isInsideCodeOrMath(state, selection.from)) {
+                                return false;
+                            }
+                            
+                            let href = text.trim();
+                            if (href.startsWith('www.')) {
+                                href = 'https://' + href;
+                            }
+                            if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
+                                href = 'https://' + href;
+                            }
+                            
+                            const { tr } = state;
+                            if (selection.empty) {
+                                // Paste raw URL as clickable text
+                                const node = state.schema.text(text.trim(), [
+                                    state.schema.marks.link.create({ href })
+                                ]);
+                                tr.replaceSelectionWith(node);
+                                view.dispatch(tr.scrollIntoView());
+                            } else {
+                                // Wrap selection text with the link mark
+                                const { from, to } = selection;
+                                tr.addMark(from, to, state.schema.marks.link.create({ href }));
+                                view.dispatch(tr.scrollIntoView());
+                            }
+                            return true;
+                        }
+                        return false;
+                    }
                 },
             }),
         ];

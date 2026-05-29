@@ -89,6 +89,7 @@
 .task-content {
     display: block;
     width: 100%;
+    overflow: visible !important;
 }
 
 .task-content p {

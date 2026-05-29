@@ -293,7 +293,7 @@ export const AITab = ({
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-12">
             {/* ══════════════════════════════════════════════════════════
                 Section 1: Local Model Group (Ollama Host + Embedding + Generation)
                ══════════════════════════════════════════════════════════ */}

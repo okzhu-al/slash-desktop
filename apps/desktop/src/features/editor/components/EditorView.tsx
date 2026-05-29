@@ -91,7 +91,7 @@ export const EditorView = (props: EditorContainerState) => {
     } = props;
 
     // Use Outline Extraction (global TOC sync)
-    useOutlineExtraction(editor);
+    useOutlineExtraction(editor, activeNoteId || noteId || null);
 
     // ── AIRangeSelector 状态 ──
     const [aiRangeState, setAiRangeState] = useState<AIRangeSelectEvent | null>(null);

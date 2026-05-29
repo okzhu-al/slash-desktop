@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useOutlineStore, OutlineHeading } from '@/stores/useOutlineStore';
 
-export function useOutlineExtraction(editor: Editor | null) {
+export function useOutlineExtraction(editor: Editor | null, activeNoteId: string | null) {
     useEffect(() => {
         if (!editor || editor.isDestroyed) return;
 
@@ -63,5 +63,5 @@ export function useOutlineExtraction(editor: Editor | null) {
                 editor.off('selectionUpdate', updateActiveHeading);
             }
         };
-    }, [editor]);
+    }, [editor, activeNoteId]);
 }

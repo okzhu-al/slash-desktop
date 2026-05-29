@@ -371,7 +371,7 @@ async def whisper_models():
             "size_mb": meta["size_mb"],
             "description": meta["description"],
             "downloaded": downloaded,
-            "active": name == _current_whisper_model_name and downloaded,
+            "active": name == _current_whisper_model_name and _whisper_model is not None and downloaded,
             "download_status": progress_info.get("status"),
             "download_progress": progress_info.get("progress", 0),
             "download_error": progress_info.get("error"),

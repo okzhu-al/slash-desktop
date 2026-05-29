@@ -1340,7 +1340,7 @@
 
   /* blockquote */
   blockquote {
-    @apply pl-3 border-l-2 border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 my-2;
+    @apply pl-3 border-l-2 border-[#006540] dark:border-[#006540] text-zinc-500 dark:text-zinc-400 my-2;
   }
   .ProseMirror blockquote p::before {
     content: "“";
