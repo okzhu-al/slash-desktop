@@ -25,11 +25,6 @@ import './TaskItemStyles.css';
 
 type MenuMode = 'none' | 'main' | 'date' | 'user' | 'priority';
 
-/**
- * 💡 WebKit 物理 DOM 选区 (Selection) 强制锚定修复
- * 使用 TreeWalker 深度优先查找最底层的物理文本节点进行锚定，
- * 如果是刚创建的空段落，则锚定在第一个子占位符的前面，这能 100% 迫使 WebKit 渲染引擎绘制光标 Caret。
- */
 const safelyAnchorSelectionToDOM = (container: HTMLElement) => {
     try {
         const pEl = container.querySelector('.task-content p') || container.querySelector('.task-content') || container;
@@ -50,18 +45,19 @@ const safelyAnchorSelectionToDOM = (container: HTMLElement) => {
             textNode = walk.currentNode;
         }
 
+        // 💡 物理黑科技：第一屏空行下，手动注入一个 TEXT_NODE 级别的零宽文本节点
+        if (!textNode) {
+            const br = pEl.querySelector('br');
+            if (br) br.remove(); // 剔除 BR 占位符干扰
+            
+            textNode = document.createTextNode('\u200B');
+            pEl.appendChild(textNode);
+            console.info(`💡 [Bug 2 Caret Telemetry] Injected Zero-Width Text Node to empty paragraph.`);
+        }
+
         if (textNode) {
             range.setStart(textNode, 0);
             range.setEnd(textNode, 0);
-        } else {
-            // 如果段落中暂时没有物理文本（即刚刚回车，是空任务列表，此时可能只有一个 <br class="ProseMirror-trailingBreak">）
-            if (pEl.firstChild) {
-                range.setStartBefore(pEl.firstChild);
-                range.setEndBefore(pEl.firstChild);
-            } else {
-                range.setStart(pEl, 0);
-                range.setEnd(pEl, 0);
-            }
         }
 
         sel.removeAllRanges();
@@ -69,35 +65,6 @@ const safelyAnchorSelectionToDOM = (container: HTMLElement) => {
         console.info(`⚡ [Bug 2 Caret Telemetry] Physical DOM Selection anchored successfully.`);
     } catch (err) {
         console.warn(`[Bug 2] Failed to safely anchor Selection:`, err);
-    }
-};
-
-/**
- * 💡 WebKit 强力布局 Reflow 与物理 Caret 重绘唤醒
- * 改变编辑器 DOM 的 padding-bottom，通过 Forced Synchronous Layout 读取 offsetHeight 阻断样式合并，
- * 并在 50ms 延时后静默还原，100% 强制 WebKit 在第一屏（scrollTop === 0）进行重绘，完美唤醒不可见光标。
- */
-const triggerWebKitReflow = (editorDom: HTMLElement) => {
-    try {
-        const origPadding = editorDom.style.paddingBottom;
-        const computedPadding = window.getComputedStyle(editorDom).paddingBottom;
-        const parsedPadding = parseFloat(computedPadding) || 0;
-        
-        // 微调 0.1px 并强制重排
-        editorDom.style.paddingBottom = `${parsedPadding + 0.1}px`;
-        
-        // 💡 物理重绘核心：直接读取 offsetHeight 强行触发同步 Layout，阻断合并优化
-        editorDom.offsetHeight; 
-        
-        // 延时 50ms 后还原，避开浏览器的优化合并机制，确保渲染管道发生真实的重绘
-        setTimeout(() => {
-            if (editorDom) {
-                editorDom.style.paddingBottom = origPadding;
-                editorDom.offsetHeight;
-            }
-        }, 50);
-    } catch (layoutErr) {
-        console.warn(`[Bug 2] Failed to trigger WebKit Reflow:`, layoutErr);
     }
 };
 
@@ -212,20 +179,17 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                             const { selection: currentSel } = editor.state;
                             // 只有当光标确实依然在当前 taskItem 内部时才保活 focus，避免抢夺其它位置的焦点
                             if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
-                                // 🌟 强力重排唤醒
-                                if (editor.view.dom) {
-                                    triggerWebKitReflow(editor.view.dom);
+                                // 1. 🌟 有条件降噪 Refocus：只有当编辑器失焦时才执行 refocus
+                                const editorDom = editor.view.dom;
+                                if (editorDom && document.activeElement !== editorDom) {
+                                    editor.commands.focus(currentSel.from, { scrollIntoView: false });
+                                    console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Refocus executed because editor was blurred.`);
                                 }
 
-                                // 🌟 物理 DOM 选区强力锚定
+                                // 2. 🌟 物理 DOM 选区强力锚定（确保 Selection 挂载在 TEXT_NODE 物理文本上，避开块级塌陷）
                                 if (domRef.current) {
                                     safelyAnchorSelectionToDOM(domRef.current);
                                 }
-
-                                // 调度 ProseMirror 级别的 focus 并保持选区
-                                const beforeFocusElement = document.activeElement;
-                                editor.commands.focus(currentSel.from, { scrollIntoView: false });
-                                console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Refocus complete. activeElement before:`, beforeFocusElement, ` -> after:`, document.activeElement);
                             }
                         }
                     }, delay);
@@ -264,17 +228,16 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
 
                     setTimeout(() => {
                         if (editor && !editor.isDestroyed) {
-                            // 🌟 假 blur 拦截恢复时的强力重绘唤醒
-                            if (editor.view.dom) {
-                                triggerWebKitReflow(editor.view.dom);
+                            // 1. 🌟 有条件降噪 Refocus：只有当编辑器失焦时才执行 refocus
+                            const editorDom = editor.view.dom;
+                            if (editorDom && document.activeElement !== editorDom) {
+                                editor.commands.focus(currentSel.from, { scrollIntoView: false });
                             }
 
-                            // 🌟 物理 DOM 选区强力锚定
+                            // 2. 🌟 物理 DOM 选区强力锚定
                             if (domRef.current) {
                                 safelyAnchorSelectionToDOM(domRef.current);
                             }
-                            
-                            editor.commands.focus(currentSel.from, { scrollIntoView: false });
                             console.info(`🛡️ [Bug 2 Blur Guard] Successfully intercepted WebKit fake blur event and restored caret selection!`);
                         }
                     }, 0);
@@ -507,6 +470,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
             <label
                 className={`task-checkbox ${checked ? 'is-checked' : ''}`}
                 onClick={handleCheckboxChange}
+                contentEditable={false}
             >
                 {checked && <Check size={10} strokeWidth={3} />}
             </label>
