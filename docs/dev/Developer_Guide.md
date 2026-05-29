@@ -264,3 +264,78 @@ git push -u origin main
    ```
 
 通过本套脱敏与签名公证架构，不仅极大解放了多仓维护的生产力，更将代码开发质量、开源安全性及企业级 CI/CD 认证安全性提升到了行业顶尖水准！
+
+---
+
+## 七、发版时序、自动更新与签名回填 SOP
+
+为了确保最终用户能够百分之百顺畅地进行在线版本检测与热升级，发版过程必须严格防范**更新通道时序竞争（Race Condition）**与**云端构建死循环（Build Loop）**。以下是基于项目工程实践的最佳发布闭环流程规范：
+
+### 1. 核心工程原理与设计逻辑
+
+#### 1.1 更新空档期的安全拦截（时序竞争防范）
+如果我们在云端 Actions 打包编译之前，就把包含了新版本号的 `update.json` 推送到云端公开分仓的 `main` 分支上，那么：
+* 在 Actions 漫长的编译和苹果官方公证（通常需要 5 - 15 分钟）空档期中，云端的 `update.json` 已经是新版，但 `signature` 仍是初始的占位符。
+* 期间若有任何客户端用户点击“检查更新”，客户端能成功发现并下载升级包，但会由于**签名校验失败**直接抛出“安装包损坏”错误，破坏用户体验。
+* **隔离设计**：在发版时，我们**只打 Tag 并单独推送 Tag，绝对不要提前将包含新版号的 `update.json` 推送到镜像仓的 `main` 分支**。云端 `main` 的 `update.json` 保持在旧版本，客户端在空档期内不会检测到任何更新。
+
+#### 1.2 为什么必须“双向回填”？（唯一修改源的捍卫）
+* **主仓沉淀**：我们必须将最新拉取到的真实数字签名也同步回填写入**主仓** `/update.json`。否则，下一次您在主仓开发功能并运行同步脚本 `./scripts/publish-all.sh` 时，分仓里填好的 `update.json` 就会被主仓中过时的配置**强行物理覆盖和抹除**！
+* **分仓发布**：分仓 `/update.json` 推送到 `main` 分支，担任轻量级静态 CDN 配置，向客户端分发更新。
+
+#### 1.3 静态 CDN 抓取（绕过 API 403 限流拦截）
+* 自动填充签名脚本 `auto_update_windows_sig.py` 在运行轮询时，不请求 GitHub 限流极严（每小时 60 次）的 REST API，而是直接高频轮询 **GitHub Releases 的原始静态下载 CDN 地址**（不受 API 频次限流约束），在网络抖动时具备极强的生命力，完全不会产生“急性猝死”。
+
+#### 1.4 Tag 触发构建唯一性（规避构建死循环）
+* 镜像分仓的 CI/CD 被配置为仅在 `push.tags: ['v*']` 时启动。因此，脚本在回填完成后向分仓 `main` 分支推送的 `git push origin main` 动作**绝对不会二次触发 GitHub Actions 编译**，彻底避开了“推送配置 -> 触发编译 -> 生成新签名 -> 再次回填推送 -> 再次触发编译”的恐怖死循环黑洞。
+
+---
+
+### 2. 完美的正式发版标准 SOP (Tag-to-Release)
+
+> [!IMPORTANT]
+> **发版前的绝对红线纪律：必须同步推进 `update.json` 版号并执行 `publish`**
+> 在分仓打 Tag 触发云端 CI/CD 构建之前，不仅要在主仓中升级 `package.json` 和 `tauri.conf.json` 的版本号，**还必须在主仓的 [/update.json](file:///Users/junior/Projects/slash/update.json) 中将版本号推进为新版本、同步更新下载 URL，并必须立即执行 `./scripts/publish-all.sh` 级联同步拷贝到分仓目录中！**
+> 如果遗漏了发版前的 `publish` 拷贝步骤就直接打 Tag 构建，Actions 产生签名后，我们在本地运行填充脚本时，脚本会将最新的数字签名强行灌入本地版本号还是旧版（如 `.40`）的分仓 `update.json` 里并直接推上云端。这将导致**“版本号与签名错位”**的奇特现象（云端 JSON 版本仍显示为旧版，客户端比对时认为已是最新版，导致全球更新通道彻底卡死！）。
+
+当您准备正式向所有客户端用户推送升级（如 `v0.1.1-beta.41`）时，请按照以下绝对安全的流程进行操作：
+
+#### 第一步：版本号同步与推进（主仓）
+1. 在主仓的 `apps/desktop/package.json` 与 `tauri.conf.json` 中，推进版本号至新版。
+2. 同步在主仓的 [/update.json](file:///Users/junior/Projects/slash/update.json) 中，将 `"version"` 字段改为新版本号，将 `url` 分别指向新版本的下载链接，**保持 signature 字段为占位符不变**。
+3. **【绝对红线】**在主仓执行同步，将所有配置和版号物理同步分发到分仓中：`./scripts/publish-all.sh`。
+
+#### 第二步：只推送 Tag 触发构建（分仓）
+1. 进入镜像仓目录 `../slash-desktop`。
+2. 提交本地改动，并**打上版本 Tag，仅推送该 Tag，切勿推送 `main` 分支**：
+   ```bash
+   cd ../slash-desktop
+   git add .
+   git commit -m "feat: release v0.1.1-beta.41"
+   git tag v0.1.1-beta.41
+   git push origin v0.1.1-beta.41  # 👈 仅推送版本 Tag！
+   ```
+   *(此时云端 Actions 正常拉起，开始长达 10 分钟的代码签名和 Notarization 公证。在此期间云端 `main` 分支上的 `update.json` 仍为旧版，空档期被安全隔离)*。
+
+#### 第三步：一键运行自动签名填充脚本（主仓）
+1. 回到主仓目录，运行签名填充服务：
+   ```bash
+   cd ../slash
+   python3 scratch/auto_update_windows_sig.py
+   ```
+2. 该脚本会自动：
+   * 读取我们第一步在主仓 `update.json` 里预设好的新版本号。
+   * 启动长轮询，从 GitHub CDN 稳定拉取最新的 macOS 与 Windows 的真实公钥签名。
+   * 将真实签名双向安全填写入**主仓**与**分仓**本地的两个 `update.json` 文件中。
+   * **自动进入分仓目录，执行提交并将回填后的 `update.json` 正式 push 推送到云端分仓的 `main` 分支！**
+
+#### 第四步：收尾与沉淀
+1. 脚本回填并推送完成后，我们在主仓的 git 历史中，将本地已填充了真实签名的高清 `update.json` 提交并推送：
+   ```bash
+   cd ../slash
+   git add update.json
+   git commit -m "chore: auto-populate dual-platform updater signatures for v0.1.1-beta.41"
+   git push
+   ```
+2. 至此，发版流程以零多余磁盘 I/O 开销、零脏代码外泄风险、零时序校验报错的完美姿态闭环落幕！
+
