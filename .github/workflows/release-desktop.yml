@@ -245,19 +245,7 @@ jobs:
           USER_BIN_DIR=$(python3 -c "import site, os; print(os.path.join(site.USER_BASE, 'bin'))")
           export PATH="$SYS_BIN_DIR:$USER_BIN_DIR:$PATH"
 
-          node build-wrapper.cjs 2>&1 | tee build_wrapper.log
-
-      - name: Upload Debug Log strictly on failure
-        if: failure()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          echo "=== BUILD FAILED! Uploading build_wrapper.log to Release ==="
-          for i in {1..5}; do
-            gh release create "${{ github.ref_name }}" --title "Slash ${{ github.ref_name }}" --prerelease --notes "Debug release" && break || sleep 5
-          done
-          gh release upload "${{ github.ref_name }}" apps/desktop/build_wrapper.log --clobber
+          node build-wrapper.cjs
 
       - name: Rebuild Beautified DMG with dmgbuild (macOS only)
         if: matrix.platform == 'macos'

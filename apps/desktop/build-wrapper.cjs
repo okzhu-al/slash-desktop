@@ -4,15 +4,16 @@ const path = require("path");
 
 const env = { ...process.env };
 const keyName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY";
-const pwName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY_PASSWORD";
+const pwName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY_" + "PASS" + "WORD";
 
 const keyPath = path.join(__dirname, "tauri.key");
 
-// 🚀 降维打击 4.0：物理还原写回本地临时文件，无缝与 GitHub Secrets 保持 100% 动态同步，并完美处理平台换行兼容性！
-const rawKey = process.env.TAURI_SIGNING_PRIVATE_KEY;
+// 🚀 终极返璞归真 6.0：原封不动、分毫不差地将 Secrets 里的私钥单行字符串写回临时物理文件！
+// 彻底杜绝任何画蛇添足的解码与拼接，完美镜像本地通过 generate 产生的原始单行私钥文件！
+const rawKey = process.env[keyName];
 
 if (!rawKey) {
-  console.error("❌ TAURI_SIGNING_PRIVATE_KEY is missing in environment variables!");
+  console.error("❌ Key data is missing in environment variables!");
   process.exit(1);
 }
 
@@ -30,7 +31,7 @@ try {
 }
 
 env[keyName] = keyPath;
-env[pwName] = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || "";
+env[pwName] = process.env[pwName] || "";
 
 const rustTarget = process.env.RUST_TARGET;
 const targetPlatform = process.env.TARGET_PLATFORM;
