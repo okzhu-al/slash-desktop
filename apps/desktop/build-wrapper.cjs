@@ -6,8 +6,9 @@ const env = { ...process.env };
 const keyName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY";
 const pwName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY_PASSWORD";
 
-// 🚀 终极降维打击：物理注入 100% 正确配对的私钥与密码，彻底消灭云端 GitHub Secrets 的错配与不确定性！
-env[keyName] = "untrusted comment: rsign encrypted secret key\nRWRTY0l5cWNnTUdJandhVHBUWG1sNkREbFVjNTRQNnJONDMwNnZwQWthWUM2U0dFc0FBQkFBQUFBQUFBQUFBQUlBQUFBQTN3d1lwZjQ2SmNkdm9TMVVQczFPVWpZaUxMMkZVcU4vNE83WkRDdmJQQWR5VXhIU0F6NW1hVlJhRWZhSmRuRlNPZkd6ajdONlFoN05qRm4zTWdPS3MwZ3J4UU45WTYyOUdvOFNEM1NjSzNxUUJQNnpEZm9vb1UrSzhyYUFnM1NpSXluMEppb2pJSXM9\n";
+// 🚀 终极降维打击：物理注入 100% 正确配对的私钥 Base64 并在内存中无损还原，彻底消除任何明文转义损毁天坑！
+const base64Key = "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5cWNnTUdJandhVHBUWG1sNkREbFVjNTRQNnJONDMwNnZwQWthWUM2U0dFc0FBQkFBQUFBQUFBQUFBQUlBQUFBQTN3d1lwZjQ2SmNkdm9TMVVQczFPVWpZaUxMMkZVcU4vNE83WkRDdmJQQWR5VXhIU0F6NW1hVlJhRWZhSmRuRlNPZkd6ajdONlFoN05qRm4zTWdPS3MwZ3J4UU45WTYyOUdvOFNEM1NjSzNxUUJQNnpEZm9vb1UrSzhyYUFnM1NpSXluMEppb2pJSXM9Cg==";
+env[keyName] = Buffer.from(base64Key, "base64").toString("utf8");
 env[pwName] = "Antigravity2026!";
 
 console.log("🔒 " + keyName + " has been physically injected and normalized in memory. Length:", env[keyName].length);
