@@ -60,7 +60,7 @@ try {
 }
 
 env[keyName] = keyPath;
-env[pwName] = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || "Antigravity2026!";
+env[pwName] = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || "";
 
 const rustTarget = process.env.RUST_TARGET;
 const targetPlatform = process.env.TARGET_PLATFORM;
