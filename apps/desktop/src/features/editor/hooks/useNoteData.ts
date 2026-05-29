@@ -127,14 +127,22 @@ export function useNoteData(): UseNoteDataReturn {
     // Fetch backlinks
     const fetchBacklinks = useCallback(async (forcedTitle?: string) => {
         const activeTitle = forcedTitle || titleRef.current || title;
-        if (!activeTitle || !isMountedRef.current) return;
+        console.log('📊 [Bug 10 Debug] fetchBacklinks called. forcedTitle:', forcedTitle, 'titleRef.current:', titleRef.current, 'title:', title, '-> activeTitle:', activeTitle);
+        if (!activeTitle || !isMountedRef.current) {
+            console.log('📊 [Bug 10 Debug] fetchBacklinks skipped. activeTitle is empty or not mounted.');
+            return;
+        }
 
         try {
             const result = await invoke<Record<string, BacklinkItem[]>>('get_note_backlinks_by_section', { noteName: activeTitle });
+            console.log('📊 [Bug 10 Debug] get_note_backlinks_by_section result raw:', result);
 
             if (isMountedRef.current) {
-                const wholeNoteBacklinks = result[''] || [];
-                setTitleBacklinks(wholeNoteBacklinks);
+                // ⚡ Bug 10 Fix: Combine all section-level backlinks and whole-note backlinks together
+                // so that links like [[Note#Section]] are correctly counted as backlinks in incoming count
+                const allNoteBacklinks = Object.values(result).flat();
+                console.log('📊 [Bug 10 Debug] Combined backlinks:', allNoteBacklinks);
+                setTitleBacklinks(allNoteBacklinks);
                 setAllBacklinks(result);
             }
         } catch (e) {

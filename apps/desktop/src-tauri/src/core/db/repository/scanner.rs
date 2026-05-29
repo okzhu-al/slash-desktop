@@ -571,6 +571,14 @@ relations:
         assert_eq!(row2.target_anchor, "[[性能测试#核心指标]]");
         assert_eq!(row2.label, Some("核心指标".to_string()));
         assert_eq!(row2.link_type, "explicit");
+
+        // 6. 验证 get_note_backlinks_by_section 是否能正确查询到带有 #section 的 WikiLink
+        let backlinks = crate::core::db::repository::links::get_note_backlinks_by_section(&conn, "性能测试").unwrap();
+        assert!(backlinks.contains_key("核心指标"), "Backlinks should contain key '核心指标'");
+        let list = backlinks.get("核心指标").unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].source_path, "测试文档.md");
+        assert_eq!(list[0].target_anchor, "[[性能测试#核心指标]]");
     }
 }
 

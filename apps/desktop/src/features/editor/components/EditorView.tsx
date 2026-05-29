@@ -132,6 +132,77 @@ export const EditorView = (props: EditorContainerState) => {
         };
     }, [editor, canRequestCollabLock, reportActivity]);
 
+    // 🔍 Bug 2 (待办列表回车光标不可见) DOM & Caret 选区焦点诊断监控
+    useEffect(() => {
+        if (!editor || !editor.view.dom) return;
+        
+        const dom = editor.view.dom;
+        console.log('👀 [Bug 2 Debug] Registered DOM & Selection Monitor for active editor.');
+
+        // 1. 监听 DOM 树变更 (以检测 task list/checkbox 的渲染变化)
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                console.log(`[Bug 2 Mutation] Type: ${mutation.type}, Target:`, mutation.target);
+                if (mutation.addedNodes.length > 0) {
+                    console.log(`  Added nodes count: ${mutation.addedNodes.length}`);
+                    mutation.addedNodes.forEach(node => {
+                        if (node instanceof HTMLElement) {
+                            console.log(`  Added: <${node.tagName.toLowerCase()}> class="${node.className}"`, node);
+                        }
+                    });
+                }
+            }
+        });
+
+        observer.observe(dom, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style', 'contenteditable']
+        });
+
+        // 2. 监听全局选区/光标变化
+        const handleSelectionChange = () => {
+            const sel = window.getSelection();
+            if (!sel || !dom.contains(sel.anchorNode)) return;
+            
+            console.log('📌 [Bug 2 Selection]', {
+                anchorNode: sel.anchorNode,
+                anchorOffset: sel.anchorOffset,
+                focusNode: sel.focusNode,
+                focusOffset: sel.focusOffset,
+                isCollapsed: sel.isCollapsed,
+                rangeCount: sel.rangeCount,
+            });
+
+            if (sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                const rects = range.getClientRects();
+                console.log('  Caret ClientRects count:', rects.length);
+                if (rects.length > 0) {
+                    const rect = rects[0];
+                    console.log('  Caret Rect:', { top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+                }
+            }
+        };
+
+        // 3. 监听编辑器 Focus/Blur
+        const handleFocus = () => console.log('🔥 [Bug 2 Focus] Editor DOM focused');
+        const handleBlur = () => console.log('💤 [Bug 2 Focus] Editor DOM blurred');
+
+        document.addEventListener('selectionchange', handleSelectionChange);
+        dom.addEventListener('focus', handleFocus);
+        dom.addEventListener('blur', handleBlur);
+
+        return () => {
+            observer.disconnect();
+            document.removeEventListener('selectionchange', handleSelectionChange);
+            dom.removeEventListener('focus', handleFocus);
+            dom.removeEventListener('blur', handleBlur);
+            console.log('👀 [Bug 2 Debug] Selection Monitor cleaned up.');
+        };
+    }, [editor]);
+
     if (!editor) return null;
 
     // DocStatusBar 切换权限：仅非只读的编辑者或管理员可切换

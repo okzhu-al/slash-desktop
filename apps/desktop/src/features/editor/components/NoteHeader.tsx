@@ -41,6 +41,7 @@ export function NoteHeader({
     onSmartRename,
     isAIRunning = false,
 }: NoteHeaderProps) {
+    console.log('📊 [Bug 10 Debug] NoteHeader rendering. title:', title, 'titleBacklinks count:', titleBacklinks.length, 'data:', titleBacklinks);
     const { t } = useTranslation();
 
     return (

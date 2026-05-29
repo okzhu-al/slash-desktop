@@ -87,6 +87,38 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         };
     }, []);
 
+    // DOM & Caret Telemetry for Bug 2 diagnosis
+    useEffect(() => {
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        console.group(`🔍 [Bug 2 Caret Telemetry] TaskItem Component Mounted`);
+        console.info(`- Node Size: ${node.nodeSize}`);
+        console.info(`- Position: ${pos}`);
+        console.info(`- Editor Editable: ${editor.isEditable}`);
+        console.info(`- Document activeElement:`, document.activeElement);
+        
+        if (pos !== null && pos !== undefined) {
+            const { selection } = editor.state;
+            const nodeEnd = pos + node.nodeSize;
+            const isCursorInside = selection.from >= pos && selection.from <= nodeEnd;
+            console.info(`- Selection State: from=${selection.from}, to=${selection.to}, empty=${selection.empty}`);
+            console.info(`- Is Selection Inside Current TaskItem: ${isCursorInside}`);
+            
+            try {
+                const domNode = editor.view.nodeDOM(pos) as HTMLElement;
+                console.info(`- Rendered Node DOM Element:`, domNode);
+                if (domNode) {
+                    console.info(`- Node HTML Structure:`, domNode.outerHTML);
+                    console.info(`- Content Editable status:`, domNode.getAttribute('contenteditable'));
+                    const contentDOM = domNode.querySelector('.task-content');
+                    console.info(`- .task-content Element:`, contentDOM);
+                }
+            } catch (err) {
+                console.warn(`- Failed to retrieve Node DOM:`, err);
+            }
+        }
+        console.groupEnd();
+    }, [editor, getPos, node, node.nodeSize]);
+
     // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
     // force a repaint by refocusing after the DOM is fully stable.
     useEffect(() => {
@@ -95,9 +127,12 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
             const { selection } = editor.state;
             const nodeEnd = pos + node.nodeSize;
             if (selection.from >= pos && selection.from <= nodeEnd) {
+                console.info(`⚡ [Bug 2 Caret Telemetry] Scheduling 20ms refocus repaint at pos ${selection.from}...`);
                 setTimeout(() => {
                     if (editor && !editor.isDestroyed) {
+                        const beforeFocusElement = document.activeElement;
                         editor.commands.focus(selection.from, { scrollIntoView: false });
+                        console.info(`⚡ [Bug 2 Caret Telemetry] Refocus complete. activeElement before:`, beforeFocusElement, ` -> after:`, document.activeElement);
                     }
                 }, 20);
             }
