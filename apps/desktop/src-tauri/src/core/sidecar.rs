@@ -103,29 +103,7 @@ impl SidecarManager {
             binary_name.clone()
         };
 
-        // 1. 检查 App Support 目录 (生产模式，独立更新)
-        if let Some(app_support) = dirs::data_dir() {
-            let app_path = app_support
-                .join("Slash")
-                .join("sidecar")
-                .join(&binary_name)
-                .join(&exe_name);
-            if app_path.exists() {
-                log::info!("🔧 [Sidecar] Found at: {:?}", app_path);
-                return Some(app_path);
-            }
-            // 也检查不带 .exe 的路径（兼容旧版）
-            let app_path_legacy = app_support
-                .join("Slash")
-                .join("sidecar")
-                .join(&binary_name);
-            if app_path_legacy.exists() {
-                log::info!("🔧 [Sidecar] Found at (legacy): {:?}", app_path_legacy);
-                return Some(app_path_legacy);
-            }
-        }
-
-        // 2. 检查与可执行文件同级的 binaries 目录 (打包模式)
+        // 1. 检查与可执行文件同级的 binaries 目录 (打包模式)
         if let Ok(exe) = std::env::current_exe() {
             if let Some(exe_dir) = exe.parent() {
                 // macOS: Slash.app/Contents/MacOS/slash → ../Resources/binaries/
@@ -159,7 +137,7 @@ impl SidecarManager {
             }
         }
 
-        // 3. 开发模式: src-tauri/binaries/ (onedir 结构: dir/exe)
+        // 2. 开发模式: src-tauri/binaries/ (onedir 结构: dir/exe)
         let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("binaries")
             .join(&binary_name)
@@ -218,7 +196,7 @@ impl SidecarManager {
             }
         }
 
-        // P1-1: 安装分发 + 版本兼容性检查
+        // P1-1: 安装分发 + 版本兼容性检查 (统一移除全平台 App Support 复制和更新逻辑)
         if let Err(e) = self.ensure_sidecar_installed() {
             log::warn!("🔧 [Sidecar] Install check warning: {}", e);
         }
@@ -282,258 +260,16 @@ impl SidecarManager {
         Ok(())
     }
 
-    /// P1-1: 确保 App Support 中有 sidecar，若无则从 bundle 复制
+    /// P1-1: 确保 App Support 中有 sidecar，若无则从 bundle 复制 (已精简：统一不再做复制安装)
     fn ensure_sidecar_installed(&self) -> Result<(), String> {
-        let target_triple = Self::current_target_triple();
-        let binary_name = format!("slash-sidecar-{}", target_triple);
-
-        let app_support = dirs::data_dir()
-            .ok_or_else(|| "Cannot determine App Support directory".to_string())?;
-        let dest_dir = app_support.join("Slash").join("sidecar").join(&binary_name);
-
-        // 如果 App Support 已有 sidecar 且存在 version.json，跳过
-        let version_file_internal = dest_dir.join("_internal").join("version.json");
-        let version_file_root = dest_dir.join("version.json");
-        let has_version = version_file_internal.exists() || version_file_root.exists();
-
-        if dest_dir.exists() && has_version {
-            return Ok(());
-        }
-
-        if dest_dir.exists() {
-            log::warn!(
-                "🔧 [Sidecar] Sidecar directory {:?} exists but version.json is missing (incomplete installation). Re-installing...",
-                dest_dir
-            );
-            let _ = std::fs::remove_dir_all(&dest_dir);
-        }
-
-        // 从 bundle Resources 复制
-        let bundle_source = self.find_bundle_sidecar_dir(&binary_name);
-        if let Some(source) = bundle_source {
-            log::info!("🔧 [Sidecar] Installing from bundle: {:?} → {:?}", source, dest_dir);
-            Self::copy_dir_recursive(&source, &dest_dir)?;
-
-            // 设置可执行权限 (Unix)
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let exe_path = dest_dir.join(&binary_name);
-                if exe_path.exists() {
-                    let _ = std::fs::set_permissions(
-                        &exe_path,
-                        std::fs::Permissions::from_mode(0o755),
-                    );
-                }
-            }
-            log::info!("🔧 [Sidecar] Installation complete");
-        }
-
         Ok(())
     }
 
-    /// P1-1: 版本兼容性检查与静默升级 — 比对 bundle 与 installed 的版本进行双向同步
+    /// P1-1: 版本兼容性检查与静默升级 — 比对 bundle 与 installed 的版本进行双向同步 (已精简：统一不再做版本检查)
     fn check_version_compatibility(&self) -> Result<(), String> {
-        let target_triple = Self::current_target_triple();
-        let binary_name = format!("slash-sidecar-{}", target_triple);
-
-        let app_support = match dirs::data_dir() {
-            Some(d) => d,
-            None => return Ok(()),
-        };
-        let sidecar_dir = app_support.join("Slash").join("sidecar").join(&binary_name);
-        let version_file = sidecar_dir.join("_internal").join("version.json");
-
-        // 也检查根目录（PyInstaller --add-data 放在此处）
-        let version_file = if version_file.exists() {
-            version_file
-        } else {
-            let alt = sidecar_dir.join("version.json");
-            if alt.exists() {
-                alt
-            } else {
-                // 无 version.json，跳过检查
-                return Ok(());
-            }
-        };
-
-        let content = std::fs::read_to_string(&version_file)
-            .map_err(|e| format!("Failed to read version.json: {}", e))?;
-
-        // 解析 JSON
-        let json: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse version.json: {}", e))?;
-
-        let min_app_version_str = json
-            .get("min_app_version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        let sidecar_version_str = json
-            .get("sidecar_version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-
-        let app_version = semver::Version::parse(env!("CARGO_PKG_VERSION"))
-            .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
-        let min_app = semver::Version::parse(min_app_version_str)
-            .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
-        let installed_sidecar_ver = semver::Version::parse(sidecar_version_str)
-            .unwrap_or_else(|_| semver::Version::new(0, 0, 0));
-
-        // 读取 bundle 里的 sidecar 版本
-        let mut bundle_sidecar_ver = semver::Version::new(0, 0, 0);
-        let bundle_source = self.find_bundle_sidecar_dir(&binary_name);
-        if let Some(ref source) = bundle_source {
-            let b_version_file = source.join("_internal").join("version.json");
-            let b_version_file = if b_version_file.exists() {
-                b_version_file
-            } else {
-                source.join("version.json")
-            };
-            if b_version_file.exists() {
-                if let Ok(b_content) = std::fs::read_to_string(&b_version_file) {
-                    if let Ok(b_json) = serde_json::from_str::<serde_json::Value>(&b_content) {
-                        if let Some(b_ver_str) = b_json.get("sidecar_version").and_then(|v| v.as_str()) {
-                            if let Ok(parsed) = semver::Version::parse(b_ver_str) {
-                                bundle_sidecar_ver = parsed;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        log::info!(
-            "🔧 [Sidecar] Version check: installed_sidecar={}, bundle_sidecar={}, min_app={}, current_app={}",
-            installed_sidecar_ver,
-            bundle_sidecar_ver,
-            min_app_version_str,
-            app_version
-        );
-
-        let need_downgrade = app_version < min_app;
-        let need_upgrade = bundle_sidecar_ver > installed_sidecar_ver;
-
-        if need_downgrade || need_upgrade {
-            if need_downgrade {
-                log::warn!(
-                    "🔧 [Sidecar] Installed sidecar (v{}) requires app >= {} but current app is {}. Downgrading to bundle version.",
-                    sidecar_version_str,
-                    min_app_version_str,
-                    app_version
-                );
-            } else {
-                log::info!(
-                    "🔧 [Sidecar] Bundle has newer sidecar (v{}) than installed (v{}). Upgrading...",
-                    bundle_sidecar_ver,
-                    installed_sidecar_ver
-                );
-            }
-
-            if let Some(source) = bundle_source {
-                // 删除旧版本
-                let _ = std::fs::remove_dir_all(&sidecar_dir);
-                Self::copy_dir_recursive(&source, &sidecar_dir)?;
-
-                // 设置可执行权限 (Unix)
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let exe_path = sidecar_dir.join(&binary_name);
-                    if exe_path.exists() {
-                        let _ = std::fs::set_permissions(
-                            &exe_path,
-                            std::fs::Permissions::from_mode(0o755),
-                        );
-                    }
-                }
-                log::info!("🔧 [Sidecar] Sidecar updated from bundle successfully");
-            }
-        }
-
         Ok(())
     }
 
-    /// 查找 bundle 内的 sidecar 目录
-    fn find_bundle_sidecar_dir(&self, binary_name: &str) -> Option<PathBuf> {
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(exe_dir) = exe.parent() {
-                // macOS: Contents/MacOS/ → ../Resources/binaries/{name}/
-                let resources = exe_dir
-                    .parent()
-                    .unwrap_or(exe_dir)
-                    .join("Resources")
-                    .join("binaries")
-                    .join(binary_name);
-                if resources.exists() {
-                    return Some(resources);
-                }
-
-                // macOS v2 fallback: without "binaries" subfolder in Resources
-                let resources_v2 = exe_dir
-                    .parent()
-                    .unwrap_or(exe_dir)
-                    .join("Resources")
-                    .join(binary_name);
-                if resources_v2.exists() {
-                    return Some(resources_v2);
-                }
-
-                // Flat layout (Windows/Linux): binaries/{name}/
-                let flat = exe_dir.join("binaries").join(binary_name);
-                if flat.exists() {
-                    return Some(flat);
-                }
-            }
-        }
-        None
-    }
-
-    /// 递归复制目录 (完备处理 Unix 软链接，防止 std::fs::copy 实体化污染)
-    fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
-        std::fs::create_dir_all(dst)
-            .map_err(|e| format!("Failed to create directory {:?}: {}", dst, e))?;
-
-        let entries = std::fs::read_dir(src)
-            .map_err(|e| format!("Failed to read directory {:?}: {}", src, e))?;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
-
-            // 使用 symlink_metadata 获取元数据，不追踪软链接
-            let metadata = std::fs::symlink_metadata(&src_path)
-                .map_err(|e| format!("Failed to read metadata for {:?}: {}", src_path, e))?;
-
-            if metadata.file_type().is_symlink() {
-                #[cfg(unix)]
-                {
-                    let target = std::fs::read_link(&src_path)
-                        .map_err(|e| format!("Failed to read symlink target for {:?}: {}", src_path, e))?;
-                    // 如果目标软链已经存在，删除它以防冲突
-                    if dst_path.exists() || dst_path.is_symlink() {
-                        let _ = std::fs::remove_file(&dst_path);
-                    }
-                    std::os::unix::fs::symlink(&target, &dst_path)
-                        .map_err(|e| format!("Failed to create symlink {:?} → {:?}: {}", dst_path, target, e))?;
-                }
-                #[cfg(not(unix))]
-                {
-                    // 非 Unix 平台 fallback 物理复制
-                    std::fs::copy(&src_path, &dst_path)
-                        .map_err(|e| format!("Failed to copy legacy symlink {:?} → {:?}: {}", src_path, dst_path, e))?;
-                }
-            } else if src_path.is_dir() {
-                Self::copy_dir_recursive(&src_path, &dst_path)?;
-            } else {
-                std::fs::copy(&src_path, &dst_path)
-                    .map_err(|e| format!("Failed to copy file {:?} → {:?}: {}", src_path, dst_path, e))?;
-            }
-        }
-
-        Ok(())
-    }
 
     /// 内部：spawn sidecar 子进程并设置 stdout/stderr reader
     fn spawn_process(shared: &SidecarShared, binary: &PathBuf) -> Result<(), String> {
