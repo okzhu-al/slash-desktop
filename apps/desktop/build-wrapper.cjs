@@ -6,12 +6,15 @@ const env = { ...process.env };
 const keyName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY";
 const pwName = "TAURI_SIGNING_" + "PRIVATE_" + "KEY_PASSWORD";
 
-// 🚀 终极降维打击：物理注入 100% 正确配对的私钥 Base64 并在内存中无损还原，彻底消除任何明文转义损毁天坑！
-const base64Key = "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5cWNnTUdJandhVHBUWG1sNkREbFVjNTRQNnJONDMwNnZwQWthWUM2U0dFc0FBQkFBQUFBQUFBQUFBQUlBQUFBQTN3d1lwZjQ2SmNkdm9TMVVQczFPVWpZaUxMMkZVcU4vNE83WkRDdmJQQWR5VXhIU0F6NW1hVlJhRWZhSmRuRlNPZkd6ajdONlFoN05qRm4zTWdPS3MwZ3J4UU45WTYyOUdvOFNEM1NjSzNxUUJQNnpEZm9vb1UrSzhyYUFnM1NpSXluMEppb2pJSXM9Cg==";
-env[keyName] = Buffer.from(base64Key, "base64").toString("utf8");
-env[pwName] = "Antigravity2026!";
+const keyPath = path.join(__dirname, "tauri.key");
 
-console.log("🔒 " + keyName + " has been physically injected and normalized in memory. Length:", env[keyName].length);
+// 🚀 终极降维打击 3.0：物理还原写回本地临时文件，将 env 指向其绝对路径以 100% 免疫 shell 换行符损坏天坑！
+const base64Key = "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5cWNnTUdJandhVHBUWG1sNkREbFVjNTRQNnJONDMwNnZwQWthWUM2U0dFc0FBQkFBQUFBQUFBQUFBQUlBQUFBQTN3d1lwZjQ2SmNkdm9TMVVQczFPVWpZaUxMMkZVcU4vNE83WkRDdmJQQWR5VXhIU0F6NW1hVlJhRWZhSmRuRlNPZkd6ajdONlFoN05qRm4zTWdPS3MwZ3J4UU45WTYyOUdvOFNEM1NjSzNxUUJQNnpEZm9vb1UrSzhyYUFnM1NpSXluMEppb2pJSXM9Cg==";
+fs.writeFileSync(keyPath, Buffer.from(base64Key, "base64"), { mode: 0o600 });
+console.log("📝 Physical private key successfully written to:", keyPath);
+
+env[keyName] = keyPath;
+env[pwName] = "Antigravity2026!";
 
 const rustTarget = process.env.RUST_TARGET;
 const targetPlatform = process.env.TARGET_PLATFORM;
@@ -69,13 +72,22 @@ try {
   console.error("❌ An error occurred during wrapper execution:", err);
   process.exit(1);
 } finally {
-  // 6. 100% 物理还原备份的 tauri.conf.json
+  // 6. 100% 物理还原备份 of tauri.conf.json
   if (originalConfigContent !== null) {
     try {
       fs.writeFileSync(configPath, originalConfigContent, "utf8");
       console.log("🔄 tauri.conf.json successfully restored to pristine state.");
     } catch (restoreErr) {
       console.error("⚠️ Failed to restore tauri.conf.json:", restoreErr);
+    }
+  }
+  // 🚀 终极清理：无条件物理删除临时的私钥物理文件以防残留与泄露！
+  if (fs.existsSync(keyPath)) {
+    try {
+      fs.unlinkSync(keyPath);
+      console.log("🧹 Physical private key file securely deleted.");
+    } catch (delErr) {
+      console.error("⚠️ Failed to delete private key file:", delErr);
     }
   }
 }
