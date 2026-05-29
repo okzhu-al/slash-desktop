@@ -652,11 +652,11 @@ export const MixedTaskItem = TaskItem.extend({
     },
 
     // Use React NodeView for rich interaction
-    addNodeView() {
-        return ReactNodeViewRenderer(TaskItemComponent, {
-            as: 'li',
-        });
-    },
+    // addNodeView() {
+    //     return ReactNodeViewRenderer(TaskItemComponent, {
+    //         as: 'li',
+    //     });
+    // },
 });
 
 /** 列表类型名称集合 */

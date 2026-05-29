@@ -43,6 +43,23 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         return (window as any).__slashTeamMembers || [];
     }, []);
 
+    // 🔍 [TaskItem Lifecycle Diagnostics]
+    useEffect(() => {
+        const currentPos = typeof getPos === 'function' ? getPos() : null;
+        console.log(`🔍 [TaskItem Component Lifecycle] Mounted:`, {
+            pos: currentPos,
+            textContent: node.textContent,
+            checked: node.attrs.checked,
+        });
+        return () => {
+            console.log(`🔍 [TaskItem Component Lifecycle] Unmounted:`, {
+                pos: currentPos,
+                textContent: node.textContent,
+                checked: node.attrs.checked,
+            });
+        };
+    }, []);
+
     // Track IME composition state with cooldown
     const isComposingRef = useRef(false);
     const compositionCooldownRef = useRef(false);

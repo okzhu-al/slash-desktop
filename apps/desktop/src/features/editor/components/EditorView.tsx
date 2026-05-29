@@ -205,12 +205,56 @@ export const EditorView = (props: EditorContainerState) => {
             console.groupEnd();
         };
 
+        const logIMEEvent = (eventName: string, e: any) => {
+            const sel = window.getSelection();
+            const anchorNode = sel?.anchorNode;
+            let taskItemIndex = -1;
+            if (anchorNode) {
+                let curr: Node | null = anchorNode;
+                while (curr && curr !== dom) {
+                    if (curr instanceof HTMLElement && curr.tagName.toLowerCase() === 'li' && curr.getAttribute('data-type') === 'taskItem') {
+                        const list = curr.parentElement;
+                        if (list) {
+                            taskItemIndex = Array.from(list.children).indexOf(curr);
+                        }
+                        break;
+                    }
+                    curr = curr.parentNode;
+                }
+            }
+            console.log(`⌨️ [Bug 2 IME] Event: ${eventName}`, {
+                data: e.data,
+                inputType: e.inputType,
+                isComposing: e.isComposing,
+                editorComposing: editor.view.composing,
+                anchorNode,
+                taskItemIndex,
+            });
+        };
+
+        const onCompStart = (e: Event) => logIMEEvent('compositionstart', e);
+        const onCompUpdate = (e: Event) => logIMEEvent('compositionupdate', e);
+        const onCompEnd = (e: Event) => logIMEEvent('compositionend', e);
+        const onBeforeInput = (e: Event) => logIMEEvent('beforeinput', e);
+        const onInput = (e: Event) => logIMEEvent('input', e);
+
+        dom.addEventListener('compositionstart', onCompStart);
+        dom.addEventListener('compositionupdate', onCompUpdate);
+        dom.addEventListener('compositionend', onCompEnd);
+        dom.addEventListener('beforeinput', onBeforeInput);
+        dom.addEventListener('input', onInput);
+
         document.addEventListener('selectionchange', handleSelectionChange);
         dom.addEventListener('focus', handleFocus);
         dom.addEventListener('blur', handleBlur, true);
 
         return () => {
             observer.disconnect();
+            dom.removeEventListener('compositionstart', onCompStart);
+            dom.removeEventListener('compositionupdate', onCompUpdate);
+            dom.removeEventListener('compositionend', onCompEnd);
+            dom.removeEventListener('beforeinput', onBeforeInput);
+            dom.removeEventListener('input', onInput);
             document.removeEventListener('selectionchange', handleSelectionChange);
             dom.removeEventListener('focus', handleFocus);
             dom.removeEventListener('blur', handleBlur);
