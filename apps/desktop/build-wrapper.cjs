@@ -32,7 +32,7 @@ try {
     }
   }
 
-  // 2. 标准化处理换行符，清除首尾空格，强行以标准的 Unix 换行符 \n 组装以绝对免疫任何转义或压扁天坑
+  // 2. 标准化处理换行符，清除首尾空格
   const lines = finalKeyContent
     .split(/\r?\n/)
     .map(line => line.trim())
@@ -42,12 +42,17 @@ try {
     throw new Error("Invalid minisign private key format: must have at least 2 lines (comment and content).");
   }
 
-  const cleanKey = lines.join("\n") + "\n";
+  // 🎯 降维打击 5.0 核心逻辑：
+  // 第一行作为 untrusted comment，剩下的所有行全部强行合并为一条连贯的单行 Base64 密文，彻底清除中间任何换行符！
+  const commentLine = lines[0];
+  const secretDataLine = lines.slice(1).join("");
+
+  const cleanKey = commentLine + "\n" + secretDataLine + "\n";
 
   fs.writeFileSync(keyPath, cleanKey, { mode: 0o600 });
-  console.log("📝 Physical private key dynamic restore SUCCESS!");
-  console.log("   First line verification:", lines[0]);
-  console.log("   Key data length verified:", lines[1].length);
+  console.log("📝 Physical private key dynamic restore (v5.0) SUCCESS!");
+  console.log("   First line verification:", commentLine);
+  console.log("   Key data line verified length:", secretDataLine.length);
 
 } catch (err) {
   console.error("❌ Failed to parse or write physical private key:", err);
