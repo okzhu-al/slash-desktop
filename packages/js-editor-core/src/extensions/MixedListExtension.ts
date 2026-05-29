@@ -6,10 +6,6 @@ import { mergeAttributes, InputRule, Extension, Editor } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { TaskItemComponent } from './Task/TaskItemComponent';
 
-// 🌟 临时规避 strict 编译警告
-void ReactNodeViewRenderer;
-void TaskItemComponent;
-
 // Import task styles
 import './Task/TaskItemStyles.css';
 
@@ -656,9 +652,9 @@ export const MixedTaskItem = TaskItem.extend({
     },
 
     // Use React NodeView for rich interaction
-    // addNodeView() {
-    //     return ReactNodeViewRenderer(TaskItemComponent);
-    // },
+    addNodeView() {
+        return ReactNodeViewRenderer(TaskItemComponent);
+    },
 });
 
 /** 列表类型名称集合 */

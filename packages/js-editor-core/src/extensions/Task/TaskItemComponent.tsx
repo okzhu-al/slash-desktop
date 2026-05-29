@@ -25,47 +25,7 @@ import './TaskItemStyles.css';
 
 type MenuMode = 'none' | 'main' | 'date' | 'user' | 'priority';
 
-const safelyAnchorSelectionToDOM = (container: HTMLElement) => {
-    try {
-        const pEl = container.querySelector('.task-content p') || container.querySelector('.task-content') || container;
-        if (!pEl) return;
 
-        const sel = window.getSelection();
-        if (!sel) return;
-
-        const isAlreadyInside = sel.anchorNode && pEl.contains(sel.anchorNode);
-        if (isAlreadyInside) return;
-
-        const range = document.createRange();
-        let textNode: Node | null = null;
-        
-        // 寻找段落内的第一个文本节点
-        const walk = document.createTreeWalker(pEl, NodeFilter.SHOW_TEXT);
-        if (walk.nextNode()) {
-            textNode = walk.currentNode;
-        }
-
-        if (textNode) {
-            range.setStart(textNode, 0);
-            range.setEnd(textNode, 0);
-        } else {
-            // 如果段落中暂时没有物理文本（即刚刚回车，是空任务列表，此时可能只有一个 <br class="ProseMirror-trailingBreak">）
-            if (pEl.firstChild) {
-                range.setStartBefore(pEl.firstChild);
-                range.setEndBefore(pEl.firstChild);
-            } else {
-                range.setStart(pEl, 0);
-                range.setEnd(pEl, 0);
-            }
-        }
-
-        sel.removeAllRanges();
-        sel.addRange(range);
-        console.info(`⚡ [Bug 2 Caret Telemetry] Physical DOM Selection anchored successfully.`);
-    } catch (err) {
-        console.warn(`[Bug 2] Failed to safely anchor Selection:`, err);
-    }
-};
 
 export const TaskItemComponent: React.FC<NodeViewProps> = ({
     node,
@@ -130,80 +90,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         };
     }, []);
 
-    // DOM & Caret Telemetry for Bug 2 diagnosis
-    useEffect(() => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        console.group(`🔍 [Bug 2 Caret Telemetry] TaskItem Component Mounted`);
-        console.info(`- Node Size: ${node.nodeSize}`);
-        console.info(`- Position: ${pos}`);
-        console.info(`- Editor Editable: ${editor.isEditable}`);
-        console.info(`- Document activeElement:`, document.activeElement);
-        
-        if (pos !== null && pos !== undefined) {
-            const { selection } = editor.state;
-            const nodeEnd = pos + node.nodeSize;
-            const isCursorInside = selection.from >= pos && selection.from <= nodeEnd;
-            console.info(`- Selection State: from=${selection.from}, to=${selection.to}, empty=${selection.empty}`);
-            console.info(`- Is Selection Inside Current TaskItem: ${isCursorInside}`);
-                      try {
-                const domNode = editor.view.nodeDOM(pos);
-                console.info(`- Rendered Node DOM Element:`, domNode);
-                if (domNode && typeof (domNode as any).getAttribute === 'function') {
-                    console.info(`- Node HTML Structure:`, (domNode as HTMLElement).outerHTML);
-                    console.info(`- Content Editable status:`, (domNode as HTMLElement).getAttribute('contenteditable'));
-                    const contentDOM = (domNode as HTMLElement).querySelector('.task-content');
-                    console.info(`- .task-content Element:`, contentDOM);
-                }
-            } catch (err) {
-                console.warn(`- Failed to retrieve Node DOM:`, err);
-            }
-        }
-        console.groupEnd();
-    }, [editor, getPos, node, node.nodeSize]);
 
-    // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
-    // force a repaint by refocusing after the DOM is fully stable.
-    // 🚀 三重焦点保活防线 (20ms, 100ms, 250ms)
-    // 结合物理 DOM 选区 Range 修复与 WebKit 0.1px 布局 Reflow 唤醒，完美抵抗 React 异步协调与 WebKit 选区丢弃导致物理 Selection 悬空或自动丢焦的问题！
-    useEffect(() => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos !== null && pos !== undefined) {
-            const { selection } = editor.state;
-            const nodeEnd = pos + node.nodeSize;
-            if (selection.from >= pos && selection.from <= nodeEnd) {
-                const focusTimes = [20, 100, 250];
-                focusTimes.forEach(delay => {
-                    setTimeout(() => {
-                        if (editor && !editor.isDestroyed) {
-                            const { selection: currentSel } = editor.state;
-                            // 只有当光标确实依然在当前 taskItem 内部时才保活 focus，避免抢夺其它位置的焦点
-                            if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
-                                // 1. 🌟 有条件降噪 Refocus：只有当编辑器失焦时才执行 refocus
-                                const editorDom = editor.view.dom;
-                                if (editorDom && document.activeElement !== editorDom) {
-                                    editor.commands.focus(currentSel.from, { scrollIntoView: false });
-                                    console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Refocus executed because editor was blurred.`);
-                                }
-
-                                // 2. 🌟 物理 DOM 选区强力锚定（确保 Selection 挂载在 TEXT_NODE 物理文本上，避开块级塌陷）
-                                if (domRef.current) {
-                                    safelyAnchorSelectionToDOM(domRef.current);
-                                }
-                            }
-                        }
-                    }, delay);
-                });
-            }
-        }
-    }, [editor, getPos, node.nodeSize]);
-
-    // 🛡️ WebKit 假丢焦原生拦截卫兵 (500ms 黄金保活拦截门)
-    // 专门捕获并高优先级拦截 WebKit 在 DOM 重组后抛出的假 blur，彻底消灭 Selection 悬空触发的原生丢焦
-    // 🛡️ WebKit 假丢焦原生拦截卫兵 (500ms 黄金保活拦截门)
-    // 🌟 步骤 1：根据验证要求，临时完全禁用 Blur Guard 逻辑以进行排查
-    useEffect(() => {
-        // Blur Guard is temporarily disabled.
-    }, []);
 
     // Get insert position (end of paragraph inside taskItem)
     const getInsertPosition = useCallback(() => {
@@ -351,8 +238,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [editor, getPos, node, menuMode]);
 
-    const handleCheckboxChange = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
+    const handleCheckboxToggle = useCallback(() => {
         if (!editor.isEditable) {
             const isTeamLibrary = editor.view.dom.closest('.team-readonly-guard');
             if (isTeamLibrary) {
@@ -418,15 +304,29 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
             data-type="taskItem"
             data-checked={checked}
         >
-            <label
-                className={`task-checkbox ${checked ? 'is-checked' : ''}`}
-                onClick={handleCheckboxChange}
+            <span
+                className={`task-checkbox-wrapper ${checked ? 'is-checked' : ''}`}
                 contentEditable={false}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCheckboxToggle();
+                }}
             >
-                {checked && <Check size={10} strokeWidth={3} />}
-            </label>
+                <input
+                    type="checkbox"
+                    checked={checked}
+                    readOnly
+                    tabIndex={-1}
+                    className="task-input-hidden"
+                    onMouseDown={(e) => e.preventDefault()}
+                />
+                <span className="task-checkbox-inner">
+                    {checked && <Check size={10} strokeWidth={3} />}
+                </span>
+            </span>
 
-            <NodeViewContent as="div" className="task-content" />
+            <NodeViewContent as="div" className="task-content-wrapper" />
 
             {menuMode === 'main' && createPortal(
                 <div
