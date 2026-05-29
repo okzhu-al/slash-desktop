@@ -121,20 +121,28 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
 
     // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
     // force a repaint by refocusing after the DOM is fully stable.
+    // 🚀 三重焦点保活防线 (20ms, 100ms, 250ms)
+    // 完美抵抗 React 渲染/WebKit 排版过程中所有网络/CPU抖动导致异步夺取焦点或物理 Selection 闪隐的问题！
     useEffect(() => {
         const pos = typeof getPos === 'function' ? getPos() : null;
         if (pos !== null && pos !== undefined) {
             const { selection } = editor.state;
             const nodeEnd = pos + node.nodeSize;
             if (selection.from >= pos && selection.from <= nodeEnd) {
-                console.info(`⚡ [Bug 2 Caret Telemetry] Scheduling 20ms refocus repaint at pos ${selection.from}...`);
-                setTimeout(() => {
-                    if (editor && !editor.isDestroyed) {
-                        const beforeFocusElement = document.activeElement;
-                        editor.commands.focus(selection.from, { scrollIntoView: false });
-                        console.info(`⚡ [Bug 2 Caret Telemetry] Refocus complete. activeElement before:`, beforeFocusElement, ` -> after:`, document.activeElement);
-                    }
-                }, 20);
+                const focusTimes = [20, 100, 250];
+                focusTimes.forEach(delay => {
+                    setTimeout(() => {
+                        if (editor && !editor.isDestroyed) {
+                            const { selection: currentSel } = editor.state;
+                            // 只有当光标确实依然在当前 taskItem 内部时才保活 focus，避免抢夺其它位置的焦点
+                            if (currentSel.from >= pos && currentSel.from <= pos + node.nodeSize) {
+                                const beforeFocusElement = document.activeElement;
+                                editor.commands.focus(currentSel.from, { scrollIntoView: false });
+                                console.info(`⚡ [Bug 2 Caret Telemetry] [Delay ${delay}ms] Refocus complete. activeElement before:`, beforeFocusElement, ` -> after:`, document.activeElement);
+                            }
+                        }
+                    }, delay);
+                });
             }
         }
     }, [editor, getPos, node.nodeSize]);

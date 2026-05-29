@@ -138,8 +138,6 @@ pub fn get_note_backlinks_by_section(
     let pattern_section = format!("[[{}#%", note_name); // [[Test#...
     let pattern_alias = format!("[[{}|%", note_name); // [[Test|...
 
-    log::info!("📊 [Rust Bug 10 Debug] get_note_backlinks_by_section called for: {}. Exact: '{}', Section: '{}', Alias: '{}'", note_name, pattern_exact, pattern_section, pattern_alias);
-
     let mut stmt = conn.prepare(
         "SELECT source_path, target_anchor FROM links 
          WHERE LOWER(target_anchor) = LOWER(?1) 
@@ -152,10 +150,8 @@ pub fn get_note_backlinks_by_section(
         |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
     )?;
 
-    let mut match_count = 0;
     for row_result in rows {
         if let Ok((source_path, target_anchor)) = row_result {
-            match_count += 1;
             // Get source title
             let source_title: String = conn
                 .query_row(
@@ -174,13 +170,11 @@ pub fn get_note_backlinks_by_section(
 
             // Skip self-links (where source note is same as target note)
             if source_title.to_lowercase() == note_name.to_lowercase() {
-                log::info!("  [Rust Bug 10 Debug] Skipped self-link from {}", source_title);
                 continue;
             }
 
             // Extract section from target_anchor
             let section = extract_section_from_anchor(&target_anchor, note_name);
-            log::info!("  [Rust Bug 10 Debug] Matched Backlink #{} -> Source: '{}', Anchor: '{}', Parsed Section: '{}'", match_count, source_title, target_anchor, section);
 
             let backlink = BacklinkInfo {
                 source_path,
@@ -191,8 +185,6 @@ pub fn get_note_backlinks_by_section(
             result.entry(section).or_default().push(backlink);
         }
     }
-
-    log::info!("📊 [Rust Bug 10 Debug] get_note_backlinks_by_section complete. Total matched: {}, Returned groups: {:?}", match_count, result.keys());
 
     Ok(result)
 }
