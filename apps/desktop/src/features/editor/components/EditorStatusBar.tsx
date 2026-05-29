@@ -287,11 +287,15 @@ export const EditorStatusBar = ({ editor, incomingLinksCount, notePath }: Editor
         editor.on('update', updateStats);
         editor.on('selectionUpdate', updateStats); // ⚡ Added: selectionUpdate guarantees statistics rebuild on programmatically quiet note switches (setContent)
 
+        // ⚡ Added: Listen to content loaded custom event to handle quiet updates / updateState completely
+        window.addEventListener('slash:editor-content-loaded', updateStats);
+
         return () => {
             if (!editor.isDestroyed) {
                 editor.off('update', updateStats);
                 editor.off('selectionUpdate', updateStats);
             }
+            window.removeEventListener('slash:editor-content-loaded', updateStats);
         };
     }, [editor]);
 

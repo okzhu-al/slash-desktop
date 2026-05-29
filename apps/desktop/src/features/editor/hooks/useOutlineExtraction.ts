@@ -58,12 +58,18 @@ export function useOutlineExtraction(editor: Editor | null, activeNoteId: string
         // Initial active heading
         updateActiveHeading();
 
+        // ⚡ Added: Listen to content loaded custom event to handle quiet updates / updateState completely
+        window.addEventListener('slash:editor-content-loaded', updateOutline);
+        window.addEventListener('slash:editor-content-loaded', updateActiveHeading);
+
         return () => {
             if (!editor.isDestroyed) {
                 editor.off('update', updateOutline);
                 editor.off('selectionUpdate', updateOutline);
                 editor.off('selectionUpdate', updateActiveHeading);
             }
+            window.removeEventListener('slash:editor-content-loaded', updateOutline);
+            window.removeEventListener('slash:editor-content-loaded', updateActiveHeading);
         };
     }, [editor, activeNoteId]);
 }

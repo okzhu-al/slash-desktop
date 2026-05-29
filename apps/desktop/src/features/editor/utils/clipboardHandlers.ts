@@ -154,8 +154,79 @@ export const createEditorDropHandler = () => {
     };
 };
 
+// Helper to check if we're inside code or math
+const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): boolean => {
+    const $pos = state.doc.resolve(pos);
+    const marks = $pos.marks();
+    if (marks.some((m: any) => m.type.name === 'code')) return true;
+
+    for (let d = $pos.depth; d > 0; d--) {
+        const node = $pos.node(d);
+        if (node.type.name === 'codeBlock' || node.type.name === 'math') {
+            return true;
+        }
+    }
+
+    if (matchedText && (matchedText.includes('`') || matchedText.includes('$'))) {
+        return true;
+    }
+
+    return false;
+};
+
+// Helper to determine if a string looks like a valid URL to auto-link
+const isUrl = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (/\s/.test(trimmed)) return false;
+    if (/^(https?:\/\/|mailto:)/i.test(trimmed)) return true;
+    try {
+        const url = new URL('https://' + trimmed);
+        return url.hostname.includes('.') && url.hostname.split('.').pop()!.length >= 2;
+    } catch {
+        return false;
+    }
+};
+
 export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>) => {
     return (view: EditorView, event: ClipboardEvent) => {
+        // === 0. Hyperlink Paste Handling (High Priority URL pasting) ===
+        const plainText = event.clipboardData?.getData('text/plain') || '';
+        if (plainText && isUrl(plainText)) {
+            const { state } = view;
+            const { selection } = state;
+            
+            // Skip if inside code or math block
+            if (!isInsideCodeOrMath(state, selection.from)) {
+                event.preventDefault();
+                
+                let href = plainText.trim();
+                if (href.startsWith('www.')) {
+                    href = 'https://' + href;
+                }
+                if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
+                    href = 'https://' + href;
+                }
+                
+                const { tr } = state;
+                const linkMarkType = state.schema.marks.link;
+                if (linkMarkType) {
+                    if (selection.empty) {
+                        // Paste raw URL as clickable text
+                        const node = state.schema.text(plainText.trim(), [
+                            linkMarkType.create({ href })
+                        ]);
+                        tr.replaceSelectionWith(node);
+                    } else {
+                        // Wrap selection text with the link mark
+                        const { from, to } = selection;
+                        tr.addMark(from, to, linkMarkType.create({ href }));
+                    }
+                    view.dispatch(tr.scrollIntoView());
+                    return true;
+                }
+            }
+        }
+
         // === 0. Code block paste handling ===
         const pasteState = view.state;
         const paste$from = pasteState.selection.$from;
@@ -245,7 +316,7 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
         }
 
         // === 1. Check for Markdown table in plain text ===
-        const plainText = event.clipboardData?.getData('text/plain') || '';
+
 
         // Detect Markdown table pattern: 
         // - Lines starting with | and ending with |

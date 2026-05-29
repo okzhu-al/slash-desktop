@@ -14,8 +14,7 @@
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { NodeViewWrapper, NodeViewContent } from '@tiptap/react';
-import type { NodeViewProps } from '@tiptap/react';
+
 import { Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { DatePickerPopup } from './ui/DatePickerPopup';
@@ -25,7 +24,14 @@ import './TaskItemStyles.css';
 
 type MenuMode = 'none' | 'main' | 'date' | 'user' | 'priority';
 
-export const TaskItemComponent: React.FC<NodeViewProps> = ({
+interface TaskItemProps {
+    node: any;
+    updateAttributes: (attrs: any) => void;
+    editor: any;
+    getPos: () => number | undefined;
+}
+
+export const TaskItemComponent: React.FC<TaskItemProps> = ({
     node,
     updateAttributes,
     editor,
@@ -87,22 +93,6 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         };
     }, []);
 
-    // WebKit Caret Repaint Fix: When the React NodeView mounts, if the cursor is inside it,
-    // force a repaint by refocusing after the DOM is fully stable.
-    useEffect(() => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos !== null && pos !== undefined) {
-            const { selection } = editor.state;
-            const nodeEnd = pos + node.nodeSize;
-            if (selection.from >= pos && selection.from <= nodeEnd) {
-                setTimeout(() => {
-                    if (editor && !editor.isDestroyed) {
-                        editor.commands.focus(selection.from, { scrollIntoView: false });
-                    }
-                }, 20);
-            }
-        }
-    }, [editor, getPos, node.nodeSize]);
 
     // Get insert position (end of paragraph inside taskItem)
     const getInsertPosition = useCallback(() => {
@@ -114,7 +104,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         if (!taskItemNode) return null;
 
         let insertPos = pos + 1;
-        taskItemNode.forEach((child, offset) => {
+        taskItemNode.forEach((child: any, offset: number) => {
             if (child.type.name === 'paragraph') {
                 insertPos = pos + 1 + offset + child.nodeSize - 1;
             }
@@ -310,20 +300,13 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
     }, [menuPosition.x, menuPosition.y]);
 
     return (
-        <NodeViewWrapper
-            as="li"
-            className={`slash-task-item ${checked ? 'is-done' : ''}`}
-            data-type="taskItem"
-            data-checked={checked}
-        >
+        <>
             <label
                 className={`task-checkbox ${checked ? 'is-checked' : ''}`}
                 onClick={handleCheckboxChange}
             >
                 {checked && <Check size={10} strokeWidth={3} />}
             </label>
-
-            <NodeViewContent as="div" className="task-content" />
 
             {menuMode === 'main' && createPortal(
                 <div
@@ -396,7 +379,7 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
                     onClose={closeMenu}
                 />
             )}
-        </NodeViewWrapper>
+        </>
     );
 };
 

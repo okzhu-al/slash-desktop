@@ -1337,38 +1337,38 @@
 
   /* 水平线 */
   hr { @apply my-4 border-zinc-200 dark:border-zinc-700; }
+}
 
-  /* blockquote */
-  .prose blockquote, .ProseMirror blockquote {
-    border-left-color: #006540 !important;
-    border-left-width: 2px !important;
-    @apply pl-3 text-zinc-500 dark:text-zinc-400 my-2;
-  }
-  .ProseMirror blockquote p::before {
-    content: "“";
-  }
-  .ProseMirror blockquote p::after {
-    content: "”";
-  }
-  /* 当 blockquote 内的段落为空时，使用绝对定位限制伪元素，避免换行并定位光标 */
-  .ProseMirror blockquote p.is-empty {
-    position: relative;
-    padding-left: 0.8em;
-  }
-  .ProseMirror blockquote p.is-empty::before {
-    content: "“" !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    line-height: inherit;
-  }
-  .ProseMirror blockquote p.is-empty::after {
-    content: "”" !important;
-    position: absolute;
-    left: 1.6em;
-    top: 0;
-    line-height: inherit;
-  }
+/* blockquote */
+.prose blockquote, .ProseMirror blockquote {
+  border-left-color: #006540 !important;
+  border-left-width: 2px !important;
+  @apply pl-3 text-zinc-500 dark:text-zinc-400 my-2;
+}
+.ProseMirror blockquote p::before {
+  content: "“";
+}
+.ProseMirror blockquote p::after {
+  content: "”";
+}
+/* 当 blockquote 内的段落为空时，使用绝对定位限制伪元素，避免换行并定位光标 */
+.ProseMirror blockquote p.is-empty {
+  position: relative;
+  padding-left: 0.8em;
+}
+.ProseMirror blockquote p.is-empty::before {
+  content: "“" !important;
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: inherit;
+}
+.ProseMirror blockquote p.is-empty::after {
+  content: "”" !important;
+  position: absolute;
+  left: 1.6em;
+  top: 0;
+  line-height: inherit;
 }
 
 /* ============================================

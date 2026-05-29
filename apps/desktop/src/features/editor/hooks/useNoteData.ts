@@ -154,6 +154,16 @@ export function useNoteData(): UseNoteDataReturn {
         return () => clearTimeout(timer);
     }, [title, fetchBacklinks]);
 
+    // ⚡ Added: Listen to content loaded custom event to immediately trigger data & backlink refetching
+    useEffect(() => {
+        const handleContentLoaded = () => {
+            fetchAIData();
+            fetchBacklinks();
+        };
+        window.addEventListener('slash:editor-content-loaded', handleContentLoaded);
+        return () => window.removeEventListener('slash:editor-content-loaded', handleContentLoaded);
+    }, [fetchAIData, fetchBacklinks]);
+
     // Listen for AI completion events to auto-refresh
     // Note: We only listen for ai:note-updated, not ai:generating
     // This prevents unnecessary animation when no new data is generated

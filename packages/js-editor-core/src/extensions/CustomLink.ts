@@ -26,18 +26,7 @@ const isInsideCodeOrMath = (state: any, pos: number, matchedText?: string): bool
     return false;
 };
 
-// Helper to determine if a string looks like a valid URL to auto-link
-const isUrl = (text: string): boolean => {
-    const trimmed = text.trim();
-    if (/\s/.test(trimmed)) return false;
-    if (/^(https?:\/\/|mailto:)/i.test(trimmed)) return true;
-    try {
-        const url = new URL('https://' + trimmed);
-        return url.hostname.includes('.') && url.hostname.split('.').pop()!.length >= 2;
-    } catch {
-        return false;
-    }
-};
+
 
 export interface CustomLinkOptions {
     openOnClick: boolean;
@@ -241,43 +230,6 @@ export const CustomLink = Mark.create<CustomLinkOptions>({
 
                         return false;
                     },
-                    handlePaste: (view, event) => {
-                        const text = event.clipboardData?.getData('text/plain');
-                        if (text && isUrl(text)) {
-                            const { state } = view;
-                            const { selection } = state;
-                            
-                            // Skip if inside code or math block
-                            if (isInsideCodeOrMath(state, selection.from)) {
-                                return false;
-                            }
-                            
-                            let href = text.trim();
-                            if (href.startsWith('www.')) {
-                                href = 'https://' + href;
-                            }
-                            if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
-                                href = 'https://' + href;
-                            }
-                            
-                            const { tr } = state;
-                            if (selection.empty) {
-                                // Paste raw URL as clickable text
-                                const node = state.schema.text(text.trim(), [
-                                    state.schema.marks.link.create({ href })
-                                ]);
-                                tr.replaceSelectionWith(node);
-                                view.dispatch(tr.scrollIntoView());
-                            } else {
-                                // Wrap selection text with the link mark
-                                const { from, to } = selection;
-                                tr.addMark(from, to, state.schema.marks.link.create({ href }));
-                                view.dispatch(tr.scrollIntoView());
-                            }
-                            return true;
-                        }
-                        return false;
-                    }
                 },
             }),
         ];
