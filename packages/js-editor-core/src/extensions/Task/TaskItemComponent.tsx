@@ -27,7 +27,7 @@ type MenuMode = 'none' | 'main' | 'date' | 'user' | 'priority';
 
 
 
-export const TaskItemComponent: React.FC<NodeViewProps> = ({
+const TaskItemComponentPropsReceiver: React.FC<NodeViewProps> = ({
     node,
     updateAttributes,
     editor,
@@ -418,5 +418,31 @@ export const TaskItemComponent: React.FC<NodeViewProps> = ({
         </NodeViewWrapper>
     );
 };
+
+export const TaskItemComponent = React.memo(TaskItemComponentPropsReceiver, (prevProps, nextProps) => {
+    // 1. 如果 attrs 变了（比如 checkbox 勾选），必须重新渲染
+    const prevAttrs = prevProps.node.attrs;
+    const nextAttrs = nextProps.node.attrs;
+    const attrsKeys = Object.keys({ ...prevAttrs, ...nextAttrs });
+    for (const key of attrsKeys) {
+        if (prevAttrs[key] !== nextAttrs[key]) {
+            return false; // props 不相等，需要 re-render
+        }
+    }
+
+    // 2. 如果可编辑状态变了，必须重新渲染
+    if (prevProps.editor.isEditable !== nextProps.editor.isEditable) {
+        return false;
+    }
+
+    // 3. 如果节点类型变了，必须重新渲染
+    if (prevProps.node.type !== nextProps.node.type) {
+        return false;
+    }
+
+    // 4. 其余文本变动（如打字 composition 等）直接交给 ProseMirror 原生且高效地接管渲染，
+    // 强行阻止 React 在拼音输入期间的任何 DOM 属性 diff 和重排，从根本上锁死 contentDOM 锚点，杜绝 IME 重挂！
+    return true; // props 相等，阻止 re-render
+});
 
 export default TaskItemComponent;
