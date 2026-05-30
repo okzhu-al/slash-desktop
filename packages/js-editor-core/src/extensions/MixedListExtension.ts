@@ -3,9 +3,6 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TextSelection, Selection, Plugin, PluginKey } from '@tiptap/pm/state';
 import { mergeAttributes, InputRule, Extension, Editor } from '@tiptap/core';
-import { ReactNodeViewRenderer } from '@tiptap/react';
-import { TaskItemComponent } from './Task/TaskItemComponent';
-
 // Import task styles
 import './Task/TaskItemStyles.css';
 
@@ -111,6 +108,16 @@ function safeLiftListItem(editor: Editor, itemDepth: number, itemType: string): 
         .run();
 }
 
+function findNearestListItemType($pos: any): 'listItem' | 'taskItem' | null {
+    for (let depth = $pos.depth; depth >= 0; depth--) {
+        const typeName = $pos.node(depth).type.name;
+        if (typeName === 'listItem' || typeName === 'taskItem') {
+            return typeName;
+        }
+    }
+    return null;
+}
+
 
 /**
  * 自定义 ListItem 扩展 - 支持混合嵌套列表
@@ -123,6 +130,16 @@ export const MixedListItem = ListItem.extend({
     addKeyboardShortcuts() {
         return {
             ...this.parent?.(),
+            Tab: () => {
+                const { $from } = this.editor.state.selection;
+                if (findNearestListItemType($from) !== this.name) return false;
+                return this.editor.commands.sinkListItem(this.name);
+            },
+            'Shift-Tab': () => {
+                const { $from } = this.editor.state.selection;
+                if (findNearestListItemType($from) !== this.name) return false;
+                return this.editor.commands.liftListItem(this.name);
+            },
             Backspace: () => {
                 const { state } = this.editor;
                 const { selection } = state;
@@ -334,6 +351,25 @@ export const MixedTaskItem = TaskItem.extend({
         };
     },
 
+    parseHTML() {
+        return [
+            {
+                tag: 'li[data-type="taskItem"]',
+                priority: 100, // 高优先级确保命中
+                contentElement: (element) => {
+                    if (!(element instanceof HTMLElement)) return element;
+
+                    return (
+                        element.querySelector('.slash-task-content [data-node-view-content-react]') ||
+                        element.querySelector('.slash-task-content') ||
+                        element.querySelector('div:not([contenteditable="false"])') ||
+                        element
+                    );
+                },
+            },
+        ];
+    },
+
     // Custom markdown serialization to handle 'paragraph block*' content model
     // Serializes the first paragraph inline, then renders nested sub-lists
     addStorage() {
@@ -419,6 +455,16 @@ export const MixedTaskItem = TaskItem.extend({
     addKeyboardShortcuts() {
         return {
             ...this.parent?.(),
+            Tab: () => {
+                const { $from } = this.editor.state.selection;
+                if (findNearestListItemType($from) !== this.name) return false;
+                return this.editor.commands.sinkListItem(this.name);
+            },
+            'Shift-Tab': () => {
+                const { $from } = this.editor.state.selection;
+                if (findNearestListItemType($from) !== this.name) return false;
+                return this.editor.commands.liftListItem(this.name);
+            },
 
             // Shift+ArrowDown: 允许跨 taskItem 向下扩展选区
             // ProseMirror ReactNodeView 边界默认阻止选区扩展
@@ -644,18 +690,336 @@ export const MixedTaskItem = TaskItem.extend({
     },
 
     renderHTML({ HTMLAttributes }) {
+        const checked = HTMLAttributes['data-checked'] === 'true' || HTMLAttributes['data-checked'] === '';
         return [
             'li',
-            mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-type': 'taskItem' }),
-            0,
+            mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+                'data-type': 'taskItem',
+                class: `slash-task-item ${checked ? 'is-done' : ''}`,
+            }),
+            [
+                'span',
+                { class: `task-checkbox-wrapper ${checked ? 'is-checked' : ''}`, contenteditable: 'false' },
+                [
+                    'input',
+                    {
+                        type: 'checkbox',
+                        checked: checked ? 'checked' : null,
+                        readonly: 'true',
+                        tabindex: '-1',
+                        class: 'task-input-hidden',
+                    }
+                ],
+                ['span', { class: 'task-checkbox-inner' }, checked ? '✓' : '']
+            ],
+            ['div', { class: 'slash-task-content' }, 0]
         ];
     },
 
-    // Use React NodeView for rich interaction
+    // Keep the task item NodeView intentionally thin for IME stability.
+    // ReactNodeViewRenderer adds wrapper layers around contentDOM; WebKit IME can then
+    // expand deleteCompositionText from text content to the whole taskItem boundary.
     addNodeView() {
-        return ReactNodeViewRenderer(TaskItemComponent, {
-            as: 'li',
-        });
+        return (props) => {
+            let currentNode = props.node;
+
+            const dom = document.createElement('li');
+            const checkboxWrapper = document.createElement('span');
+            const input = document.createElement('input');
+            const checkboxInner = document.createElement('span');
+            const contentDOM = document.createElement('div');
+            let menuEl: HTMLDivElement | null = null;
+            let lastSpaceTime = 0;
+
+            const renderChecked = (checked: boolean) => {
+                dom.setAttribute('data-type', 'taskItem');
+                dom.setAttribute('data-checked', String(checked));
+                dom.className = `slash-task-item ${checked ? 'is-done' : ''}`;
+                checkboxWrapper.className = `task-checkbox-wrapper ${checked ? 'is-checked' : ''}`;
+                input.checked = checked;
+                checkboxInner.textContent = checked ? '✓' : '';
+            };
+
+            checkboxWrapper.setAttribute('contenteditable', 'false');
+            input.type = 'checkbox';
+            input.readOnly = true;
+            input.tabIndex = -1;
+            input.className = 'task-input-hidden';
+            checkboxInner.className = 'task-checkbox-inner';
+            contentDOM.className = 'slash-task-content';
+
+            checkboxWrapper.append(input, checkboxInner);
+            dom.append(checkboxWrapper, contentDOM);
+            renderChecked(currentNode.attrs.checked === true);
+
+            const closeMenu = () => {
+                menuEl?.remove();
+                menuEl = null;
+            };
+
+            const closeMenuRegistryKey = '__slashTaskMetadataMenuClosers';
+            const getCloseMenuRegistry = (): Set<() => void> => {
+                const win = window as any;
+                if (!win[closeMenuRegistryKey]) {
+                    win[closeMenuRegistryKey] = new Set<() => void>();
+                }
+                return win[closeMenuRegistryKey];
+            };
+
+            const closeOtherMenus = () => {
+                getCloseMenuRegistry().forEach(close => {
+                    if (close !== closeMenu) close();
+                });
+            };
+
+            const insertDraftChip = (type: 'dateChip' | 'userChip' | 'priorityChip') => {
+                const { state } = props.view;
+                const insertPos = state.selection.from;
+                closeMenu();
+
+                // 确保 chip 前方有空格，不紧挨前面的内容
+                let needsSpace = false;
+                if (insertPos > 0) {
+                    try {
+                        const charBefore = state.doc.textBetween(insertPos - 1, insertPos, '', '\0');
+                        if (charBefore !== ' ' && charBefore !== '\n') {
+                            needsSpace = true;
+                        }
+                    } catch { /* ignore */ }
+                }
+
+                if (needsSpace) {
+                    props.editor.chain()
+                        .insertContentAt(insertPos, [
+                            { type: 'text', text: ' ' },
+                            { type, attrs: { isDraft: true } },
+                        ])
+                        .setTextSelection(insertPos + 2)
+                        .focus()
+                        .run();
+                } else {
+                    props.editor.chain()
+                        .insertContentAt(insertPos, { type, attrs: { isDraft: true } })
+                        .setTextSelection(insertPos + 1)
+                        .focus()
+                        .run();
+                }
+            };
+
+            const createMenuButton = (label: string, shortcut: string, onClick: () => void) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'task-metadata-option';
+                button.textContent = `${label} ${shortcut}`;
+                button.addEventListener('mousedown', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                button.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onClick();
+                });
+                return button;
+            };
+
+            const openMenu = (x: number, y: number) => {
+                closeOtherMenus();
+                closeMenu();
+
+                menuEl = document.createElement('div');
+                menuEl.className = 'task-metadata-menu';
+                menuEl.style.position = 'fixed';
+                menuEl.style.left = `${x}px`;
+                menuEl.style.top = `${y}px`;
+                menuEl.style.transform = 'none';
+
+                const backdrop = document.createElement('div');
+                backdrop.className = 'task-metadata-backdrop';
+                backdrop.addEventListener('click', closeMenu);
+                menuEl.append(backdrop);
+
+                menuEl.append(createMenuButton('📅 Date', '&', () => insertDraftChip('dateChip')));
+
+                const teamMembers = (window as any).__slashTeamMembers || [];
+                if (teamMembers.length > 0) {
+                    menuEl.append(createMenuButton('👤 User', '@', () => insertDraftChip('userChip')));
+                }
+
+                menuEl.append(createMenuButton('🚩 Priority', '!', () => insertDraftChip('priorityChip')));
+                document.body.append(menuEl);
+            };
+
+            const handleKeyDown = (event: KeyboardEvent) => {
+                if (event.key !== ' ' && event.code !== 'Space') return;
+                if (!props.editor.isEditable || props.view.composing) return;
+                if (menuEl) return;
+
+                const pos = typeof props.getPos === 'function' ? props.getPos() : null;
+                if (typeof pos !== 'number') return;
+
+                const { from, empty } = props.view.state.selection;
+                if (!empty || from <= pos || from >= pos + currentNode.nodeSize) return;
+
+                const textContent = currentNode.textContent || '';
+                const cursorInNode = from - pos - 1;
+                if (cursorInNode < textContent.length - 1) return;
+
+                const now = Date.now();
+                const timeSinceLastSpace = now - lastSpaceTime;
+                if (timeSinceLastSpace >= 500) {
+                    lastSpaceTime = now;
+                    return;
+                }
+
+                event.preventDefault();
+                lastSpaceTime = 0;
+
+                // 安全校验：确认 from-1 确实是空格字符，而非 chip 等 atom 节点
+                // 当快速连按双空格时，ProseMirror 的 MutationObserver 可能尚未处理
+                // 第一次空格的 DOM mutation，导致 from 仍指向 chip 后方
+                const charBefore = props.view.state.doc.textBetween(from - 1, from, '', '\0');
+                let menuPos = from;
+                if (charBefore === ' ') {
+                    props.editor.chain()
+                        .deleteRange({ from: from - 1, to: from })
+                        .setTextSelection(from - 1)
+                        .focus()
+                        .run();
+                    menuPos = from - 1;
+                }
+
+                try {
+                    const coords = props.view.coordsAtPos(menuPos);
+                    openMenu(coords.left + 5, coords.bottom + 5);
+                } catch {
+                    const rect = dom.getBoundingClientRect();
+                    openMenu(rect.left + 24, rect.bottom);
+                }
+            };
+
+            const handleGlobalMouseDown = (event: MouseEvent) => {
+                if (!menuEl || menuEl.contains(event.target as Node)) return;
+                closeMenu();
+            };
+
+            const handleGlobalKeyDown = (event: KeyboardEvent) => {
+                if (!menuEl) return;
+                if (event.key === 'Escape' || event.key === 'Backspace') {
+                    event.preventDefault();
+                    closeMenu();
+                    props.editor.commands.focus();
+                }
+            };
+
+            getCloseMenuRegistry().add(closeMenu);
+            contentDOM.addEventListener('keydown', handleKeyDown, true);
+            document.addEventListener('mousedown', handleGlobalMouseDown, true);
+            document.addEventListener('keydown', handleGlobalKeyDown, true);
+
+            checkboxWrapper.addEventListener('mousedown', event => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+
+            checkboxWrapper.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (!props.editor.isEditable) return;
+
+                const pos = typeof props.getPos === 'function' ? props.getPos() : null;
+                if (typeof pos !== 'number') return;
+
+                const tr = props.view.state.tr.setNodeMarkup(pos, undefined, {
+                    ...currentNode.attrs,
+                    checked: currentNode.attrs.checked !== true,
+                });
+                props.view.dispatch(tr);
+            });
+
+            return {
+                dom,
+                contentDOM,
+                update: (node) => {
+                    if (node.type !== currentNode.type) return false;
+                    currentNode = node;
+                    renderChecked(currentNode.attrs.checked === true);
+                    return true;
+                },
+                ignoreMutation: (mutation) => {
+                    if ((mutation as any).type === 'selection') return false;
+                    return !contentDOM.contains(mutation.target);
+                },
+                destroy: () => {
+                    closeMenu();
+                    getCloseMenuRegistry().delete(closeMenu);
+                    contentDOM.removeEventListener('keydown', handleKeyDown, true);
+                    document.removeEventListener('mousedown', handleGlobalMouseDown, true);
+                    document.removeEventListener('keydown', handleGlobalKeyDown, true);
+                },
+            };
+        };
+    },
+
+    addProseMirrorPlugins() {
+        let compositionStartPos: number | null = null;
+
+        const isInsideTaskItem = ($pos: any) => {
+            for (let depth = $pos.depth; depth >= 0; depth--) {
+                if ($pos.node(depth).type.name === this.name) {
+                    return depth;
+                }
+            }
+            return -1;
+        };
+
+        return [
+            ...(this.parent?.() ?? []),
+            new Plugin({
+                key: new PluginKey('taskItemImeCompositionGuard'),
+                props: {
+                    handleDOMEvents: {
+                        compositionstart: (view) => {
+                            compositionStartPos = view.state.selection.from;
+                            return false;
+                        },
+                        beforeinput: (view, event) => {
+                            const inputEvent = event as InputEvent;
+                            if (inputEvent.inputType !== 'deleteCompositionText') return false;
+                            if (compositionStartPos === null) return false;
+
+                            const { state } = view;
+                            const { selection } = state;
+                            const taskItemDepth = isInsideTaskItem(selection.$from);
+                            if (taskItemDepth < 0) return false;
+
+                            const from = Math.max(
+                                selection.$from.start(selection.$from.depth),
+                                Math.min(compositionStartPos, selection.from)
+                            );
+                            const to = Math.min(
+                                selection.$from.end(selection.$from.depth),
+                                Math.max(compositionStartPos, selection.to)
+                            );
+
+                            if (from >= to) return false;
+
+                            event.preventDefault();
+                            const tr = state.tr.delete(from, to);
+                            tr.setSelection(TextSelection.create(tr.doc, from));
+                            tr.setMeta('composition', true);
+                            view.dispatch(tr);
+                            return true;
+                        },
+                        compositionend: () => {
+                            compositionStartPos = null;
+                            return false;
+                        },
+                    },
+                },
+            }),
+        ];
     },
 });
 

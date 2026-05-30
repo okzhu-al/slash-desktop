@@ -60,6 +60,11 @@ export function useNoteContent({
 
         // Helper: Load content into editor with sanitization and state locking
         const loadContent = (rawBody: string, clearHistory = false) => {
+            // 🛡️ IME composition 期间坚决禁止任何反向 setContent，防止打字期间 DOM 遭到物理破坏
+            if (editor && editor.view && editor.view.composing) {
+                console.log('[useNoteContent] Editor is composing, abort loadContent');
+                return '';
+            }
 
 
             // 1. Lock already set at effect start; re-confirm here for safety

@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Minus, Square, X, Copy, PanelRightOpen, PanelRightClose, Sparkles, ListChecks, FolderArchive, History, List, Network } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
+import { check } from "@tauri-apps/plugin-updater";
 import { useTabsStore, Tab } from "@/core/tabs/TabsStore";
 import { cn } from "@/shared/utils/cn";
 import { useIsTeamNote } from "@/hooks/useIsTeamNote";
+import { UpdateCheckerModal } from "@/features/settings/UpdateCheckerModal";
 import slashLogo from '@/assets/icon.png';
 
 export type RightPanelMode = 'ghostlink' | 'tasks' | 'classification' | 'activity' | 'outline' | 'localgraph';
@@ -69,6 +71,8 @@ export const TitleBar = ({
     // AI status state
     const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
     const [providerType, setProviderType] = useState<'local' | 'online'>('local');
+    const [hasAvailableUpdate, setHasAvailableUpdate] = useState(false);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
 
     useEffect(() => {
         const isMacOS = navigator.userAgent.includes("Mac");
@@ -137,6 +141,35 @@ export const TitleBar = ({
         };
     }, [currentNotePath]);
 
+    useEffect(() => {
+        let cancelled = false;
+        let checking = false;
+
+        const checkForAvailableUpdate = async () => {
+            if (checking) return;
+            checking = true;
+            try {
+                const update = await check();
+                if (!cancelled) {
+                    setHasAvailableUpdate(Boolean(update));
+                }
+            } catch {
+                // Background check stays quiet; the About panel still shows detailed update errors.
+            } finally {
+                checking = false;
+            }
+        };
+
+        const initialTimer = window.setTimeout(checkForAvailableUpdate, 5000);
+        const interval = window.setInterval(checkForAvailableUpdate, 6 * 60 * 60 * 1000);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(initialTimer);
+            window.clearInterval(interval);
+        };
+    }, []);
+
     const minimize = () => getCurrentWindow().minimize();
     const maximize = async () => {
         await getCurrentWindow().toggleMaximize();
@@ -176,6 +209,21 @@ export const TitleBar = ({
                     paddingRight: sidebarOpen ? '16px' : '8px'
                 }}
             >
+                {/* Update Capsule */}
+                {hasAvailableUpdate && (
+                    <button
+                        onClick={() => setShowUpdateModal(true)}
+                        className={cn(
+                            "no-drag flex items-center h-5 px-2.5 rounded-full text-[11px] font-semibold",
+                            "bg-indigo-500 text-white shadow-sm shadow-indigo-500/20",
+                            "hover:bg-indigo-600 active:bg-indigo-700 transition-colors cursor-pointer"
+                        )}
+                        title={t('settings.update_available', '发现新版本可用')}
+                    >
+                        {t('settings.update_badge', '更新')}
+                    </button>
+                )}
+
                 {/* AI Status Indicator */}
                 {aiStatus !== null && (
                     <button
@@ -212,6 +260,10 @@ export const TitleBar = ({
                                 : "text-[#006540] dark:text-[#006540]"
                         )}>{aiLabel}</span>
                     </button>
+                )}
+
+                {showUpdateModal && (
+                    <UpdateCheckerModal onClose={() => setShowUpdateModal(false)} />
                 )}
 
                 <button

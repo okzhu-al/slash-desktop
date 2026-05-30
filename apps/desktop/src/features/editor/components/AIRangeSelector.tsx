@@ -90,6 +90,15 @@ function getParagraphPosAtCoords(editor: Editor, x: number, y: number, side: 'st
         : snapToParagraphEnd(editor, posInfo.pos);
 }
 
+function getElementScale(element: Element) {
+    const rect = element.getBoundingClientRect();
+    const htmlElement = element as HTMLElement;
+    return {
+        x: htmlElement.offsetWidth ? rect.width / htmlElement.offsetWidth : 1,
+        y: htmlElement.offsetHeight ? rect.height / htmlElement.offsetHeight : 1,
+    };
+}
+
 export function AIRangeSelector({
     editor,
     skill,
@@ -184,6 +193,9 @@ export function AIRangeSelector({
         const view = editor.view;
         const editorEl = view.dom.closest('.editor-content-area') || view.dom;
         const editorRect = editorEl.getBoundingClientRect();
+        const scale = getElementScale(editorEl);
+        const scaleX = scale.x || 1;
+        const scaleY = scale.y || 1;
 
         const docSize = editor.state.doc.content.size;
         const safeFrom = Math.max(0, Math.min(rangeRef.current.from, docSize));
@@ -201,22 +213,22 @@ export function AIRangeSelector({
             // 最小高度保护
             const minHeight = 16;
             setStartHandlePos({
-                top: startCoords.top - editorRect.top,
-                left: startCoords.left - editorRect.left,
-                height: Math.max(sHeight, minHeight),
+                top: (startCoords.top - editorRect.top) / scaleY,
+                left: (startCoords.left - editorRect.left) / scaleX,
+                height: Math.max(sHeight / scaleY, minHeight),
             });
             setEndHandlePos({
-                top: endCoords.top - editorRect.top,
-                left: endCoords.right - editorRect.left,
-                height: Math.max(eHeight, minHeight),
+                top: (endCoords.top - editorRect.top) / scaleY,
+                left: (endCoords.right - editorRect.left) / scaleX,
+                height: Math.max(eHeight / scaleY, minHeight),
             });
 
-            const sLeft = startCoords.left - editorRect.left;
-            const eLeft = endCoords.right - editorRect.left;
+            const sLeft = (startCoords.left - editorRect.left) / scaleX;
+            const eLeft = (endCoords.right - editorRect.left) / scaleX;
             const midX = (sLeft + eLeft) / 2;
             setToolbarPos({
-                top: (startCoords.top - editorRect.top) - 40,
-                left: Math.max(0, Math.min(midX - 60, editorRect.width - 180)),
+                top: ((startCoords.top - editorRect.top) / scaleY) - 40,
+                left: Math.max(0, Math.min(midX - 60, (editorRect.width / scaleX) - 180)),
             });
             setPositionsReady(true);
         } catch (err) {

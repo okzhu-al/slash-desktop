@@ -38,6 +38,11 @@ interface NoteTaskPanelProps {
     projectPath?: string | null;
 }
 
+interface EditorTasksUpdatedDetail {
+    notePath: string;
+    tasks: Task[];
+}
+
 /**
  * 从 markdown 内容中解析任务项
  * 匹配 `- [ ] text` 和 `- [x] text` 格式
@@ -94,9 +99,15 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(false);
     const lastNotePathRef = useRef<string | null>(null);
+    const liveTaskSnapshotsRef = useRef<Map<string, Task[]>>(new Map());
 
     // 团队查看模式：从 markdown 内容实时解析任务
     const isTeamViewer = !!(notePath?.startsWith('__team__/') && markdownContent);
+
+    const getLiveSnapshot = useCallback((path: string | null) => {
+        if (!path) return null;
+        return liveTaskSnapshotsRef.current.get(path) ?? null;
+    }, []);
 
     // Fetch tasks when note changes
     useEffect(() => {
@@ -132,12 +143,18 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
             return;
         }
 
-        setLoading(true);
+        const liveSnapshot = getLiveSnapshot(notePath);
+        if (liveSnapshot) {
+            setTasks(liveSnapshot);
+            setLoading(false);
+        } else {
+            setLoading(true);
+        }
 
         // 虚拟团队路径不走磁盘扫描，直接查询已有任务
         if (notePath.startsWith('__team__/')) {
             invoke<Task[]>('get_note_tasks', { notePath })
-                .then(result => setTasks(result))
+                .then(result => setTasks(getLiveSnapshot(notePath) ?? result))
                 .catch(() => setTasks([]))
                 .finally(() => setLoading(false));
             return;
@@ -147,40 +164,68 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         invoke<Task[]>('scan_note_tasks', { notePath })
             .then(scannedTasks => {
                 // Use scanned tasks directly (they are already stored in DB)
-                setTasks(scannedTasks);
+                setTasks(getLiveSnapshot(notePath) ?? scannedTasks);
             })
             .catch(e => {
                 console.error('Failed to scan tasks:', e);
                 // Fallback: try to get existing tasks from DB
                 return invoke<Task[]>('get_note_tasks', { notePath })
-                    .then(result => setTasks(result))
+                    .then(result => setTasks(getLiveSnapshot(notePath) ?? result))
                     .catch(() => setTasks([]));
             })
             .finally(() => {
                 setLoading(false);
             });
-    }, [notePath, projectPath, isTeamViewer, markdownContent]);
+    }, [notePath, projectPath, isTeamViewer, markdownContent, getLiveSnapshot]);
 
-    // Listen for task updates from editor (when user toggles checkbox in note)
+    // Listen for live task snapshots from the active editor and persisted task updates.
     useEffect(() => {
         if (!notePath) {
             // 项目模式下也监听保存和同步事件来刷新任务列表
             if (projectPath) {
+                const mergeLiveProjectTasks = (baseTasks: Task[]) => {
+                    const liveSnapshots = liveTaskSnapshotsRef.current;
+                    const tasksWithoutLiveNotes = baseTasks.filter(task => !liveSnapshots.has(task.note_path));
+                    const liveTasks: Task[] = [];
+
+                    liveSnapshots.forEach((snapshot, snapshotNotePath) => {
+                        if (snapshotNotePath.startsWith(projectPath)) {
+                            liveTasks.push(...snapshot);
+                        }
+                    });
+
+                    return [...tasksWithoutLiveNotes, ...liveTasks];
+                };
+
                 const handleProjectTasksUpdate = () => {
                     invoke<Task[]>('get_tasks')
                         .then(result => {
                             const projectTasks = result.filter(task =>
                                 task.note_path.startsWith(projectPath)
                             );
-                            setTasks(projectTasks);
+                            setTasks(mergeLiveProjectTasks(projectTasks));
                         })
                         .catch(console.error);
                 };
+
+                const handleEditorTasksUpdated = (e: Event) => {
+                    const detail = (e as CustomEvent<EditorTasksUpdatedDetail>).detail;
+                    if (!detail?.notePath || !Array.isArray(detail.tasks)) return;
+                    if (!detail.notePath.startsWith(projectPath)) return;
+
+                    liveTaskSnapshotsRef.current.set(detail.notePath, detail.tasks);
+                    setTasks(prev => mergeLiveProjectTasks(prev));
+                    setLoading(false);
+                };
+
                 window.addEventListener('slash:note-saved', handleProjectTasksUpdate);
                 window.addEventListener('sync:completed', handleProjectTasksUpdate);
+                window.addEventListener('slash:editor-tasks-updated', handleEditorTasksUpdated);
+                window.dispatchEvent(new CustomEvent('slash:request-editor-tasks'));
                 return () => {
                     window.removeEventListener('slash:note-saved', handleProjectTasksUpdate);
                     window.removeEventListener('sync:completed', handleProjectTasksUpdate);
+                    window.removeEventListener('slash:editor-tasks-updated', handleEditorTasksUpdated);
                 };
             }
             return;
@@ -195,6 +240,16 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
             invoke<Task[]>('scan_note_tasks', { notePath })
                 .then(setTasks)
                 .catch(console.error);
+        };
+
+        const handleEditorTasksUpdated = (e: Event) => {
+            const detail = (e as CustomEvent<EditorTasksUpdatedDetail>).detail;
+            if (!detail?.notePath || !Array.isArray(detail.tasks)) return;
+            if (detail.notePath !== notePath) return;
+
+            liveTaskSnapshotsRef.current.set(detail.notePath, detail.tasks);
+            setTasks(detail.tasks);
+            setLoading(false);
         };
 
         const handleRemoteToggle = (e: Event) => {
@@ -214,11 +269,14 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         window.addEventListener('slash:note-saved', handleTaskUpdate);
         window.addEventListener('sync:completed', handleTaskUpdate);
         window.addEventListener('slash:remote-task-toggle', handleRemoteToggle);
+        window.addEventListener('slash:editor-tasks-updated', handleEditorTasksUpdated);
+        window.dispatchEvent(new CustomEvent('slash:request-editor-tasks'));
 
         return () => {
             window.removeEventListener('slash:note-saved', handleTaskUpdate);
             window.removeEventListener('sync:completed', handleTaskUpdate);
             window.removeEventListener('slash:remote-task-toggle', handleRemoteToggle);
+            window.removeEventListener('slash:editor-tasks-updated', handleEditorTasksUpdated);
         };
     }, [notePath, projectPath]);
 
@@ -229,6 +287,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         }
         
         const targetNotePath = task.note_path || notePath;
+        const activeEditorNotePath = notePath || targetNotePath;
         if (!targetNotePath) return;
 
         // Check team space read-only rules
@@ -246,9 +305,23 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         }
 
         const newStatus = !task.is_completed;
+        let dispatchedVisualToggle = false;
         console.debug('📋 [NoteTaskPanel] Toggling task:', taskId, '->', newStatus);
 
         try {
+            const dispatchVisualToggle = () => {
+                if (!activeEditorNotePath || dispatchedVisualToggle) return;
+                window.dispatchEvent(new CustomEvent('slash:toggle-task', {
+                    detail: {
+                        notePath: activeEditorNotePath,
+                        lineNumber: task.line_number,
+                        rawText: task.raw_text,
+                        isCompleted: newStatus
+                    }
+                }));
+                dispatchedVisualToggle = true;
+            };
+
             if (targetNotePath.startsWith('__team__/')) {
                 // Collab Mode virtual paths: use remote bypass directly to avoid write/push conflicts
                 const parts = targetNotePath.substring(9).split('/');
@@ -276,7 +349,10 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                     checked: newStatus,
                     toggled_by: useSessionStore.getState().userId || 'unknown'
                 });
+            } else if (taskId < 0 && activeEditorNotePath) {
+                dispatchVisualToggle();
             } else {
+                dispatchVisualToggle();
                 // Local notes: traditional disk-based update (safe from missing IDs)
                 await invoke('update_task_completion', {
                     notePath: targetNotePath,
@@ -291,14 +367,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
             ));
 
             // Notify Editor to visually sync the checkbox without reloading from disk
-            window.dispatchEvent(new CustomEvent('slash:toggle-task', {
-                detail: {
-                    notePath: targetNotePath,
-                    lineNumber: task.line_number,
-                    rawText: task.raw_text,
-                    isCompleted: newStatus
-                }
-            }));
+            dispatchVisualToggle();
 
         } catch (e) {
             console.error('Failed to update task:', e);

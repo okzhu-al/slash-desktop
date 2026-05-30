@@ -7,10 +7,9 @@
 
 /* Task Item - flex container with top alignment */
 /* 🌟 TaskList 专用 CSS Reset —— 覆盖 Tailwind prose 干扰 */
-ul[data-type="taskList"] {
+.tiptap ul[data-type="taskList"],
+.ProseMirror ul[data-type="taskList"] {
     list-style: none !important;
-    padding-left: 0 !important;
-    margin: 0 !important;
 }
 
 .slash-task-item {
@@ -18,12 +17,13 @@ ul[data-type="taskList"] {
     align-items: flex-start !important;
     gap: 8px !important;
     position: relative !important;
-    padding-left: 0 !important;
     padding-top: 0 !important;
     margin-bottom: 0.35rem !important;
     list-style: none !important;
     width: 100% !important;
-    min-height: 27px; /* 18px * 1.5 = 27px */
+    min-height: 1.5em;
+    line-height: 1.5 !important;
+    margin-left: -22px !important;
 }
 
 .slash-task-item.is-done > .slash-task-content {
@@ -40,13 +40,16 @@ ul[data-type="taskList"] {
     color: inherit;
 }
 
-/* Strikethrough on the actual paragraph element (TipTap v3 DOM: .slash-task-content > div[data-node-view-content-react] > p) */
+/* Strikethrough on the actual paragraph element.
+   Supports both the old React NodeView wrapper and the thin native NodeView. */
+.slash-task-item.is-done > .slash-task-content > p,
 .slash-task-item.is-done > .slash-task-content > div > p {
     text-decoration: line-through;
     text-decoration-color: #9CA3AF;
 }
 
 /* Force all inline elements (bold, italic, links, code) to inherit completed style */
+.slash-task-item.is-done > .slash-task-content > p *,
 .slash-task-item.is-done > .slash-task-content > div > p * {
     color: inherit !important;
 }
@@ -56,6 +59,7 @@ ul[data-type="taskList"] {
     color: #6B7280; /* gray-500 for dark mode */
 }
 
+.dark .slash-task-item.is-done > .slash-task-content > p,
 .dark .slash-task-item.is-done > .slash-task-content > div > p {
     text-decoration-color: #6B7280;
 }
@@ -68,7 +72,7 @@ ul[data-type="taskList"] {
     justify-content: center;
     width: 14px;
     height: 14px;
-    margin-top: 6.5px; /* (27px - 14px) / 2 = 6.5px 完美对齐第一行文本 */
+    margin-top: 0.36em;
     border-radius: 3px;
     border: 1.5px solid #64748B;
     background: transparent;

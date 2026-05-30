@@ -420,7 +420,17 @@ const TaskItemComponentPropsReceiver: React.FC<NodeViewProps> = ({
 };
 
 export const TaskItemComponent = React.memo(TaskItemComponentPropsReceiver, (prevProps, nextProps) => {
-    // 1. 如果 attrs 变了（比如 checkbox 勾选），必须重新渲染
+    // 1. 如果可编辑状态变了，必须重新渲染
+    if (prevProps.editor.isEditable !== nextProps.editor.isEditable) {
+        return false;
+    }
+
+    // 2. 如果节点类型变了，必须重新渲染
+    if (prevProps.node.type !== nextProps.node.type) {
+        return false;
+    }
+
+    // 3. 如果 attrs 变了（比如 checkbox 勾选），必须重新渲染
     const prevAttrs = prevProps.node.attrs;
     const nextAttrs = nextProps.node.attrs;
     const attrsKeys = Object.keys({ ...prevAttrs, ...nextAttrs });
@@ -430,18 +440,17 @@ export const TaskItemComponent = React.memo(TaskItemComponentPropsReceiver, (pre
         }
     }
 
-    // 2. 如果可编辑状态变了，必须重新渲染
-    if (prevProps.editor.isEditable !== nextProps.editor.isEditable) {
-        return false;
+    // 4. 🛡️ IME Composition 期间，绝对禁止 React 组件进行任何 re-render，
+    // 从根本上物理锁定 contentDOM 在打字输入期间绝对静态，杜绝重挂！
+    if (nextProps.editor.view.composing) {
+        return true; // 强行返回 true，阻止打字期间的任何 React render 和 DOM diff！
     }
 
-    // 3. 如果节点类型变了，必须重新渲染
-    if (prevProps.node.type !== nextProps.node.type) {
-        return false;
+    // 5. 非打字期间，如果文本内容发生变化，我们允许其重新渲染以同步 node 引用，避免数据分裂与强制重建
+    if (prevProps.node.textContent !== nextProps.node.textContent) {
+        return false; // 触发单次 re-render 来对齐最新引用
     }
 
-    // 4. 其余文本变动（如打字 composition 等）直接交给 ProseMirror 原生且高效地接管渲染，
-    // 强行阻止 React 在拼音输入期间的任何 DOM 属性 diff 和重排，从根本上锁死 contentDOM 锚点，杜绝 IME 重挂！
     return true; // props 相等，阻止 re-render
 });
 

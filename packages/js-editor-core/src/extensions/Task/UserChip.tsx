@@ -23,8 +23,37 @@ const UserChipView: React.FC<NodeViewProps> = ({ node, updateAttributes, editor,
     const handleSelect = useCallback((selectedUsername: string) => {
         updateAttributes({ username: selectedUsername, isDraft: false });
         setShowPopup(false);
-        editor.commands.focus();
-    }, [updateAttributes, editor]);
+
+        const pos = typeof getPos === 'function' ? getPos() : undefined;
+        if (typeof pos === 'number') {
+            let needsSpaceBefore = false;
+            try {
+                if (pos > 1) {
+                    const beforeText = editor.state.doc.textBetween(pos - 1, pos);
+                    if (beforeText !== ' ' && beforeText !== '\n') {
+                        needsSpaceBefore = true;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to check text before chip:', e);
+            }
+
+            if (needsSpaceBefore) {
+                editor.chain()
+                    .insertContentAt(pos, ' ')
+                    .setTextSelection(pos + 2)
+                    .focus()
+                    .run();
+            } else {
+                editor.chain()
+                    .setTextSelection(pos + 1)
+                    .focus()
+                    .run();
+            }
+        } else {
+            editor.commands.focus();
+        }
+    }, [updateAttributes, editor, getPos]);
 
     const handleClose = useCallback(() => {
         setShowPopup(false);

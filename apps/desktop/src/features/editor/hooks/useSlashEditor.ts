@@ -53,6 +53,93 @@ interface UseSlashEditorOptions {
     readOnly?: boolean;
 }
 
+interface EditorTaskSnapshot {
+    id: number;
+    note_path: string;
+    line_number: number;
+    raw_text: string;
+    is_completed: boolean;
+    due_date: string | null;
+    assignee: string | null;
+    priority: string | null;
+    created_at: number;
+    updated_at: number;
+}
+
+function getTextPositionLine(doc: any, pos: number): number {
+    let line = 1;
+    doc.descendants((_node: any, nodePos: number) => {
+        if (nodePos >= pos) return false;
+        if (_node.isTextblock) line++;
+        return true;
+    });
+    return line;
+}
+
+function getTaskContentNode(taskItemNode: any) {
+    let contentNode: any = null;
+
+    taskItemNode.forEach((child: any) => {
+        if (!contentNode && child.type.name === 'paragraph') {
+            contentNode = child;
+        }
+    });
+
+    return contentNode;
+}
+
+function extractTaskMetadata(node: any) {
+    let dueDate: string | null = node.attrs?.dueDate ?? null;
+    let assignee: string | null = node.attrs?.assignee ?? null;
+    let priority: string | null = node.attrs?.priority ?? null;
+
+    node.descendants((child: any) => {
+        if (child.type.name === 'dateChip' && child.attrs?.date) {
+            dueDate = child.attrs.date;
+        }
+        if (child.type.name === 'userChip' && child.attrs?.username) {
+            assignee = child.attrs.username;
+        }
+        if (child.type.name === 'priorityChip' && child.attrs?.priority) {
+            priority = child.attrs.priority;
+        }
+        return true;
+    });
+
+    return { dueDate, assignee, priority };
+}
+
+function extractTaskSnapshotFromDoc(doc: any, notePath: string): EditorTaskSnapshot[] {
+    const now = Date.now();
+    const tasks: EditorTaskSnapshot[] = [];
+
+    doc.descendants((node: any, pos: number) => {
+        if (node.type.name !== 'taskItem') return true;
+
+        const contentNode = getTaskContentNode(node);
+        const rawText = (contentNode?.textContent ?? '').trim();
+        if (!rawText) return true;
+
+        const { dueDate, assignee, priority } = extractTaskMetadata(contentNode ?? node);
+        tasks.push({
+            id: -((pos + 1) * 1000 + tasks.length),
+            note_path: notePath,
+            line_number: getTextPositionLine(doc, pos),
+            raw_text: rawText,
+            is_completed: node.attrs?.checked === true,
+            due_date: dueDate,
+            assignee,
+            priority,
+            created_at: now,
+            updated_at: now,
+        });
+
+        return true;
+    });
+
+    return tasks;
+}
+
 export function useSlashEditor({
     noteId,
     isLoadingContentRef,
@@ -67,6 +154,8 @@ export function useSlashEditor({
 }: UseSlashEditorOptions) {
     const { t } = useTranslation();
 
+    const noteIdRef = useRef(noteId);
+
     // Track last saved markdown snapshot to skip no-op saves
     const lastSavedSnapshotRef = useRef<string>('');
 
@@ -75,6 +164,23 @@ export function useSlashEditor({
 
     // ⏱ 编辑器创建计时（只在 mount 时记录，不随 re-render 更新）
 
+    useEffect(() => {
+        noteIdRef.current = noteId;
+    }, [noteId]);
+
+    const emitTaskSnapshot = (sourceEditor: any) => {
+        const currentNoteId = noteIdRef.current;
+        if (!currentNoteId || typeof window === 'undefined') return;
+        if (!sourceEditor || sourceEditor.isDestroyed) return;
+
+        const tasks = extractTaskSnapshotFromDoc(sourceEditor.state.doc, currentNoteId);
+        window.dispatchEvent(new CustomEvent('slash:editor-tasks-updated', {
+            detail: {
+                notePath: currentNoteId,
+                tasks,
+            },
+        }));
+    };
 
     const editor = useEditor({
         extensions: createEditorExtensions({
@@ -124,6 +230,7 @@ export function useSlashEditor({
                         isComposingRef.current = false;
                         // 🛡️ 补发 onContentUpdate：
                         if (!isLoadingContentRef.current && hasUserEditedRef.current) {
+                            emitTaskSnapshot(editorRef.current);
                             // By deferring the getMarkdown to the Thunk, we ensure confirming IME words does NOT freeze the UI!
                             onContentUpdate(() => {
                                 let snap = (editorRef.current?.storage as any)?.markdown?.getMarkdown() || '';
@@ -395,6 +502,7 @@ export function useSlashEditor({
             // We pass a Thunk (() => string) to let `useContentPersistence` run it 500ms LATER on the debounce timer.
 
             onEmptyChange(editor.isEmpty);
+            emitTaskSnapshot(editor);
 
             onContentUpdate(() => {
                 let contentSnapshot = (editor.storage as any)?.markdown?.getMarkdown() || '';
@@ -458,6 +566,19 @@ export function useSlashEditor({
             onFocusChange(false);
         },
     }, []);
+
+    useEffect(() => {
+        if (!editor) return;
+
+        const handleTaskSnapshotRequest = () => {
+            emitTaskSnapshot(editor);
+        };
+
+        window.addEventListener('slash:request-editor-tasks', handleTaskSnapshotRequest);
+        return () => {
+            window.removeEventListener('slash:request-editor-tasks', handleTaskSnapshotRequest);
+        };
+    }, [editor]);
 
     // Live snapshot: 每次文档变化、选区变化及视口滚动时实时更新缓存并持久化状态（撤销栈、选区、滚动高度）
     useEffect(() => {

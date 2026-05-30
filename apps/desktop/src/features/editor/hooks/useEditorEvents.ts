@@ -69,6 +69,12 @@ export function useEditorEvents({
         const editor = editorRef.current;
         if (!editor || editor.isDestroyed) return;
 
+        // 🛡️ IME composition 期间坚决禁止任何反向 setContent，防止打字期间 DOM 遭到物理破坏
+        if (editor.view.composing) {
+            console.log(`[useEditorEvents] ${logPrefix} — editor is composing, abort setContent`);
+            return;
+        }
+
         const currentMarkdown = (editor.storage as any)?.markdown?.getMarkdown?.() || '';
         if (currentMarkdown.trim() === body.trim()) {
             console.log(`[useEditorEvents] ${logPrefix} — content unchanged, skip reload`);
@@ -322,7 +328,7 @@ export function useEditorEvents({
         const handleVisualTaskToggle = (e: Event) => {
             const detail = (e as CustomEvent).detail;
             if (!detail) return;
-            const { notePath, rawText, isCompleted } = detail;
+            const { notePath, lineNumber, rawText, isCompleted } = detail;
             
             // Only apply if it's the current active note
             if (noteIdRef.current !== notePath) return;
@@ -334,18 +340,37 @@ export function useEditorEvents({
             if (!targetText) return;
 
             let foundPos: number | null = null;
+            const candidates: Array<{ pos: number; lineNumber: number; text: string }> = [];
+            const getLineForPos = (targetPos: number) => {
+                let line = 1;
+                editor.state.doc.descendants((node: any, pos: number) => {
+                    if (pos >= targetPos) return false;
+                    if (node.isTextblock) line++;
+                    return true;
+                });
+                return line;
+            };
 
             // Traverse the document to find the matching taskItem
             editor.state.doc.descendants((node: any, pos: number) => {
                 if (node.type.name === 'taskItem') {
                     const nodeText = node.textContent.trim();
                     if (nodeText && (nodeText.includes(targetText) || targetText.includes(nodeText))) {
-                        foundPos = pos;
-                        return false; // Stop traversing once found
+                        candidates.push({
+                            pos,
+                            lineNumber: getLineForPos(pos),
+                            text: nodeText,
+                        });
                     }
                 }
                 return true; // Continue
             });
+
+            const targetLineNumber = typeof lineNumber === 'number' ? lineNumber : null;
+            const exactLineMatch = targetLineNumber === null
+                ? null
+                : candidates.find(candidate => candidate.lineNumber === targetLineNumber);
+            foundPos = (exactLineMatch ?? candidates[0])?.pos ?? null;
 
             if (foundPos !== null) {
                 // Update node's 'checked' attribute directly bypassing serialization pipeline

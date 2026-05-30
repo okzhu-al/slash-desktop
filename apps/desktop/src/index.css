@@ -431,7 +431,16 @@
   /* 列表容器：去除默认样式的圆点 */
   .prose ul[data-type="taskList"] {
     list-style: none;
-    @apply my-0; /* 嵌套时不需要额外垂直间距 */
+    padding-left: 42px !important;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .prose li ul[data-type="taskList"],
+  .prose li ol[data-type="taskList"] {
+    padding-left: 1.15rem !important;
+    margin-top: 0.35rem !important;
+    margin-bottom: 0 !important;
   }
 
   /* Nested list inside task-content: match sibling item spacing */
@@ -454,7 +463,20 @@
   .prose li[data-type="taskItem"],
   .prose ul[data-type="taskList"] > li {
     list-style-type: none !important; /* 强制去掉前面的点 */
-    @apply ps-0 block relative; /* 使用 absolute 定位来对齐文本 */
+    font-size: 18px;
+    line-height: 1.5;
+    padding: 0;
+    margin-top: 0;
+    margin-bottom: 0.35rem;
+    @apply ps-0 flex relative;
+  }
+
+  .prose ul[data-type="taskList"] > li[data-type="taskItem"] {
+    margin-left: -22px !important;
+  }
+
+  .prose li ul[data-type="taskList"] > li[data-type="taskItem"]:last-child {
+    margin-bottom: 0 !important;
   }
 
   /* 结构修正：确保内容 div 作为块级元素不受原生 flex 限制 */
@@ -467,7 +489,9 @@
 
   /* 结构修正：checkbox 容器 */
   .prose li[data-type="taskItem"] > label,
-  .prose ul[data-type="taskList"] > li > label {
+  .prose li[data-type="taskItem"] > .task-checkbox-wrapper,
+  .prose ul[data-type="taskList"] > li > label,
+  .prose ul[data-type="taskList"] > li > .task-checkbox-wrapper {
     margin: 0;
     user-select: none;
   }

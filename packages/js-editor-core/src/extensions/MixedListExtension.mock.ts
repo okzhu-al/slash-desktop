@@ -4,8 +4,6 @@ import { TaskList } from '@tiptap/extension-task-list';
 import { TextSelection, Selection, Plugin, PluginKey } from '@tiptap/pm/state';
 import { mergeAttributes, InputRule, Extension, Editor } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-// import { TaskItemComponent } from './Task/TaskItemComponent';
-
 // Import task styles
 // import './Task/TaskItemStyles.css';
 
@@ -644,10 +642,30 @@ export const MixedTaskItem = TaskItem.extend({
     },
 
     renderHTML({ HTMLAttributes }) {
+        const checked = HTMLAttributes['data-checked'] === 'true' || HTMLAttributes['data-checked'] === '';
         return [
             'li',
             mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-type': 'taskItem' }),
-            0,
+            [
+                'div',
+                { class: `slash-task-item ${checked ? 'is-done' : ''}`, 'data-type': 'taskItem', 'data-checked': String(checked) },
+                [
+                    'span',
+                    { class: `task-checkbox-wrapper ${checked ? 'is-checked' : ''}`, contenteditable: 'false' },
+                    [
+                        'input',
+                        {
+                            type: 'checkbox',
+                            checked: checked ? 'checked' : null,
+                            readonly: 'true',
+                            tabindex: '-1',
+                            class: 'task-input-hidden',
+                        }
+                    ],
+                    ['span', { class: 'task-checkbox-inner' }]
+                ],
+                ['div', { class: 'slash-task-content' }, 0]
+            ]
         ];
     },
 
