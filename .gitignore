@@ -65,6 +65,7 @@ tmp_pm/
 test_path/
 temp_skip/
 test/
+scratch/
 
 # ignore server data folder
 /apps/server/data/
