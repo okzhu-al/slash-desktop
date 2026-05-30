@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Minus, Square, X, Copy, PanelRightOpen, PanelRightClose, Sparkles, ListChecks, FolderArchive, History, List, Network } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -193,6 +193,16 @@ export const TitleBar = ({
         onTabClose?.(tabId);
     };
 
+    const handleHorizontalWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+        const el = e.currentTarget;
+        if (el.scrollWidth <= el.clientWidth) return;
+        const primaryDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        if (primaryDelta === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        el.scrollLeft += primaryDelta;
+    }, []);
+
     const isAIReady = aiStatus?.connected && aiStatus?.generation_model_available && aiStatus?.embedding_model_available;
     const aiLabel = providerType === 'online' ? 'Online AI' : 'Local AI';
 
@@ -286,6 +296,7 @@ export const TitleBar = ({
 
             <div
                 ref={tabsContainerRef}
+                onWheel={handleHorizontalWheel}
                 className="flex-1 min-w-0 flex items-center gap-0.5 h-full overflow-x-auto [&::-webkit-scrollbar]:hidden px-2"
                 data-tauri-drag-region
             >
@@ -351,7 +362,7 @@ export const TitleBar = ({
             >
                 {/* Action buttons - only show when panel is open */}
                 {graphPanelOpen && (
-                <div className="flex items-center gap-1.5 pr-2 overflow-x-auto min-w-0 [&::-webkit-scrollbar]:hidden h-full">
+                <div onWheel={handleHorizontalWheel} className="flex items-center gap-1.5 pr-2 overflow-x-auto min-w-0 [&::-webkit-scrollbar]:hidden h-full">
                         {/* Outline Button */}
                         {onSetRightPanelMode && (!allowedRightPanelModes || allowedRightPanelModes.includes('outline')) && (
                             <button

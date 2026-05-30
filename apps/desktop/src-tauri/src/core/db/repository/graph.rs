@@ -42,15 +42,16 @@ pub struct NoteGraph {
 /// Helper to determine PARA category from path
 /// Used by both get_note_graph and get_global_graph
 fn get_category_from_path(path: &str) -> String {
-    if path.starts_with("00_Inbox") {
+    let normalized = path.replace('\\', "/");
+    if normalized.starts_with("00_Inbox") {
         "inbox".to_string()
-    } else if path.starts_with("01_Projects") {
+    } else if normalized.starts_with("01_Projects") {
         "project".to_string()
-    } else if path.starts_with("02_Areas") {
+    } else if normalized.starts_with("02_Areas") {
         "area".to_string()
-    } else if path.starts_with("03_Resources") {
+    } else if normalized.starts_with("03_Resources") {
         "resource".to_string()
-    } else if path.starts_with("04_Archives") {
+    } else if normalized.starts_with("04_Archives") {
         "archive".to_string()
     } else {
         "resource".to_string() // default
@@ -76,7 +77,8 @@ fn is_para_root(segment: &str) -> bool {
 /// "01_Projects/AI" -> 1 (first visible level)
 /// "01_Projects/AI/Models" -> 2
 fn get_depth_from_path(path: &str) -> i32 {
-    let parts: Vec<&str> = path.split('/').collect();
+    let normalized = path.replace('\\', "/");
+    let parts: Vec<&str> = normalized.split('/').collect();
     if parts.is_empty() {
         return 0;
     }
@@ -114,7 +116,8 @@ fn generate_folder_nodes(
             )
             .unwrap_or(0);
 
-        let parts: Vec<&str> = note_path.split('/').collect();
+        let normalized_note_path = note_path.replace('\\', "/");
+        let parts: Vec<&str> = normalized_note_path.split('/').collect();
         for i in 1..parts.len() {
             let folder_path = parts[..i].join("/");
 

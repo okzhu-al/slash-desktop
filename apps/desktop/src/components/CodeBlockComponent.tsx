@@ -11,6 +11,34 @@ mermaid.initialize({
     securityLevel: 'loose',
 });
 
+const writeClipboardText = async (text: string) => {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+    } catch (error) {
+        console.warn('[CodeBlock] navigator.clipboard.writeText failed, falling back.', error);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+
+    if (!copied) {
+        throw new Error('Fallback clipboard copy failed');
+    }
+};
+
 export const CodeBlockComponent: React.FC<any> = ({
     node: {
         attrs: { language: defaultLanguage },
@@ -141,10 +169,13 @@ export const CodeBlockComponent: React.FC<any> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActivated, isMermaid, isEditing, isMermaid ? node.textContent : null]);
 
-    const handleCopy = async () => {
-        const code = node.textContent;
+    const handleCopy = async (event?: React.MouseEvent) => {
+        event?.preventDefault();
+        event?.stopPropagation();
+
+        const code = node.textContent || wrapperRef.current?.querySelector('code')?.textContent || '';
         if (code) {
-            await navigator.clipboard.writeText(code);
+            await writeClipboardText(code);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -238,6 +269,10 @@ export const CodeBlockComponent: React.FC<any> = ({
 
                 <button
                     onClick={handleCopy}
+                    onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
                     className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
                     style={{ pointerEvents: 'auto' }}
                     title="Copy code"
@@ -295,6 +330,10 @@ export const CodeBlockComponent: React.FC<any> = ({
                         </button>
                         <button
                             onClick={handleCopy}
+                            onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                            }}
                             className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
                             title="Copy code"
                         >

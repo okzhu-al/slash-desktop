@@ -42,13 +42,18 @@ fi
 cp "$SRC_ROOT/Cargo.toml" "$DEST_ROOT/Cargo.toml"
 cp "$SRC_ROOT/Cargo.lock" "$DEST_ROOT/Cargo.lock"
 
+if [ -f "$SRC_ROOT/.env.example" ]; then
+  cp "$SRC_ROOT/.env.example" "$DEST_ROOT/.env.example"
+fi
+
 if [ -f "$SRC_ROOT/docker-compose.yml" ]; then
   cp "$SRC_ROOT/docker-compose.yml" "$DEST_ROOT/docker-compose.yml"
 fi
 
-if [ -d "$SRC_ROOT/docs/server" ]; then
-  mkdir -p "$DEST_ROOT/docs"
-  rsync -av "$SRC_ROOT/docs/server/" "$DEST_ROOT/docs/server/"
+if [ -d "$SRC_ROOT/docs/user/server" ]; then
+  mkdir -p "$DEST_ROOT/docs/user/server"
+  rsync -av "$SRC_ROOT/docs/user/server/" "$DEST_ROOT/docs/user/server/"
+  cp "$SRC_ROOT/docs/user/server/README.md" "$DEST_ROOT/README.md"
 fi
 
 cd "$DEST_ROOT"
@@ -56,6 +61,7 @@ cd "$DEST_ROOT"
 # Hard-remove anything that must never be in server
 echo "🗑️  Enforcing deletion of forbidden paths..."
 rm -rf target node_modules dist
+find . -name ".DS_Store" -delete
 rm -f *.log
 
 # --- Workspace adjustments ---

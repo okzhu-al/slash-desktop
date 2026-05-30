@@ -70,6 +70,13 @@ rm -f docker-compose.yml
 rm -f test.rs test_path.rs test_paths.js test-note-id.js test-custom-skill.sh
 rm -f tmp_migration.rs
 
+# Publish desktop-facing user docs.
+echo "📚 Publishing desktop user documentation..."
+rm -rf docs
+mkdir -p docs/user/desktop
+rsync -av "$SRC_ROOT/docs/user/desktop/" docs/user/desktop/
+cp "$SRC_ROOT/docs/user/desktop/README.md" README.md
+
 # Public repo must not include private server implementation
 if [ -d "apps/server" ]; then
   echo "ERROR: apps/server still exists in desktop mirror"

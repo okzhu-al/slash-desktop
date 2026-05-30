@@ -1,15 +1,15 @@
 {
-  "version": "0.1.2",
-  "notes": "Slash v0.1.2 release with task list stability fixes, task sidebar sync improvements, AI selection alignment fixes, and update discovery.",
-  "pub_date": "2026-05-30T01:40:00Z",
+  "version": "0.1.2-beta.1",
+  "notes": "Slash v0.1.2-beta.1 release.",
+  "pub_date": "2026-05-30T14:44:21Z",
   "platforms": {
     "darwin-aarch64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbm1NMy93TjE5a3pWcmFUTGZZM044b0dOR1locEh6MFlOeE13VWJOUHVvNG9jeFovTW9ieGFOMFEvcWowU1lpaEJNSjBVZkdwbHZaR1NDMVdLQ25rS3dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMTA0NzcwCWZpbGU6U2xhc2guYXBwLnRhci5negpLMUw3OHltTGxuL3BabDd5cDFFTm9RcXRXU2cwektIK2RNcnBjRExaNnJ0dEhnd3ZLbkp2S1o4aFhxa2Y5cFNPUXk2MmpvYkxxL3FaZENSWFZHejhCZz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.2/Slash.app.tar.gz"
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.2-beta.1/Slash.app.tar.gz"
     },
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnZ1d0tHNW54YXFRSG5pMzlmSUUrQ2ZLV0ZyOUVpTVk4QWtJWkM4MWpPeURacVMrZTlrcE5Cdk90WWgwTk1ObFZGeDhmVkVKWC80UjFVK1lnL0hiWHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMTA0OTc1CWZpbGU6U2xhc2hfMC4xLjJfeDY0LXNldHVwLmV4ZQpMTU9tVkNGdnRUWFNOSkJDTXFidWZma1dRd09SYS82S0VEdDRTSXNIV2FPcGdFNzdWZm5xSGZaSUZPNUE4YjZFZkJ4TTFrSlRwSmJBdWZCNnRSNFJCZz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.2/Slash_0.1.2_x64-setup.exe"
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.2-beta.1/Slash_0.1.2-beta.1_x64-setup.exe"
     }
   }
 }

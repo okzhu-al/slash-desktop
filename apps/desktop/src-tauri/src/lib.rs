@@ -117,13 +117,19 @@ pub fn run() {
                 log::error!("🔧 [Sidecar] Failed to start: {}", e);
             }
 
-            // [Beta Test] Always open devtools to debug the white screen issue
-            if let Some(window) = app.get_webview_window("main") {
-                window.open_devtools();
-                
-                #[cfg(target_os = "windows")]
-                {
-                    let _ = window.set_decorations(false);
+            #[cfg(any(debug_assertions, target_os = "windows"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(debug_assertions)]
+                    {
+                        let _ = window.show();
+                        window.open_devtools();
+                    }
+
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = window.set_decorations(false);
+                    }
                 }
             }
             Ok(())

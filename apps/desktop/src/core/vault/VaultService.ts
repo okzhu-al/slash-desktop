@@ -1,8 +1,30 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { exists, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
+import aboutSlashGuide from '../../../../../docs/user/desktop/README.md?raw';
+import aiGuide from '../../../../../docs/user/desktop/ai-guide.md?raw';
+import inputGuide from '../../../../../docs/user/desktop/input-guide.md?raw';
 
 const STORAGE_KEY_VAULTS = 'slash-vaults-history';
 const CONFIG_DIR_NAME = '.slash';
+
+const DESKTOP_USER_GUIDES = [
+    {
+        seedKey: 'about-slash',
+        path: '00_Inbox/About Slash.md',
+        content: aboutSlashGuide,
+    },
+    {
+        seedKey: 'input-guide',
+        path: '03_Resources/Slash Input Guide.md',
+        content: inputGuide,
+    },
+    {
+        seedKey: 'ai-guide',
+        path: '03_Resources/Slash AI Guide.md',
+        content: aiGuide,
+    },
+] as const;
 
 export interface VaultInfo {
     path: string;
@@ -126,6 +148,7 @@ class TauriVaultService implements VaultService {
 
             if (selected && typeof selected === 'string') {
                 await this.initializeVault(selected);
+                await this.seedDesktopUserGuides(selected);
                 this.addVault(selected);
                 return selected;
             }
@@ -169,6 +192,36 @@ class TauriVaultService implements VaultService {
                 console.error('Failed to create config directory:', error);
                 throw new Error('Could not initialize vault configuration.');
             }
+        }
+    }
+
+    private withSeedFrontmatter(seedKey: string, content: string): string {
+        const normalized = content.replace(/\r\n/g, '\n').trimStart();
+        return [
+            '---',
+            'slash_seed: user-guide',
+            `slash_seed_key: ${seedKey}`,
+            '---',
+            '',
+            normalized,
+        ].join('\n');
+    }
+
+    private async seedDesktopUserGuides(vaultPath: string): Promise<void> {
+        const { join, dirname } = await import('@tauri-apps/api/path');
+
+        await invoke<string[]>('ensure_para_structure', { vaultPath });
+
+        for (const guide of DESKTOP_USER_GUIDES) {
+            const targetPath = await join(vaultPath, guide.path);
+
+            if (await exists(targetPath)) {
+                continue;
+            }
+
+            const parentPath = await dirname(targetPath);
+            await mkdir(parentPath, { recursive: true });
+            await writeTextFile(targetPath, this.withSeedFrontmatter(guide.seedKey, guide.content));
         }
     }
 }

@@ -124,10 +124,15 @@ function App() {
 
   /** 通用笔记导航：将 path 转为完整 Note 对象并选中 */
   const navigateToNotePath = useCallback((notePath: string) => {
-    const fullPath = notePath.startsWith('/') ? notePath
-      : notePath.startsWith('__team__/') ? notePath
-      : (notePath.includes('/') || notePath.endsWith('.md')) ? `${vaultPath}/${notePath}`
-      : `${vaultPath}/${notePath}.md`;
+    if (!vaultPath && !notePath.startsWith('__team__/')) return;
+    const normalizedInput = normalizePath(notePath);
+    const normalizedVault = normalizePath(vaultPath || '');
+    const isAbsolute = normalizedInput.startsWith('/') || /^[a-z]:\//i.test(normalizedInput);
+    const relativePath = isAbsolute ? getRelativePath(normalizedInput, normalizedVault) : normalizedInput;
+    const pathWithExtension = relativePath.endsWith('.md') ? relativePath : `${relativePath}.md`;
+    const fullPath = normalizedInput.startsWith('__team__/') ? normalizedInput
+      : isAbsolute && relativePath === normalizedInput ? normalizedInput
+      : `${normalizedVault}/${pathWithExtension}`;
     const noteTitle = getBasename(notePath).replace(/\.md$/, '') || notePath;
     selectNote({
       id: fullPath, title: noteTitle, content: '', path: fullPath,
@@ -919,7 +924,7 @@ function App() {
             })()
           ) : rightPanelMode === 'localgraph' ? (
             <LocalGraphPanel
-              notePath={selectedNote?.id || null}
+              notePath={selectedNote?.id && vaultPath ? getRelativePath(selectedNote.id, vaultPath) : null}
               onNavigate={navigateToNotePath}
               refreshKey={graphRefreshKey}
             />

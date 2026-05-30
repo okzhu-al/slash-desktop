@@ -4,6 +4,7 @@ import { Buffer } from 'buffer';
 window.Buffer = Buffer;
 
 import ReactDOM from "react-dom/client";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import App from "./App";
 
@@ -66,3 +67,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       </KeybindingProvider>
     </GlobalErrorBoundary>
 );
+
+if (!import.meta.env.DEV) {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            getCurrentWindow().show().catch(console.error);
+        });
+    });
+}

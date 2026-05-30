@@ -10,15 +10,16 @@ pub fn get_note_graph(
     db_state: State<DbStateWrapper>,
 ) -> Result<crate::core::db::repository::NoteGraph, String> {
     // Convert absolute path to relative path
-    let relative_path = if note_path.starts_with(&vault_path) {
-        note_path
-            .strip_prefix(&vault_path)
-            .unwrap_or(&note_path)
+    let normalized_note_path = crate::core::db::repository::normalize_path(&note_path);
+    let normalized_vault_path = crate::core::db::repository::normalize_path(&vault_path);
+    let relative_path = if normalized_note_path.starts_with(&normalized_vault_path) {
+        normalized_note_path
+            .strip_prefix(&normalized_vault_path)
+            .unwrap_or(&normalized_note_path)
             .trim_start_matches('/')
-            .trim_start_matches('\\')
             .to_string()
     } else {
-        note_path.clone()
+        normalized_note_path
     };
 
     log::debug!(
