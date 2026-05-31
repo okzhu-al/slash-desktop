@@ -26,7 +26,8 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        const value = bytes / Math.pow(k, i);
+        return `${i === 0 ? Math.round(value).toString() : value.toFixed(1)} ${sizes[i]}`;
     };
 
     const handleCheckUpdate = async () => {
@@ -210,7 +211,11 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 size={32} className="animate-spin text-[#002FA7]" />
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.downloading_update', '正在下载更新包')}</h3>
-                            <p className="text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums min-w-[200px] mx-auto text-center">{downloadedSize} / {totalSize}</p>
+                            <div className="grid grid-cols-[5.5rem_1rem_5.5rem] items-center justify-center text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums">
+                                <span className="text-right">{downloadedSize}</span>
+                                <span className="text-center">/</span>
+                                <span className="text-left">{totalSize}</span>
+                            </div>
                         </div>
 
                         {/* Premium Progress Bar */}
@@ -222,7 +227,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                                 />
                             </div>
                             <div className="flex justify-end">
-                                <span className="text-[11px] font-bold text-[#002FA7] font-mono tabular-nums">{progress}%</span>
+                                <span className="w-9 text-right text-[11px] font-bold text-[#002FA7] font-mono tabular-nums">{progress}%</span>
                             </div>
                         </div>
                     </div>

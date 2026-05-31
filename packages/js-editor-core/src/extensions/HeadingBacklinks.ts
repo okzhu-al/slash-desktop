@@ -43,10 +43,7 @@ export const HeadingBacklinks = Extension.create<{}, HeadingBacklinksStorage>({
                 key: headingBacklinksPluginKey,
                 state: {
                     init: () => DecorationSet.empty,
-                    apply: (_tr, _oldDecorations, _oldState, _newState) => {
-                        // 🌟 临时强行静默阻断：不添加任何 backlink widget decoration，阻断 DOM 频繁 Patch 以供测试 Bug 2
-                        return DecorationSet.empty;
-                    },
+                    apply: (_tr, _oldDecorations, _oldState, _newState) => DecorationSet.empty,
                 },
                 props: {
                     decorations(state) {

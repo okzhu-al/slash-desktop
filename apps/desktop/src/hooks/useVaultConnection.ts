@@ -50,8 +50,9 @@ export interface VaultConnectionState {
  * 
  * Flow:
  * 1. init_db(vaultPath) - Initialize SQLite database
- * 2. scan_vault(vaultPath) - Scan all .md files and populate DB
- * 3. start_watcher(vaultPath) - Start file system watcher
+ * 2. start_watcher(vaultPath) - Start file system watcher
+ * 3. start_embedding_worker(vaultPath) - Start background embedding worker
+ * 4. scan_vault(vaultPath) - Run a background DB refresh after UI is usable
  */
 export function useVaultConnection(vaultPath: string | null): VaultConnectionState {
     const [isDbReady, setIsDbReady] = useState(false);
@@ -114,6 +115,7 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
         }
 
         let unlistenRefresh: UnlistenFn | null = null;
+        let scanTimer: ReturnType<typeof setTimeout> | null = null;
 
         const initializeVault = async () => {
 
@@ -131,16 +133,14 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
 
                 setIsDbReady(true);
                 setError(null);
+                refreshStats();
             } catch (e) {
                 console.error('❌ [VaultConnection] DB init failed:', e);
                 setError(`Database initialization failed: ${e}`);
                 return;
             }
 
-            // Step B: Scan vault
-            await scanVault(vaultPath);
-
-            // Step C: Start file watcher
+            // Step B: Start file watcher before the heavier scan so UI can become usable first.
             try {
                 await invoke<string>('start_watcher', { vaultPath });
 
@@ -149,7 +149,7 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
                 // Non-fatal, continue without watcher
             }
 
-            // Step D: Start embedding background worker
+            // Step C: Start embedding background worker
             try {
                 await invoke<string>('start_embedding_worker', { vaultPath });
             } catch (e) {
@@ -157,7 +157,7 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
                 // Non-fatal, continue without worker
             }
 
-            // Step E: Listen for vault:refresh events from watcher
+            // Step D: Listen for vault:refresh events from watcher
             const cleanupRefresh = await listen('vault:refresh', async () => {
                 refreshStats();
 
@@ -173,11 +173,14 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
                 unlistenRefresh = cleanupRefresh;
             }
 
-            // Step E: AI processing - REMOVED
-            // All AI processing now goes through trigger_ai_orchestrated for proper scheduling
-            // The old process_dirty_notes_batch bypassed Scheduler hash/delta checks
+            if (cancelled) return;
 
-
+            // Step E: Heavy vault scan runs after the workspace is visible and interactive.
+            scanTimer = setTimeout(() => {
+                if (!cancelled) {
+                    scanVault(vaultPath);
+                }
+            }, 500);
         };
 
         let cancelled = false;
@@ -191,6 +194,10 @@ export function useVaultConnection(vaultPath: string | null): VaultConnectionSta
                     const p = unlistenRefresh() as any;
                     if (p && p.catch) p.catch(() => {});
                 } catch (e) {}
+            }
+            if (scanTimer) {
+                clearTimeout(scanTimer);
+                scanTimer = null;
             }
             invoke('close_db').catch(() => {
                 // Ignore close errors

@@ -242,15 +242,6 @@ function App() {
     localStorage.setItem('sidebar_width', width.toString());
   };
 
-  // Load last opened vault
-  useEffect(() => {
-    const lastVault = localStorage.getItem("last_vault_path");
-    if (lastVault) {
-      handleVaultOpened(lastVault);
-    }
-  }, []);
-
-
   // Restore active tab content when app starts (repo ready, no note selected yet)
   useEffect(() => {
     if (repo && !selectedNote && vaultPath) {

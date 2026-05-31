@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { fileSystemService } from './FileSystemService';
 import { cacheService } from '@/core/cache/CacheService';
+import { fileTreeSnapshotService } from './FileTreeSnapshotService';
 import { FileSystemItem } from './types';
 import { SortConfig, SortField, SortDirection, sortFileTree } from './sortUtils';
 import { getBasename, getParentPath, getRelativePath, normalizePath } from '@/shared/utils/pathUtils';
@@ -101,6 +102,10 @@ const isPARAFolder = (folderName: string): boolean => {
     return PARA_PREFIXES.some(prefix => folderName.startsWith(prefix));
 };
 
+const persistTreeSnapshot = (root: FileSystemItem) => {
+    fileTreeSnapshotService.save(root.path, root).catch(console.error);
+};
+
 // Recursively process folder and its children, applying expansion state
 const processFolder = async (
     folder: FileSystemItem,
@@ -146,6 +151,11 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         await cacheService.initialize(path);
 
         const { expandedPaths } = get();
+        const cachedTree = await fileTreeSnapshotService.load(path);
+        if (cachedTree) {
+            const { sortConfig } = get();
+            set({ root: sortFileTree(cachedTree, sortConfig, true) });
+        }
 
         try {
             const children = await fileSystemService.getDirectoryContents(path);
@@ -173,6 +183,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             const { sortConfig } = get();
             const sortedRoot = sortFileTree(rootItem, sortConfig, true);
             set({ root: sortedRoot });
+            persistTreeSnapshot(sortedRoot);
         } catch (error) {
             console.error("Failed to load root:", error);
         }
@@ -195,6 +206,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         if (!isOpen) {
             const newRoot = updateTree(root, path, (node) => ({ ...node, isOpen: false }));
             set({ root: newRoot });
+            persistTreeSnapshot(newRoot);
             return;
         }
 
@@ -220,6 +232,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             // Re-sort tree to maintain correct order after loading children
             const sortedRoot = sortFileTree(newRoot, sortConfig, true);
             set({ root: sortedRoot });
+            persistTreeSnapshot(sortedRoot);
         } catch (error) {
             // If folder doesn't exist (deleted externally), remove it from the tree
             const errorMsg = String(error);
@@ -259,6 +272,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             // Re-sort entire tree to maintain correct order
             const sortedRoot = sortFileTree(newRoot, sortConfig, true);
             set({ root: sortedRoot });
+            persistTreeSnapshot(sortedRoot);
         } catch (error) {
             // If folder doesn't exist (deleted externally), remove it from the tree
             const errorMsg = String(error);
@@ -334,6 +348,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         if (newRoot) {
 
             set({ root: newRoot });
+            persistTreeSnapshot(newRoot);
         } else {
 
         }
@@ -420,6 +435,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             // Re-sort tree after rename to maintain correct sort order
             const sortedRoot = sortFileTree(newRoot, sortConfig, true);
             set({ root: sortedRoot });
+            persistTreeSnapshot(sortedRoot);
 
             // Update persisted expansion state if folder was renamed
             if (expandedPaths.has(oldPath)) {
@@ -448,6 +464,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         }));
 
         set({ root: newRoot });
+        persistTreeSnapshot(newRoot);
     },
 
     expandToPath: async (filePath: string) => {
@@ -501,6 +518,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             // Re-sort the entire tree with new config
             const sortedRoot = sortFileTree(root, newConfig, true);
             set({ sortConfig: newConfig, root: sortedRoot });
+            persistTreeSnapshot(sortedRoot);
         } else {
             set({ sortConfig: newConfig });
         }

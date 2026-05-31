@@ -25,6 +25,17 @@ class CacheService {
 
     // Initialize with a root directory to store .slash folder
     async initialize(baseDir: string) {
+        if (this.rootDir !== baseDir) {
+            if (this.saveTimeout) {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = null;
+                if (this.rootDir) {
+                    await this.persist();
+                }
+            }
+            this.cache = {};
+            this.isLoaded = false;
+        }
         this.rootDir = baseDir;
         await this.load();
     }
