@@ -82,3 +82,8 @@ Slash 适合：
 4. 用 WikiLink 建立笔记关系。
 5. 用任务列表记录行动项。
 6. 按需要配置 AI 或 Server 同步。
+
+## 另见
+
+- [[Slash Input Guide]]
+- [[Slash AI Guide]]

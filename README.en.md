@@ -83,5 +83,5 @@ Slash is a good fit if you:
 
 See also:
 
-- [Input Guide](./input-guide.md)
-- [AI Guide](./ai-guide.md)
+- [[Slash Input Guide]]
+- [[Slash AI Guide]]
