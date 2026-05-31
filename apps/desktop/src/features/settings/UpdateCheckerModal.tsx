@@ -39,6 +39,9 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                 setVersion(update.version);
                 setBody(update.body || '');
                 setState('available');
+                window.dispatchEvent(new CustomEvent('slash:update-available', {
+                    detail: { version: update.version },
+                }));
             } else {
                 setState('latest');
                 setTimeout(() => {

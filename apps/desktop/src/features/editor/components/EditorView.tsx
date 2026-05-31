@@ -274,7 +274,7 @@ export const EditorView = (props: EditorContainerState) => {
         <div className={cn(
             "mx-auto px-8 pt-8 pb-4 transition-all duration-300 ease-in-out",
             editorWidth === "full" ? "max-w-6xl" : "max-w-3xl"
-        )} style={{ zoom: zoomLevel } as any}>
+        )} style={zoomLevel === 1 ? undefined : ({ zoom: zoomLevel } as any)}>
             {/* Find in Note Bar */}
             <FindInNote
                 editor={editor}

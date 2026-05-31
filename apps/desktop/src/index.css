@@ -352,7 +352,7 @@
 
   .prose p {
     font-size: 18px;
-    line-height: 1.5; /* 27px line box gives tight optimal reading */
+    line-height: normal; /* Keep WebKit contenteditable caret aligned on wrapped visual lines */
     padding: 0;
     margin-top: 0;
     margin-bottom: 0.6rem; /* User's preferred baseline visual gap */
@@ -378,7 +378,7 @@
   /* 列表项间距 */
   .prose li {
     font-size: 18px;
-    line-height: 1.5;
+    line-height: normal;
     padding: 0; 
     margin-top: 0;
     margin-bottom: 0.35rem; /* User's preferred list item visual gap */
@@ -464,7 +464,7 @@
   .prose ul[data-type="taskList"] > li {
     list-style-type: none !important; /* 强制去掉前面的点 */
     font-size: 18px;
-    line-height: 1.5;
+    line-height: normal;
     padding: 0;
     margin-top: 0;
     margin-bottom: 0.35rem;
@@ -505,7 +505,7 @@
   /* 复选框微调 */
   .prose li[data-type="taskItem"] input[type="checkbox"],
   .prose ul[data-type="taskList"] > li input[type="checkbox"] {
-    @apply mt-[0.35em]; /* aligned with 1.625 line height (26px) */
+    @apply mt-[0.25em]; /* aligned with normal text line metrics */
     @apply cursor-pointer;
   }
 

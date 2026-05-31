@@ -21,8 +21,8 @@
     margin-bottom: 0.35rem !important;
     list-style: none !important;
     width: 100% !important;
-    min-height: 1.5em;
-    line-height: 1.5 !important;
+    min-height: 1.25em;
+    line-height: normal !important;
     margin-left: -22px !important;
 }
 
@@ -72,7 +72,7 @@
     justify-content: center;
     width: 14px;
     height: 14px;
-    margin-top: 0.36em;
+    margin-top: 0.25em;
     border-radius: 3px;
     border: 1.5px solid #64748B;
     background: transparent;
@@ -119,8 +119,8 @@
 /* 🌟 空段落设置 min-height 保障光标 Y 轴高度并撑开排版 */
 .slash-task-content p {
     margin: 0 !important;
-    min-height: 1.5em !important;
-    line-height: 1.5 !important;
+    min-height: 1.25em !important;
+    line-height: normal !important;
 }
 
 /* Capsules (Date, Assignee, Priority) */

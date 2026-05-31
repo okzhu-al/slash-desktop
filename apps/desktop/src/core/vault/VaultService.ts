@@ -1,30 +1,66 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { exists, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
+import i18n from '@/core/i18n/config';
 import aboutSlashGuide from '../../../../../docs/user/desktop/README.md?raw';
 import aiGuide from '../../../../../docs/user/desktop/ai-guide.md?raw';
 import inputGuide from '../../../../../docs/user/desktop/input-guide.md?raw';
+import aboutSlashGuideEn from '../../../../../docs/user/desktop/en/README.md?raw';
+import aiGuideEn from '../../../../../docs/user/desktop/en/ai-guide.md?raw';
+import inputGuideEn from '../../../../../docs/user/desktop/en/input-guide.md?raw';
 
 const STORAGE_KEY_VAULTS = 'slash-vaults-history';
 const CONFIG_DIR_NAME = '.slash';
 
-const DESKTOP_USER_GUIDES = [
-    {
-        seedKey: 'about-slash',
-        path: '00_Inbox/About Slash.md',
-        content: aboutSlashGuide,
-    },
-    {
-        seedKey: 'input-guide',
-        path: '03_Resources/Slash Input Guide.md',
-        content: inputGuide,
-    },
-    {
-        seedKey: 'ai-guide',
-        path: '03_Resources/Slash AI Guide.md',
-        content: aiGuide,
-    },
-] as const;
+const DESKTOP_USER_GUIDE_PATHS = {
+    aboutSlash: '00_Inbox/About Slash.md',
+    inputGuide: '03_Resources/Slash Input Guide.md',
+    aiGuide: '03_Resources/Slash AI Guide.md',
+} as const;
+
+const DESKTOP_USER_GUIDES_BY_LANGUAGE = {
+    zh: [
+        {
+            seedKey: 'about-slash',
+            path: DESKTOP_USER_GUIDE_PATHS.aboutSlash,
+            content: aboutSlashGuide,
+        },
+        {
+            seedKey: 'input-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.inputGuide,
+            content: inputGuide,
+        },
+        {
+            seedKey: 'ai-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.aiGuide,
+            content: aiGuide,
+        },
+    ],
+    en: [
+        {
+            seedKey: 'about-slash',
+            path: DESKTOP_USER_GUIDE_PATHS.aboutSlash,
+            content: aboutSlashGuideEn,
+        },
+        {
+            seedKey: 'input-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.inputGuide,
+            content: inputGuideEn,
+        },
+        {
+            seedKey: 'ai-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.aiGuide,
+            content: aiGuideEn,
+        },
+    ],
+} as const;
+
+type SeedLanguage = keyof typeof DESKTOP_USER_GUIDES_BY_LANGUAGE;
+
+function getDesktopGuideSeedLanguage(): SeedLanguage {
+    const language = i18n.resolvedLanguage || i18n.language || localStorage.getItem('i18nextLng') || navigator.language || 'en';
+    return language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
 
 export interface VaultInfo {
     path: string;
@@ -170,6 +206,7 @@ class TauriVaultService implements VaultService {
             if (selected && typeof selected === 'string') {
                 await this.initializeVault(selected);
                 this.addVault(selected);
+                await this.seedDesktopUserGuides(selected);
                 return selected;
             }
             return null;
@@ -195,12 +232,13 @@ class TauriVaultService implements VaultService {
         }
     }
 
-    private withSeedFrontmatter(seedKey: string, content: string): string {
+    private withSeedFrontmatter(seedKey: string, seedLanguage: SeedLanguage, content: string): string {
         const normalized = content.replace(/\r\n/g, '\n').trimStart();
         return [
             '---',
             'slash_seed: user-guide',
             `slash_seed_key: ${seedKey}`,
+            `slash_seed_lang: ${seedLanguage}`,
             '---',
             '',
             normalized,
@@ -211,8 +249,10 @@ class TauriVaultService implements VaultService {
         const { join, dirname } = await import('@tauri-apps/api/path');
 
         await invoke<string[]>('ensure_para_structure', { vaultPath });
+        const seedLanguage = getDesktopGuideSeedLanguage();
+        const guides = DESKTOP_USER_GUIDES_BY_LANGUAGE[seedLanguage];
 
-        for (const guide of DESKTOP_USER_GUIDES) {
+        for (const guide of guides) {
             const targetPath = await join(vaultPath, guide.path);
 
             if (await exists(targetPath)) {
@@ -221,7 +261,7 @@ class TauriVaultService implements VaultService {
 
             const parentPath = await dirname(targetPath);
             await mkdir(parentPath, { recursive: true });
-            await writeTextFile(targetPath, this.withSeedFrontmatter(guide.seedKey, guide.content));
+            await writeTextFile(targetPath, this.withSeedFrontmatter(guide.seedKey, seedLanguage, guide.content));
         }
     }
 }

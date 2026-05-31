@@ -59,6 +59,7 @@
         "update_error": "Check update failed",
         "close": "Close",
         "retry": "Retry",
+        "update_badge": "Update",
         "update_available": "New version available",
         "release_notes": "Release Notes",
         "later": "Later",

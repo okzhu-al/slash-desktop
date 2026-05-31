@@ -144,6 +144,9 @@ export const TitleBar = ({
     useEffect(() => {
         let cancelled = false;
         let checking = false;
+        let warmupTimer: number | undefined;
+        let warmupChecks = 0;
+        const maxWarmupChecks = 10;
 
         const checkForAvailableUpdate = async () => {
             if (checking) return;
@@ -152,6 +155,10 @@ export const TitleBar = ({
                 const update = await check();
                 if (!cancelled) {
                     setHasAvailableUpdate(Boolean(update));
+                    if (update && warmupTimer !== undefined) {
+                        window.clearInterval(warmupTimer);
+                        warmupTimer = undefined;
+                    }
                 }
             } catch {
                 // Background check stays quiet; the About panel still shows detailed update errors.
@@ -160,13 +167,30 @@ export const TitleBar = ({
             }
         };
 
+        const handleUpdateAvailable = () => {
+            setHasAvailableUpdate(true);
+        };
+
         const initialTimer = window.setTimeout(checkForAvailableUpdate, 5000);
+        warmupTimer = window.setInterval(() => {
+            warmupChecks += 1;
+            void checkForAvailableUpdate();
+            if (warmupChecks >= maxWarmupChecks && warmupTimer !== undefined) {
+                window.clearInterval(warmupTimer);
+                warmupTimer = undefined;
+            }
+        }, 60 * 1000);
         const interval = window.setInterval(checkForAvailableUpdate, 6 * 60 * 60 * 1000);
+        window.addEventListener('slash:update-available', handleUpdateAvailable);
 
         return () => {
             cancelled = true;
             window.clearTimeout(initialTimer);
+            if (warmupTimer !== undefined) {
+                window.clearInterval(warmupTimer);
+            }
             window.clearInterval(interval);
+            window.removeEventListener('slash:update-available', handleUpdateAvailable);
         };
     }, []);
 
@@ -211,7 +235,7 @@ export const TitleBar = ({
 
             {/* Left Section (Top Left Sidebar Header Control) */}
             <div
-                className={`flex items-center gap-3 shrink-0 h-full ease-in-out border-r border-zinc-200 dark:border-zinc-700 ${isMac ? 'pl-20' : 'pl-10'} ${isResizing ? '' : 'transition-all duration-300'}`}
+                className={`flex items-center gap-2 shrink-0 h-full ease-in-out border-r border-zinc-200 dark:border-zinc-700 ${isMac ? 'pl-20' : 'pl-10'} ${isResizing ? '' : 'transition-all duration-300'}`}
                 data-tauri-drag-region
                 style={{
                     width: sidebarOpen ? sidebarWidth : 'auto',
@@ -224,7 +248,7 @@ export const TitleBar = ({
                     <button
                         onClick={() => setShowUpdateModal(true)}
                         className={cn(
-                            "no-drag flex items-center h-5 px-2.5 rounded-full text-[11px] font-semibold",
+                            "no-drag flex shrink-0 items-center h-5 px-2.5 rounded-full text-[11px] font-semibold leading-none whitespace-nowrap",
                             "bg-indigo-500 text-white shadow-sm shadow-indigo-500/20",
                             "hover:bg-indigo-600 active:bg-indigo-700 transition-colors cursor-pointer"
                         )}
@@ -239,7 +263,7 @@ export const TitleBar = ({
                     <button
                         onClick={onOpenSettings}
                         className={cn(
-                            "flex items-center gap-1.5 px-2 py-1 rounded-md transition-all text-xs font-medium",
+                            "no-drag flex shrink-0 items-center gap-1.5 h-5 px-2 rounded-md transition-all text-xs font-medium leading-none whitespace-nowrap",
                             "hover:bg-zinc-100 dark:hover:bg-zinc-800",
                             isAIReady
                                 ? "text-zinc-600 dark:text-zinc-400"

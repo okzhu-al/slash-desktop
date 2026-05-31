@@ -54,7 +54,17 @@ if [ -d "$SRC_ROOT/docs/user/server" ]; then
   mkdir -p "$DEST_ROOT/docs/user/server"
   rsync -av "$SRC_ROOT/docs/user/server/" "$DEST_ROOT/docs/user/server/"
   cp "$SRC_ROOT/docs/user/server/README.md" "$DEST_ROOT/README.md"
+  if [ -f "$SRC_ROOT/docs/user/server/en/README.md" ]; then
+    cp "$SRC_ROOT/docs/user/server/en/README.md" "$DEST_ROOT/README.en.md"
+  fi
 fi
+
+echo "📝 Generating release notes..."
+CURRENT_VERSION="$(python3 -c 'import json; print(json.load(open("'"$SRC_ROOT"'/update.json"))["version"])')"
+"$SRC_ROOT/scripts/extract-release-notes.py" \
+  --version "$CURRENT_VERSION" \
+  --source "$SRC_ROOT/docs/operations/beta-change-log.md" \
+  --output "$DEST_ROOT/RELEASE_NOTES.md"
 
 cd "$DEST_ROOT"
 

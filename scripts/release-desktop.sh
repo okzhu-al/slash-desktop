@@ -16,13 +16,14 @@ usage() {
 Usage: scripts/release-desktop.sh -v <version> [options]
 
 Runs the full desktop release loop:
-  1. Update desktop version files and update.json in the main repo.
-  2. Run local checks.
-  3. Commit and push the main repo.
-  4. Publish split repos.
-  5. Commit the desktop mirror, push only the release tag, and wait for Actions.
-  6. Fetch generated updater signatures, update both update.json files.
-  7. Push slash-desktop/main and commit/push the main repo updater metadata.
+  1. Validate version ordering and beta-change-log.md coverage.
+  2. Update desktop version files and update.json in the main repo.
+  3. Run local checks.
+  4. Commit and push the main repo.
+  5. Publish split repos and generated release notes.
+  6. Commit the desktop mirror, push only the release tag, and wait for Actions.
+  7. Fetch generated updater signatures, update both update.json files.
+  8. Push slash-desktop/main and commit/push the main repo updater metadata.
 
 Options:
   -v, --version       Version to release, for example 0.1.3.
@@ -86,6 +87,128 @@ validate_version() {
     die "Version must look like 0.1.2 or 0.1.2-beta.1"
 }
 
+ensure_version_progression() {
+  log "Validating release version ordering"
+  VERSION="$VERSION" ROOT="$ROOT" DESKTOP_REPO="$DESKTOP_REPO" REPO_FULL_NAME="$REPO_FULL_NAME" python3 <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+version = os.environ["VERSION"]
+root = Path(os.environ["ROOT"])
+desktop_repo = Path(os.environ["DESKTOP_REPO"])
+repo = os.environ["REPO_FULL_NAME"]
+
+def parse_semver(value: str):
+    value = value.strip()
+    if value.startswith("v"):
+        value = value[1:]
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?", value)
+    if not match:
+        raise ValueError(f"invalid semver: {value}")
+    major, minor, patch = map(int, match.group(1, 2, 3))
+    prerelease = match.group(4)
+    pre_parts = []
+    if prerelease:
+        for part in prerelease.split("."):
+            pre_parts.append(int(part) if part.isdigit() else part)
+    return major, minor, patch, pre_parts
+
+def compare_identifier(left, right):
+    left_is_int = isinstance(left, int)
+    right_is_int = isinstance(right, int)
+    if left_is_int and right_is_int:
+        return (left > right) - (left < right)
+    if left_is_int:
+        return -1
+    if right_is_int:
+        return 1
+    return (left > right) - (left < right)
+
+def compare_semver(left: str, right: str) -> int:
+    left_major, left_minor, left_patch, left_pre = parse_semver(left)
+    right_major, right_minor, right_patch, right_pre = parse_semver(right)
+    core_cmp = (left_major, left_minor, left_patch) > (right_major, right_minor, right_patch)
+    if (left_major, left_minor, left_patch) != (right_major, right_minor, right_patch):
+        return 1 if core_cmp else -1
+    if not left_pre and not right_pre:
+        return 0
+    if not left_pre:
+        return 1
+    if not right_pre:
+        return -1
+    for left_part, right_part in zip(left_pre, right_pre):
+        part_cmp = compare_identifier(left_part, right_part)
+        if part_cmp:
+            return part_cmp
+    return (len(left_pre) > len(right_pre)) - (len(left_pre) < len(right_pre))
+
+def git_tags(repo_path: Path):
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "tag", "--list", "v[0-9]*"],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+        return [line.removeprefix("v") for line in result.stdout.splitlines() if line.strip()]
+    except subprocess.CalledProcessError:
+        return []
+
+existing_versions = []
+
+for path in [root / "update.json", desktop_repo / "update.json"]:
+    if path.exists():
+        try:
+            existing_versions.append(json.loads(path.read_text())["version"])
+        except Exception:
+            pass
+
+try:
+    with urllib.request.urlopen(f"https://raw.githubusercontent.com/{repo}/main/update.json", timeout=10) as response:
+        existing_versions.append(json.loads(response.read().decode("utf-8"))["version"])
+except Exception as exc:
+    print(f"warning: could not read online updater metadata: {exc}", file=sys.stderr)
+
+existing_versions.extend(git_tags(root))
+existing_versions.extend(git_tags(desktop_repo))
+
+valid_existing = []
+for item in existing_versions:
+    try:
+        parse_semver(item)
+        valid_existing.append(item)
+    except ValueError:
+        pass
+
+if valid_existing:
+    highest = valid_existing[0]
+    for item in valid_existing[1:]:
+        if compare_semver(item, highest) > 0:
+            highest = item
+    if compare_semver(version, highest) <= 0:
+        raise SystemExit(
+            f"release version {version} must be greater than existing highest version {highest}. "
+            "Use a higher version, for example the next beta or patch version."
+        )
+    print(f"Version ordering OK: {version} > {highest}")
+else:
+    print(f"Version ordering OK: no comparable existing versions found")
+PY
+}
+
+ensure_changelog_entry() {
+  log "Validating beta-change-log.md entry for v$VERSION"
+  "$ROOT/scripts/extract-release-notes.py" \
+    --version "$VERSION" \
+    --source "$ROOT/docs/operations/beta-change-log.md" \
+    >/dev/null || die "docs/operations/beta-change-log.md must contain a section for v$VERSION before release"
+}
+
 ensure_repos() {
   [ -d "$ROOT/.git" ] || die "Main repo is not a git repo: $ROOT"
   [ -d "$DESKTOP_REPO/.git" ] || die "Desktop mirror is not a git repo: $DESKTOP_REPO"
@@ -127,8 +250,21 @@ tauri_path.write_text(json.dumps(tauri, indent=2) + "\n")
 
 update_path = root / "update.json"
 update = json.loads(update_path.read_text())
+notes = __import__("subprocess").run(
+    [
+        str(root / "scripts/extract-release-notes.py"),
+        "--version",
+        version,
+        "--source",
+        str(root / "docs/operations/beta-change-log.md"),
+        "--body-only",
+    ],
+    check=True,
+    text=True,
+    stdout=__import__("subprocess").PIPE,
+).stdout.strip()
 update["version"] = version
-update["notes"] = f"Slash v{version} release."
+update["notes"] = notes
 update["pub_date"] = os.environ.get("PUB_DATE") or __import__("datetime").datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 update["platforms"]["darwin-aarch64"]["url"] = f"https://github.com/{repo}/releases/download/v{version}/Slash.app.tar.gz"
 update["platforms"]["windows-x86_64"]["url"] = f"https://github.com/{repo}/releases/download/v{version}/Slash_{version}_x64-setup.exe"
@@ -335,6 +471,8 @@ fi
 
 ensure_repos
 ensure_tag_available
+ensure_version_progression
+ensure_changelog_entry
 
 update_versions
 run_checks

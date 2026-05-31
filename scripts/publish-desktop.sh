@@ -76,6 +76,16 @@ rm -rf docs
 mkdir -p docs/user/desktop
 rsync -av "$SRC_ROOT/docs/user/desktop/" docs/user/desktop/
 cp "$SRC_ROOT/docs/user/desktop/README.md" README.md
+if [ -f "$SRC_ROOT/docs/user/desktop/en/README.md" ]; then
+  cp "$SRC_ROOT/docs/user/desktop/en/README.md" README.en.md
+fi
+
+echo "📝 Generating public release notes..."
+CURRENT_VERSION="$(python3 -c 'import json; print(json.load(open("update.json"))["version"])')"
+"$SRC_ROOT/scripts/extract-release-notes.py" \
+  --version "$CURRENT_VERSION" \
+  --source "$SRC_ROOT/docs/operations/beta-change-log.md" \
+  --output RELEASE_NOTES.md
 
 # Public repo must not include private server implementation
 if [ -d "apps/server" ]; then
