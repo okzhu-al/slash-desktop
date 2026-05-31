@@ -85,6 +85,7 @@ CURRENT_VERSION="$(python3 -c 'import json; print(json.load(open("update.json"))
 "$SRC_ROOT/scripts/extract-release-notes.py" \
   --version "$CURRENT_VERSION" \
   --source "$SRC_ROOT/docs/operations/beta-change-log.md" \
+  --public \
   --output RELEASE_NOTES.md
 
 # Public repo must not include private server implementation

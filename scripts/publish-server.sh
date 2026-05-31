@@ -64,6 +64,7 @@ CURRENT_VERSION="$(python3 -c 'import json; print(json.load(open("'"$SRC_ROOT"'/
 "$SRC_ROOT/scripts/extract-release-notes.py" \
   --version "$CURRENT_VERSION" \
   --source "$SRC_ROOT/docs/operations/beta-change-log.md" \
+  --public \
   --output "$DEST_ROOT/RELEASE_NOTES.md"
 
 cd "$DEST_ROOT"

@@ -206,6 +206,7 @@ ensure_changelog_entry() {
   "$ROOT/scripts/extract-release-notes.py" \
     --version "$VERSION" \
     --source "$ROOT/docs/operations/beta-change-log.md" \
+    --public \
     >/dev/null || die "docs/operations/beta-change-log.md must contain a section for v$VERSION before release"
 }
 
@@ -258,6 +259,7 @@ notes = __import__("subprocess").run(
         "--source",
         str(root / "docs/operations/beta-change-log.md"),
         "--body-only",
+        "--public",
     ],
     check=True,
     text=True,
