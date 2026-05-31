@@ -4,11 +4,11 @@
   "pub_date": "2026-05-31T05:36:42Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbmxubE1qejczSjQ0NHk0MEdIdFlKUXJFdjRyU1prdEZOMVg4Z1ZXblVpTGJJQ0J0Qm5VUnNWcyt6cmY5dk5nY281U0pReFBEYTFVRWUraTQzYnFDdUFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMjAwMjc3CWZpbGU6U2xhc2guYXBwLnRhci5negorbEFvQ1hCMktwdExuYkFFcGhTRUhqRWJmM0huMnV0Z1lXWWFhdElaQ3JDaFpPdDNOYjdSUXhZbFFTc0VDVTU4bE1XWUxVSXM5amxLTFd3Sis5bmhBZz09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnZMWGFrZ3k2ZTdwbzVWeHVjS1M5SVh1ZnVuQnV0dWUrN1R4aVRDWjZVaU1YdlUxUDAzSmw4ZURDeVE0V2Z3aWpXMUs5L0hWcGFGeEYybkU3czV3bFFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMjA2NDYxCWZpbGU6U2xhc2guYXBwLnRhci5negpmRkRROXZnSTFva3M3ZUFTYWJxWUN0dFNsMEtoYVNTaEtVWTJjWTNlYXYrS3oycXRhcFNTVEh6bUgvaGM0VEQvU0d0Y1RiUE5GK3FYaDlPNmhSQTVCZz09Cg==",
       "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.3/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnBQNkcxc2lzTm8xVkMwSEkrdWNYdFUyN21FLzgzc0xGQTBVWXRCUml4clZadndpR1FRempmWmVjNWNSSXMrd2xuREEyU3h0NzRTbWpHeU5WZFpBUGcwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMjAwNjQ4CWZpbGU6U2xhc2hfMC4xLjMtYmV0YS4yX3g2NC1zZXR1cC5leGUKaDBWRFR1cFhqVm9mMUlYSVRSUHlkZ252MmZ4K2ZYcHJ3N1R1TFYwQ2Evei9EbndQK3h5a1c5Y3FxNDhPSm9wRmh4L2ZYN2VsZTJlZ2hlN3VqZnNMQVE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbm9XamtWcEowdFFrNklDaFE5NDZGdUlnU2orWVJxMmlQVkdpYzJSa2Frd0FaSEZlVkE1NkcvQmlua003cjd2bkZzS3B4NlFNVm5yR1hBekdIaVVIQ3drPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwMjA2ODg4CWZpbGU6U2xhc2hfMC4xLjMtYmV0YS4zX3g2NC1zZXR1cC5leGUKYXRDYWd5bDVvTWVoWHN2Y3BvcDU0UUFGcSt4aXFjY2IyL1hWV1o0R3JjbnF0cm1UUm9iVytBSTlUNmJaZlBjWDYrbmZhNEJhRm84YmpqaVIrWklmQ2c9PQo=",
       "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.3/Slash_0.1.3-beta.3_x64-setup.exe"
     }
   }
