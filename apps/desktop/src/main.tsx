@@ -68,6 +68,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     </GlobalErrorBoundary>
 );
 
+(window as any).__slashBootstrapped = true;
+window.clearTimeout((window as any).__slashBootFallback);
+
 if (!import.meta.env.DEV) {
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {

@@ -1,6 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use std::sync::Mutex;
+#[cfg(not(debug_assertions))]
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, Submenu, PredefinedMenuItem};
@@ -115,6 +117,25 @@ pub fn run() {
             let sidecar_state = app.state::<SidecarState>();
             if let Err(e) = sidecar_state.0.start() {
                 log::error!("🔧 [Sidecar] Failed to start: {}", e);
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(2500)).await;
+
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let is_visible = window.is_visible().unwrap_or(false);
+                        if !is_visible {
+                            log::warn!(
+                                "🪟 [Startup] Main window was still hidden after frontend reveal timeout; showing fallback window"
+                            );
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
             }
 
             #[cfg(any(debug_assertions, target_os = "windows"))]
