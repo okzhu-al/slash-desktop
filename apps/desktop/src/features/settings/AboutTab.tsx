@@ -41,7 +41,7 @@ export const AboutTab = ({
             {/* Check for Updates */}
             <button 
                 onClick={() => setShowUpdateModal(true)}
-                className="absolute bottom-2 right-2 text-xs font-medium text-[#002FA7] hover:text-[#002FA7]/80 dark:text-[#002FA7] dark:hover:text-[#002FA7]/80 transition-colors px-3 py-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="absolute bottom-2 right-2 text-xs font-medium text-[#002FA7] hover:text-[#002FA7]/80 dark:text-blue-400 dark:hover:text-blue-300 transition-colors px-3 py-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
                 {t("settings.check_updates", "检查版本更新")}
             </button>

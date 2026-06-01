@@ -850,6 +850,7 @@
         "revoke_success": "Cleared {{count}} sessions. {{name}} has been forced offline.",
         "revoke_failed": "Failed to force offline: {{error}}",
         "toggle_role_failed": "Failed to toggle role: {{error}}",
+        "self_revoke_admin_forbidden": "You can’t remove your own admin role. Ask another admin to perform this action.",
         "dir_section_members": "Directory Members",
         "dir_empty": "Empty directory",
         "dir_files": "Files",

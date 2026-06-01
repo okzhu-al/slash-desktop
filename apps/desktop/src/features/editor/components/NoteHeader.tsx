@@ -83,9 +83,9 @@ export function NoteHeader({
                     className={cn(
                         "ml-2 p-1.5 rounded-md transition-all duration-300",
                         isAIRunning
-                            ? "text-[#002FA7] dark:text-[#002FA7] cursor-wait"
+                            ? "text-[#002FA7] dark:text-blue-400 cursor-wait"
                             : [
-                                "text-[#002FA7] dark:text-[#002FA7]",
+                                "text-[#002FA7] dark:text-blue-400",
                                 "magic-wand-breathe",
                             ]
                     )}

@@ -13,7 +13,7 @@ use super::client::SyncClient;
 use super::helpers::{
     build_directory_hashes_from_mapped, extract_asset_refs, filter_oversized_assets,
 };
-use super::path_mapping::{normalize_prefix, TeamPathMappingsFile};
+use super::path_mapping::{normalize_prefix, TeamDirectoryMappingsFile, TeamPathMappingsFile};
 
 /// 将指定子目录推送到目标 vault（Promote to Team）
 ///
@@ -188,6 +188,7 @@ pub async fn push_directory_to_vault(
                             mtime: local_manifest.mtime,
                             logical_clock: 1,
                             file_id: local_manifest.file_id.clone(),
+                            directory_id: None,
                             edit_started_at: None,
                             edit_session_id: None,
                             is_user_edit: true,
@@ -223,6 +224,7 @@ pub async fn push_directory_to_vault(
                                 mtime: local_manifest.mtime,
                                 logical_clock: 1,
                                 file_id: local_manifest.file_id.clone(),
+                                directory_id: None,
                                 edit_started_at: None,
                                 edit_session_id: None,
                                 is_user_edit: true,
@@ -289,6 +291,49 @@ pub async fn push_directory_to_vault(
         source_dir,
         target_dir
     );
+
+    // UUID-first mapping v3：Promote 后尽快绑定 directory_id。
+    match sync_client.get_team_scope(Some(&target_vault_id)).await {
+        Ok(scope) => {
+            if let Some(scope_dir) = scope.scope_dirs.iter().find(|sd| {
+                sd.directory_path.trim_end_matches('/') == target_dir.trim_end_matches('/')
+            }) {
+                if let Some(directory_id) = scope_dir.directory_id.as_deref() {
+                    let directory_mappings_path =
+                        root.join(".slash").join("team_directory_mappings.json");
+                    let mut directory_mappings_file =
+                        TeamDirectoryMappingsFile::load(&directory_mappings_path);
+                    directory_mappings_file.upsert(
+                        &target_vault_id,
+                        directory_id.to_string(),
+                        source_dir.clone(),
+                        target_dir.clone(),
+                        scope_dir.role.clone(),
+                    );
+                    directory_mappings_file.save(&directory_mappings_path);
+                    log::debug!(
+                        "[Promote] Saved UUID-first directory mapping: directory_id={} {} → {}",
+                        directory_id,
+                        source_dir,
+                        target_dir
+                    );
+                } else {
+                    log::warn!(
+                        "[Promote] Scope entry for '{}' did not include directory_id; v3 mapping skipped",
+                        target_dir
+                    );
+                }
+            } else {
+                log::warn!(
+                    "[Promote] Scope entry for '{}' not found after push; v3 mapping skipped",
+                    target_dir
+                );
+            }
+        }
+        Err(e) => {
+            log::warn!("[Promote] Failed to refresh team scope for v3 mapping: {e}");
+        }
+    }
 
     // promote.rs — Promote 完成后激活后台团队同步
     let team_state_path = root.join(".slash/team_sync_state.json");

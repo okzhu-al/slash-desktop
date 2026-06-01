@@ -40,12 +40,13 @@ class AnnotationServiceImpl {
     }
 
     /** 获取指定文件的批注列表 */
-    async listAnnotations(vaultId: string, filePath: string): Promise<AnnotationInfo[]> {
+    async listAnnotations(vaultId: string, filePath: string, fileId?: string | null): Promise<AnnotationInfo[]> {
         const base = this.getBaseUrl();
         const headers = this.getHeaders();
         if (!base || !headers) throw new Error('Sync not configured');
 
         const params = new URLSearchParams({ vault_id: vaultId, file_path: filePath });
+        if (fileId) params.set('file_id', fileId);
         const resp = await fetch(`${base}/api/annotation/list?${params}`, { headers });
         if (!resp.ok) throw new Error(`Failed to list annotations: ${resp.status}`);
 
@@ -61,6 +62,7 @@ class AnnotationServiceImpl {
         anchorPreview: string,
         content: string,
         parentId?: string,
+        fileId?: string | null,
     ): Promise<string> {
         const base = this.getBaseUrl();
         const headers = this.getHeaders();
@@ -72,6 +74,7 @@ class AnnotationServiceImpl {
             body: JSON.stringify({
                 vault_id: vaultId,
                 file_path: filePath,
+                file_id: fileId,
                 anchor_id: anchorId,
                 anchor_preview: anchorPreview,
                 content,

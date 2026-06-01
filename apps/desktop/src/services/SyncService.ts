@@ -284,6 +284,8 @@ class SyncServiceImpl {
     async taskBypass(event: {
         vault_id: string;
         file_path: string;
+        file_id?: string | null;
+        directory_id?: string | null;
         line_number: number;
         line_content_hash: string;
         checked: boolean;
@@ -390,6 +392,30 @@ class SyncServiceImpl {
 
         return resp.text();
     }
+
+    /** 通过稳定 file_id 获取团队文件内容与当前路径（只读） */
+    async getVaultFileById(vaultId: string, fileId: string): Promise<{ content: string; filePath: string; fileId: string }> {
+        const config = this.getConfig();
+        if (!config) throw new Error('Sync not configured');
+
+        const resp = await fetch(
+            `${config.serverUrl}/api/sync/vaults/file?vault_id=${encodeURIComponent(vaultId)}&file_id=${encodeURIComponent(fileId)}`,
+            {
+                headers: { 'Authorization': `Bearer ${config.accessToken}` },
+            }
+        );
+
+        if (!resp.ok) {
+            throw new Error(`Failed to get file by id: ${resp.status}`);
+        }
+
+        const content = await resp.text();
+        return {
+            content,
+            filePath: resp.headers.get('X-Slash-File-Path') || '',
+            fileId: resp.headers.get('X-Slash-File-Id') || fileId,
+        };
+    }
 }
 
 /** 团队空间文件树节点 */
@@ -397,6 +423,7 @@ export interface TeamTreeNode {
     name: string;
     path: string;
     is_dir: boolean;
+    file_id?: string | null;
     children?: TeamTreeNode[];
     size?: number;
     editor_username?: string;

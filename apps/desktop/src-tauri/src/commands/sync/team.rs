@@ -14,7 +14,8 @@ use super::client::SyncClient;
 use super::helpers::collect_mapped_files_for_push;
 use super::helpers::filter_oversized_assets;
 use super::path_mapping::{
-    normalize_prefix, resolve_team_pull_path, TeamPathMappingsFile, PARA_TEAM_TO_PERSONAL,
+    normalize_prefix, resolve_team_pull_path, TeamDirectoryMappingsFile, TeamPathMappingsFile,
+    PARA_TEAM_TO_PERSONAL,
 };
 use super::state::{
     expire_edit_session_if_idle, load_unified_state, make_edit_session_id, save_unified_state,
@@ -117,7 +118,7 @@ async fn sync_team_single(
     }
 
     // Step 2: 读取并更新路径映射
-    let (path_mappings, reverse_mappings_owned) =
+    let (path_mappings, reverse_mappings_owned, directory_id_mappings) =
         resolve_path_mappings(root, team_vault_id, &scope);
 
     // 构建 target→source 反向映射（用于 Pull）
@@ -127,7 +128,7 @@ async fn sync_team_single(
         .collect();
 
     // Step 3: 确定需要同步的 source 目录列表
-    let source_dirs = resolve_source_dirs(&path_mappings, &scope);
+    let source_dirs = resolve_source_dirs(&path_mappings, &directory_id_mappings, &scope);
 
     if source_dirs.is_empty() && !scope.is_full_scope {
         // 🛡️ BUG-E07 Fix 7: T-4 清除了所有 mapping 导致 source_dirs 为空 → 早期返回
@@ -238,6 +239,7 @@ async fn sync_team_single(
     let mut mapped_files = build_team_mapped_files(
         &manifests,
         &path_mappings,
+        &directory_id_mappings,
         &source_dirs,
         &scope,
         &managed_prefixes,
@@ -1323,23 +1325,67 @@ fn resolve_path_mappings(
 ) -> (
     std::collections::HashMap<String, String>,
     Vec<(String, String)>,
+    std::collections::HashMap<String, String>,
 ) {
     let mappings_path = root.join(".slash").join("team_path_mappings.json");
-    let mut mappings_file = TeamPathMappingsFile::load(&mappings_path);
+    let mut legacy_mappings_file = TeamPathMappingsFile::load(&mappings_path);
+    let directory_mappings_path = root.join(".slash").join("team_directory_mappings.json");
+    let mut directory_mappings_file = TeamDirectoryMappingsFile::load(&directory_mappings_path);
 
-    let mut path_mappings = mappings_file
+    let mut legacy_path_mappings = legacy_mappings_file
         .teams
         .get(team_vault_id)
         .cloned()
         .unwrap_or_default();
+    let mut path_mappings = directory_mappings_file.to_path_mappings(team_vault_id);
+    let mut directory_id_mappings =
+        directory_mappings_file.to_directory_id_mappings(team_vault_id);
+
+    let scope_by_path: std::collections::HashMap<String, &slash_sync_proto::TeamScopeDir> = scope
+        .scope_dirs
+        .iter()
+        .chain(scope.managed_scope_dirs.iter())
+        .map(|sd| (sd.directory_path.trim_end_matches('/').to_string(), sd))
+        .collect();
+
+    let mut directory_mappings_changed = false;
+
+    // 迁移旧 path mapping：只迁移能从 scope 里唯一拿到 directory_id 的条目。
+    for (local_path, remote_path) in &legacy_path_mappings {
+        let remote_trimmed = remote_path.trim_end_matches('/');
+        if path_mappings.values().any(|target| target == remote_trimmed) {
+            continue;
+        }
+        let Some(scope_dir) = scope_by_path.get(remote_trimmed) else {
+            path_mappings.insert(local_path.clone(), remote_trimmed.to_string());
+            continue;
+        };
+        let Some(directory_id) = scope_dir.directory_id.as_deref() else {
+            path_mappings.insert(local_path.clone(), remote_trimmed.to_string());
+            continue;
+        };
+
+        directory_mappings_file.upsert(
+            team_vault_id,
+            directory_id.to_string(),
+            local_path.clone(),
+            remote_trimmed.to_string(),
+            scope_dir.role.clone(),
+        );
+        path_mappings.insert(local_path.clone(), remote_trimmed.to_string());
+        directory_id_mappings.insert(local_path.clone(), directory_id.to_string());
+        directory_mappings_changed = true;
+    }
 
     // T-3: 自动发现 scope_dirs 中的新目录，建立 PARA 反向映射
-    let mut new_mappings_added = false;
     let existing_targets: std::collections::HashSet<String> =
         path_mappings.values().cloned().collect();
 
     for sd in &scope.scope_dirs {
         let team_dir = sd.directory_path.trim_end_matches('/');
+        let Some(directory_id) = sd.directory_id.as_deref() else {
+            continue;
+        };
 
         // 跳过根级 PARA 目录（T-2: 不自动映射根目录）
         if !team_dir.contains('/') {
@@ -1357,23 +1403,34 @@ fn resolve_path_mappings(
 
         for (team_prefix, personal_prefix) in PARA_TEAM_TO_PERSONAL {
             if let Some(rest) = team_dir.strip_prefix(team_prefix) {
-                let personal_dir = format!("{personal_prefix}{rest}");
+                let base_personal_dir = format!("{personal_prefix}{rest}");
+                let personal_dir = choose_team_local_path(root, &base_personal_dir, &path_mappings);
                 if !path_mappings.contains_key(&personal_dir) {
                     log::debug!(
-                        "[TeamSync] T-3 auto-mapping: {} → {} (role={})",
+                        "[TeamSync] T-3 auto-mapping v3: {} → {} (directory_id={}, role={})",
                         personal_dir,
                         team_dir,
+                        directory_id,
                         sd.role
                     );
-                    path_mappings.insert(personal_dir, team_dir.to_string());
-                    new_mappings_added = true;
+                    directory_mappings_file.upsert(
+                        team_vault_id,
+                        directory_id.to_string(),
+                        personal_dir.clone(),
+                        team_dir.to_string(),
+                        sd.role.clone(),
+                    );
+                    path_mappings.insert(personal_dir.clone(), team_dir.to_string());
+                    directory_id_mappings.insert(personal_dir, directory_id.to_string());
+                    directory_mappings_changed = true;
                 }
                 break;
             }
         }
     }
 
-    let mut mappings_changed = new_mappings_added;
+    let mut mappings_changed = directory_mappings_changed;
+    let mut legacy_mappings_changed = false;
 
     // T-4: 🧹 幽灵清剿（如果 Owner 删除了目录或收回权限，将本地映射抹除并物理超度）
     // 🛡️ BUG-E07 Fix 3: Admin 也需要清理过期映射。Admin 使用 managed_dirs 作为参照：
@@ -1387,28 +1444,12 @@ fn resolve_path_mappings(
             // Admin 删除子目录时只删 directory_permissions，PARA 根仍在 scope 中，
             // 前缀匹配会让 T-4 保留已失效的子目录 mapping → Step 3.5 重建空壳子。
             let is_sub_dir = tgt.contains('/');
-            let is_in_scope = scope.scope_dirs.iter().any(|sd| {
-                let sd_path = sd.directory_path.trim_end_matches('/');
-                if is_sub_dir {
-                    // 子目录级：必须精确匹配 scope_dirs 中的条目
-                    tgt == sd_path
-                } else {
-                    // PARA 根级：前缀匹配（兼容嵌套结构）
-                    tgt == sd_path || tgt.starts_with(&format!("{sd_path}/"))
-                }
-            });
+            let is_in_scope =
+                is_mapping_in_scope(src, tgt, is_sub_dir, &directory_id_mappings, scope);
             if !is_in_scope {
                 // Admin 追加检查：是否仍在 managed_dirs 中（说明目录依然存在，只是 Admin 自己没绑定权限）
-                let is_in_managed = scope.managed_dirs.iter().any(|md| {
-                    let md_trimmed = md.trim_end_matches('/');
-                    if is_sub_dir {
-                        // 子目录级：必须精确匹配 managed_dirs，否则已被完全删除的子目录会因为上级目录存活而永远残留
-                        tgt == md_trimmed
-                    } else {
-                        // PARA 根级：前缀匹配（兼容嵌套结构）
-                        tgt == md_trimmed || tgt.starts_with(&format!("{md_trimmed}/"))
-                    }
-                });
+                let is_in_managed =
+                    is_mapping_in_managed(src, tgt, is_sub_dir, &directory_id_mappings, scope);
                 if scope.is_full_scope && is_in_managed {
                     // Admin 且目录仍然存在（只是 Admin 自己没权限），保留映射
                     continue;
@@ -1429,19 +1470,30 @@ fn resolve_path_mappings(
                 }
             }
             path_mappings.remove(&src);
+            legacy_path_mappings.remove(&src);
+            directory_id_mappings.remove(&src);
+            remove_directory_mapping_by_local_path(
+                &mut directory_mappings_file,
+                team_vault_id,
+                &src,
+            );
             mappings_changed = true;
+            legacy_mappings_changed = true;
         }
     }
 
     if mappings_changed {
-        mappings_file
-            .teams
-            .insert(team_vault_id.to_string(), path_mappings.clone());
-        mappings_file.save(&mappings_path);
+        directory_mappings_file.save(&directory_mappings_path);
         log::debug!(
-            "[TeamSync] Saved {} updated mappings for active team {} (after auto-discovery & purging)",
+            "[TeamSync] Saved {} updated UUID-first mappings for active team {}",
             path_mappings.len(), team_vault_id
         );
+    }
+    if legacy_mappings_changed {
+        legacy_mappings_file
+            .teams
+            .insert(team_vault_id.to_string(), legacy_path_mappings);
+        legacy_mappings_file.save(&mappings_path);
     }
 
     // 构建反向映射 (target→source) 的 owned 版本
@@ -1450,20 +1502,104 @@ fn resolve_path_mappings(
         .map(|(src, tgt)| (tgt.clone(), src.clone()))
         .collect();
 
-    (path_mappings, reverse_owned)
+    (path_mappings, reverse_owned, directory_id_mappings)
+}
+
+fn is_mapping_in_scope(
+    source_path: &str,
+    target_path: &str,
+    is_sub_dir: bool,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
+    scope: &slash_sync_proto::TeamScopeResponse,
+) -> bool {
+    if let Some(directory_id) = directory_id_mappings.get(source_path) {
+        return scope
+            .scope_dirs
+            .iter()
+            .any(|sd| sd.directory_id.as_deref() == Some(directory_id.as_str()));
+    }
+
+    scope.scope_dirs.iter().any(|sd| {
+        let sd_path = sd.directory_path.trim_end_matches('/');
+        if is_sub_dir {
+            target_path == sd_path
+        } else {
+            target_path == sd_path || target_path.starts_with(&format!("{sd_path}/"))
+        }
+    })
+}
+
+fn is_mapping_in_managed(
+    source_path: &str,
+    target_path: &str,
+    is_sub_dir: bool,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
+    scope: &slash_sync_proto::TeamScopeResponse,
+) -> bool {
+    if let Some(directory_id) = directory_id_mappings.get(source_path) {
+        return scope
+            .managed_scope_dirs
+            .iter()
+            .any(|sd| sd.directory_id.as_deref() == Some(directory_id.as_str()));
+    }
+
+    scope.managed_dirs.iter().any(|md| {
+        let md_trimmed = md.trim_end_matches('/');
+        if is_sub_dir {
+            target_path == md_trimmed
+        } else {
+            target_path == md_trimmed || target_path.starts_with(&format!("{md_trimmed}/"))
+        }
+    })
+}
+
+fn choose_team_local_path(
+    root: &std::path::Path,
+    base_personal_dir: &str,
+    path_mappings: &std::collections::HashMap<String, String>,
+) -> String {
+    if !root.join(base_personal_dir).exists() || path_mappings.contains_key(base_personal_dir) {
+        return base_personal_dir.to_string();
+    }
+
+    let mut candidate = format!("{base_personal_dir} (Team)");
+    let mut index = 2;
+    while root.join(&candidate).exists() || path_mappings.contains_key(&candidate) {
+        candidate = format!("{base_personal_dir} (Team {index})");
+        index += 1;
+    }
+    candidate
+}
+
+fn remove_directory_mapping_by_local_path(
+    mappings_file: &mut TeamDirectoryMappingsFile,
+    team_vault_id: &str,
+    local_path: &str,
+) {
+    if let Some(team) = mappings_file.teams.get_mut(team_vault_id) {
+        team.directories
+            .retain(|_, mapping| mapping.local_path != local_path);
+    }
 }
 
 /// 确定需要同步的 source 目录列表
 fn resolve_source_dirs<'a>(
     path_mappings: &'a std::collections::HashMap<String, String>,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
     scope: &slash_sync_proto::TeamScopeResponse,
 ) -> Vec<&'a str> {
-    if scope.scope_dirs.is_empty() && scope.is_full_scope {
+    if scope.is_full_scope {
         path_mappings.keys().map(|s| s.as_str()).collect()
     } else {
         path_mappings
             .iter()
-            .filter(|(_, target)| {
+            .filter(|(source, target)| {
+                if let Some(directory_id) = directory_id_mappings.get(source.as_str()) {
+                    return scope
+                        .scope_dirs
+                        .iter()
+                        .any(|sd| sd.directory_id.as_deref() == Some(directory_id.as_str()));
+                }
                 scope.scope_dirs.iter().any(|sd| {
                     let sd_path = sd.directory_path.trim_end_matches('/');
                     let tgt = target.trim_end_matches('/');
@@ -1479,6 +1615,7 @@ fn resolve_source_dirs<'a>(
 fn build_team_mapped_files<'a>(
     manifests: &'a [slash_core::FileManifestBasic],
     path_mappings: &std::collections::HashMap<String, String>,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
     source_dirs: &[&str],
     scope: &slash_sync_proto::TeamScopeResponse,
     managed_prefixes: &[String],
@@ -1490,7 +1627,7 @@ fn build_team_mapped_files<'a>(
             let tgt_prefix = normalize_prefix(tgt_dir);
 
             if m.relative_path.starts_with(&src_prefix) || m.relative_path == *src_dir {
-                if scope.is_full_scope || source_dirs.contains(&src_dir.as_str()) {
+                if is_source_dir_allowed(src_dir, directory_id_mappings, source_dirs, scope) {
                     let target_path = format!(
                         "{}{}",
                         tgt_prefix,
@@ -1526,6 +1663,24 @@ fn build_team_mapped_files<'a>(
         }
     }
     mapped_files
+}
+
+fn is_source_dir_allowed(
+    src_dir: &str,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
+    source_dirs: &[&str],
+    scope: &slash_sync_proto::TeamScopeResponse,
+) -> bool {
+    if scope.is_full_scope {
+        return true;
+    }
+    if let Some(directory_id) = directory_id_mappings.get(src_dir) {
+        return scope
+            .scope_dirs
+            .iter()
+            .any(|sd| sd.directory_id.as_deref() == Some(directory_id.as_str()));
+    }
+    source_dirs.contains(&src_dir)
 }
 
 /// 检测已删除的团队文件

@@ -189,19 +189,34 @@ export function useFileWatcher({ repo, onNoteDeleted, onNoteRenamed: _onNoteRena
                                             
                                             try {
                                                 const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                                                const data = await readTextFile(`${rootDirNorm}/.slash/team_path_mappings.json`);
-                                                const parsed = JSON.parse(data);
-                                                
                                                 let allMappings: Record<string, string> = {};
-                                                if (parsed.teams) {
-                                                    for (const teamId of Object.keys(parsed.teams)) {
-                                                        Object.assign(allMappings, parsed.teams[teamId]);
+
+                                                try {
+                                                    const data = await readTextFile(`${rootDirNorm}/.slash/team_directory_mappings.json`);
+                                                    const parsed = JSON.parse(data);
+                                                    for (const team of Object.values(parsed?.teams || {}) as Array<any>) {
+                                                        for (const mapping of Object.values(team?.directories || {}) as Array<any>) {
+                                                            if (mapping?.status !== 'active') continue;
+                                                            if (typeof mapping.local_path === 'string' && typeof mapping.remote_path === 'string') {
+                                                                allMappings[mapping.local_path] = mapping.remote_path;
+                                                            }
+                                                        }
                                                     }
-                                                } else if (parsed.mappings) {
-                                                    allMappings = parsed.mappings as Record<string, string>;
-                                                } else {
-                                                    allMappings = parsed as Record<string, string>;
-                                                }
+                                                } catch { }
+
+                                                try {
+                                                    const data = await readTextFile(`${rootDirNorm}/.slash/team_path_mappings.json`);
+                                                    const parsed = JSON.parse(data);
+                                                    if (parsed.teams) {
+                                                        for (const teamId of Object.keys(parsed.teams)) {
+                                                            Object.assign(allMappings, parsed.teams[teamId]);
+                                                        }
+                                                    } else if (parsed.mappings) {
+                                                        Object.assign(allMappings, parsed.mappings as Record<string, string>);
+                                                    } else {
+                                                        Object.assign(allMappings, parsed as Record<string, string>);
+                                                    }
+                                                } catch { }
                                                 
                                                 const mappings = Object.entries(allMappings);
                                                 for (const [personal, team] of mappings) {
@@ -232,7 +247,13 @@ export function useFileWatcher({ repo, onNoteDeleted, onNoteRenamed: _onNoteRena
                                                     shouldClose = true;
                                                 } else {
                                                     for (const virt of teamCandidates) {
-                                                        if (tab.id === virt || pathStartsWith(tab.id, virt)) {
+                                                        const teamPath = tab.teamPath ? `__team__/${tab.teamPath}` : null;
+                                                        if (
+                                                            tab.id === virt
+                                                            || pathStartsWith(tab.id, virt)
+                                                            || teamPath === virt
+                                                            || (teamPath ? pathStartsWith(teamPath, virt) : false)
+                                                        ) {
                                                             shouldClose = true;
                                                             break;
                                                         }

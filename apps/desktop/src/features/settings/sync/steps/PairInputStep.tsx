@@ -5,6 +5,7 @@ import { Cloud, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/utils/cn';
 import { BackButton } from '../components/BackButton';
+import { syncInputClass, syncLabelClass } from '../components/formStyles';
 import type { SyncFlowContext } from '../useSyncFlow';
 
 export const PairInputStep = ({ ctx }: { ctx: SyncFlowContext }) => {
@@ -17,16 +18,16 @@ export const PairInputStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                     <Cloud size={16} className="text-[#002FA7]" /> {t('sync.connect_cloud')}
                 </h4>
                 <div>
-                    <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.server_url')}</label>
+                    <label className={syncLabelClass}>{t('sync.server_url')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.serverUrl} onChange={(e) => ctx.setServerUrl(e.target.value)}
                         placeholder="http://your-server:3721"
-                        className="w-full px-3.5 py-2 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10 transition-all font-mono hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]" />
+                        className={cn(syncInputClass('blue'), 'font-mono')} />
                 </div>
                 <div>
-                    <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.pair_code')}</label>
+                    <label className={syncLabelClass}>{t('sync.pair_code')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.accessCode} onChange={(e) => ctx.setAccessCode(e.target.value)}
                         placeholder={t('sync.pair_code_placeholder')} onKeyDown={(e) => e.key === 'Enter' && ctx.serverUrl.trim() && ctx.accessCode.trim() && ctx.handlePair()}
-                        className="w-full px-3.5 py-2 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10 transition-all font-mono tracking-widest hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]" />
+                        className={cn(syncInputClass('blue'), 'font-mono tracking-widest')} />
                 </div>
                 {ctx.error && (
                     <div className="space-y-2">

@@ -146,8 +146,8 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                         <div className="flex items-center gap-3.5 pb-4 border-b border-zinc-200/50 dark:border-zinc-700/50">
                             <div className={cn(
                                 "shrink-0 w-11 h-11 rounded-full flex items-center justify-center shadow-sm border",
-                                isTeam ? "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 text-[#002FA7] dark:text-[#002FA7] border-[#002FA7]/30 dark:border-[#002FA7]/30"
-                                    : "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 text-[#002FA7] dark:text-[#002FA7] border-[#002FA7]/30 dark:border-[#002FA7]/30"
+                                isTeam ? "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 text-[#002FA7] dark:text-blue-400 border-[#002FA7]/30 dark:border-blue-500/30"
+                                    : "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 text-[#002FA7] dark:text-blue-400 border-[#002FA7]/30 dark:border-blue-500/30"
                             )}>
                                 {isTeam ? <Users size={20} strokeWidth={2} /> : <KeyRound size={20} strokeWidth={2} />}
                             </div>
@@ -180,7 +180,7 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                                         value={ctx.password} onChange={(e) => ctx.setPassword(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && !isInputDisabled && handleUnifiedLogin()}
                                         placeholder={t('sync.password_placeholder')}
-                                        className="glass-input w-full px-3.5 py-2.5 text-[14px] font-medium rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-[#002FA7]/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
+                                        className="glass-input w-full px-3.5 py-2.5 text-[14px] font-medium rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
                                     />
                                     <label className="flex items-center gap-2.5 px-1 cursor-pointer w-max group">
                                         <div className="relative flex items-center justify-center">
@@ -208,7 +208,7 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                                     value={ctx.accessCode} onChange={(e) => ctx.setAccessCode(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && !isInputDisabled && handleUnifiedLogin()}
                                     placeholder={ctx.serverInfo?.has_pin ? t('sync.pin_input_placeholder') : t('sync.pair_code_placeholder', '服务器已重置，请输入配对码重新连接')}
-                                    className="glass-input w-full px-3.5 py-2.5 text-[14px] font-mono tracking-widest rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-[#002FA7]/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
+                                    className="glass-input w-full px-3.5 py-2.5 text-[14px] font-mono tracking-widest rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
                                 />
                             )}
                         </div>
@@ -243,8 +243,8 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <div className="glass-panel flex flex-col items-center justify-center py-10 px-6 text-center rounded-2xl mb-6 shadow-sm">
                     <div className="relative mb-6 flex items-center justify-center group cursor-default">
                         <div className="absolute w-44 h-44 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 pointer-events-none mix-blend-multiply dark:mix-blend-lighten" style={{ background: 'radial-gradient(circle, rgba(0,47,167,0.18) 0%, rgba(0,47,167,0) 65%)' }} />
-                        <div className="relative w-20 h-20 rounded-3xl bg-linear-to-br from-white to-[#002FA7]/5 dark:from-zinc-800 dark:to-[#002FA7]/20 shadow-xl dark:shadow-md border border-white dark:border-[#002FA7]/30 flex items-center justify-center transform transition-all duration-500 group-hover:-translate-y-1.5 ring-4 ring-[#002FA7]/10 dark:ring-[#002FA7]/20 backdrop-blur-md">
-                            <Cloud className="text-[#002FA7] dark:text-[#002FA7] transition-transform duration-500 group-hover:scale-110" size={34} strokeWidth={1.5} />
+                        <div className="relative w-20 h-20 rounded-3xl bg-linear-to-br from-white to-[#002FA7]/5 dark:from-zinc-800 dark:to-[#002FA7]/20 shadow-xl dark:shadow-md border border-white dark:border-blue-500/30 flex items-center justify-center transform transition-all duration-500 group-hover:-translate-y-1.5 ring-4 ring-[#002FA7]/10 dark:ring-[#002FA7]/20 backdrop-blur-md">
+                            <Cloud className="text-[#002FA7] dark:text-blue-400 transition-transform duration-500 group-hover:scale-110" size={34} strokeWidth={1.5} />
                         </div>
                     </div>
                     <h3 className="text-[18px] font-extrabold text-zinc-900 dark:text-white mb-2.5 tracking-tight">
@@ -311,13 +311,13 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                         }
                         ctx.setStep('join_team');
                     }}
-                    className="glass-panel group relative flex flex-col items-center justify-center gap-2.5 px-2 py-5 rounded-xl transition-all duration-300 hover:shadow-[0_8px_20px_rgba(139,92,246,0.12)] hover:-translate-y-1 border-transparent hover:border-[#002FA7]/60 dark:hover:border-[#002FA7]/40 overflow-hidden"
+                    className="glass-panel group relative flex flex-col items-center justify-center gap-2.5 px-2 py-5 rounded-xl transition-all duration-300 hover:shadow-[0_8px_20px_rgba(139,92,246,0.12)] hover:-translate-y-1 border-transparent hover:border-[#002FA7]/60 dark:hover:border-blue-400/45 overflow-hidden"
                 >
                     <div className="absolute inset-0 bg-linear-to-br from-[#002FA7]/0 to-[#002FA7]/0 group-hover:from-[#002FA7]/5 dark:group-hover:from-[#002FA7]/10 transition-colors duration-300" />
-                    <div className="w-10 h-10 rounded-full bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center group-hover:-translate-y-0.5 transition-transform duration-300 shadow-sm border border-[#002FA7]/30 dark:border-[#002FA7]/30">
-                        <Users size={18} className="text-[#002FA7] dark:text-[#002FA7] group-hover:scale-110 transition-transform duration-300" />
+                    <div className="w-10 h-10 rounded-full bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center group-hover:-translate-y-0.5 transition-transform duration-300 shadow-sm border border-[#002FA7]/30 dark:border-blue-500/30">
+                        <Users size={18} className="text-[#002FA7] dark:text-blue-400 group-hover:scale-110 transition-transform duration-300" />
                     </div>
-                    <span className="text-[12px] font-bold text-[#545454] dark:text-[#C8C8C8] group-hover:text-[#002FA7] dark:group-hover:text-[#002FA7] transition-colors text-center tracking-wide leading-tight">
+                    <span className="text-[12px] font-bold text-[#545454] dark:text-[#C8C8C8] group-hover:text-[#002FA7] dark:group-hover:text-blue-300 transition-colors text-center tracking-wide leading-tight">
                         {t('sync.join_team_entry_short', '加入团队空间')}
                     </span>
                 </button>

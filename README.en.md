@@ -2,7 +2,7 @@
 
 > Status: Current
 > Audience: Users
-> Owner: Product
+> Owner: Slash
 > Last reviewed: 2026-05-31
 
 Slash is a local-first Markdown workspace for knowledge work. You can use it to write notes, organize reference material, manage tasks, search your vault, use AI-assisted organization and summarization, and connect to a self-hosted Slash Server when you need personal sync or team collaboration.
@@ -85,3 +85,4 @@ See also:
 
 - [[Slash Input Guide]]
 - [[Slash AI Guide]]
+- [[Slash Team Guide]]

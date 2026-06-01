@@ -392,7 +392,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode('outline')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'outline'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={t('outline.panel_title', '笔记大纲')}
@@ -405,7 +405,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode?.('ghostlink')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'ghostlink'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={t('graph.ghost_links', 'Related Notes')}
@@ -418,7 +418,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode('localgraph')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'localgraph'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={t('graph.local_title', '关联图谱')}
@@ -431,7 +431,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode('tasks')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'tasks'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={t('tasks.panel_title', 'Tasks')}
@@ -444,7 +444,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode('activity')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'activity'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={isTeamNote ? t('activity.panel_title', '协作历史') : t('activity.history_title', '历史快照')}
@@ -457,7 +457,7 @@ export const TitleBar = ({
                             <button
                                 onClick={() => onSetRightPanelMode('classification')}
                                 className={`w-7 h-7 flex items-center justify-center px-1 rounded-md transition-colors ${rightPanelMode === 'classification'
-                                    ? 'text-[#002FA7] dark:text-[#002FA7] bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
+                                    ? 'text-[#002FA7] dark:text-blue-400 bg-[#002FA7]/10 dark:bg-[#002FA7]/20'
                                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/5'
                                     }`}
                                 title={t('classification.title', '智能归档')}

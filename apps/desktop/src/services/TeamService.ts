@@ -50,6 +50,7 @@ export interface TeamMembersResponse {
 }
 
 export interface DirectoryPermissionInfo {
+    directory_id?: string | null;
     directory_path: string;
     user_id: string;
     username: string;
@@ -228,8 +229,12 @@ class TeamServiceImpl {
         token: string,
         vaultId: string,
         directoryPath: string,
+        directoryId?: string | null,
     ): Promise<DirectoryPermissionInfo[]> {
         const params = new URLSearchParams({ vault_id: vaultId, directory_path: directoryPath });
+        if (directoryId) {
+            params.set('directory_id', directoryId);
+        }
         return this.request(
             serverUrl,
             token,
@@ -247,6 +252,7 @@ class TeamServiceImpl {
         userId: string,
         dirRole: DirectoryRole,
         observerVisible?: boolean,
+        directoryId?: string | null,
     ): Promise<void> {
         await this.request(
             serverUrl,
@@ -255,6 +261,7 @@ class TeamServiceImpl {
             '/api/team/directories/permissions',
             {
                 vault_id: vaultId,
+                directory_id: directoryId,
                 directory_path: directoryPath,
                 user_id: userId,
                 dir_role: dirRole,
@@ -270,6 +277,7 @@ class TeamServiceImpl {
         vaultId: string,
         oldPrefix: string,
         newPrefix: string,
+        directoryId?: string | null,
     ): Promise<{ renamed: number }> {
         return this.request(
             serverUrl,
@@ -278,6 +286,7 @@ class TeamServiceImpl {
             '/api/team/directories/rename',
             {
                 vault_id: vaultId,
+                directory_id: directoryId,
                 old_prefix: oldPrefix,
                 new_prefix: newPrefix,
             },
@@ -323,8 +332,12 @@ class TeamServiceImpl {
         token: string,
         vaultId: string,
         directoryPath: string,
+        directoryId?: string | null,
     ): Promise<DirectoryFileInfo[]> {
         const params = new URLSearchParams({ vault_id: vaultId, directory_path: directoryPath });
+        if (directoryId) {
+            params.set('directory_id', directoryId);
+        }
         return this.request(
             serverUrl,
             token,
@@ -388,6 +401,7 @@ class TeamServiceImpl {
         vaultId: string,
         directoryPath: string,
         userId: string,
+        directoryId?: string | null,
     ): Promise<void> {
         await this.request(
             serverUrl,
@@ -396,6 +410,7 @@ class TeamServiceImpl {
             '/api/team/directories/permissions',
             {
                 vault_id: vaultId,
+                directory_id: directoryId,
                 directory_path: directoryPath,
                 user_id: userId,
             },
@@ -431,8 +446,12 @@ class TeamServiceImpl {
         vaultId: string,
         directoryPath: string,
         manageMode?: boolean,
+        directoryId?: string | null,
     ): Promise<CanDeleteDirectoryResponse> {
         const params = new URLSearchParams({ vault_id: vaultId, directory_path: directoryPath });
+        if (directoryId) {
+            params.set('directory_id', directoryId);
+        }
         if (manageMode) {
             params.append('manage_mode', 'true');
         }
@@ -451,6 +470,7 @@ class TeamServiceImpl {
         vaultId: string,
         directoryPath: string,
         manageMode?: boolean,
+        directoryId?: string | null,
     ): Promise<{ success: boolean }> {
         return this.request(
             serverUrl,
@@ -459,6 +479,7 @@ class TeamServiceImpl {
             `/api/team/directories`,
             {
                 vault_id: vaultId,
+                directory_id: directoryId,
                 directory_path: directoryPath,
                 manage_mode: manageMode,
             }

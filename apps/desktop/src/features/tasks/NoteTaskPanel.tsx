@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/shared/utils/cn';
 import { syncService } from '@/services/SyncService';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 import { extractContentHash } from '@/shared/utils/taskHash';
 import { useSessionStore } from '@/stores/useSessionStore';
 
@@ -254,7 +255,8 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
 
         const handleRemoteToggle = (e: Event) => {
             const detail = (e as CustomEvent).detail;
-            if (!detail || detail.notePath !== notePath) return;
+            const parsedNote = parseTeamNoteId(notePath);
+            if (!detail || (detail.notePath !== notePath && (!parsedNote.fileId || detail.fileId !== parsedNote.fileId))) return;
 
             setTasks(prev => prev.map(t => {
                 // Match by line number and text to ensure we modify the right task when IDs are volatile
@@ -324,12 +326,18 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
 
             if (targetNotePath.startsWith('__team__/')) {
                 // Collab Mode virtual paths: use remote bypass directly to avoid write/push conflicts
-                const parts = targetNotePath.substring(9).split('/');
-                const teamVaultId = parts[0];
-                const relativePath = parts.slice(1).join('/');
+                const parsedTeamNote = parseTeamNoteId(targetNotePath);
+                const teamVaultId = parsedTeamNote.teamVaultId || useSessionStore.getState().teamVaultId;
+                let relativePath = parsedTeamNote.filePath || '';
+                let fileId = parsedTeamNote.fileId;
 
                 if (!teamVaultId) {
                     throw new Error('Sync not configured for team space');
+                }
+                if (!relativePath && fileId) {
+                    const file = await syncService.getVaultFileById(teamVaultId, fileId);
+                    relativePath = file.filePath;
+                    fileId = file.fileId;
                 }
                 
                 // Construct the full line string to hash since we only mapped raw_text
@@ -344,6 +352,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                 await syncService.taskBypass({
                     vault_id: teamVaultId,
                     file_path: relativePath,
+                    file_id: fileId,
                     line_number: task.line_number,
                     line_content_hash: contentHash, // Send even if empty, server expects it
                     checked: newStatus,

@@ -5,6 +5,7 @@ import { Check, KeyRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/utils/cn';
 import { BackButton } from '../components/BackButton';
+import { syncInputClass } from '../components/formStyles';
 import type { SyncFlowContext } from '../useSyncFlow';
 
 export const SetupPinStep = ({ ctx }: { ctx: SyncFlowContext }) => {
@@ -36,7 +37,7 @@ export const SetupPinStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <p className="text-xs text-[#545454] dark:text-[#C8C8C8]">{t('sync.setup_pin_desc')}</p>
                 <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.newPin} onChange={(e) => ctx.setNewPin(e.target.value)}
                     placeholder={t('sync.pin_placeholder')} maxLength={8} onKeyDown={(e) => e.key === 'Enter' && ctx.newPin.trim().length >= 4 && handlePinAndComplete()}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#002FA7]/50 font-mono tracking-widest" />
+                    className={cn(syncInputClass('blue'), 'font-mono tracking-widest')} />
                 {ctx.error && <p className="text-xs text-[#A42227]">{ctx.error}</p>}
                 <button onClick={handlePinAndComplete}
                     disabled={ctx.newPin.trim().length < 4}

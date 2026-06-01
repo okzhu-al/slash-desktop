@@ -17,10 +17,11 @@ export interface TeamTreeItemProps {
     depth: number;
     expandedDirs: Set<string>;
     onToggleDir: (path: string) => void;
-    onFileClick: (path: string, editorName?: string) => void;
+    onFileClick: (path: string, editorName?: string, fileId?: string | null) => void;
     onDirClick?: (path: string, name: string) => void;
     activeDirPath?: string;
     activeNotePath?: string;
+    activeNoteFileId?: string | null;
     isAdmin?: boolean;
     isMaintenanceMode?: boolean;
     onDeleteDir?: (path: string, name: string) => void;
@@ -38,6 +39,7 @@ export function TeamTreeItem({
     onDirClick, 
     activeDirPath, 
     activeNotePath, 
+    activeNoteFileId,
     isAdmin, 
     isMaintenanceMode,
     onDeleteDir, 
@@ -122,7 +124,7 @@ export function TeamTreeItem({
                     }}
                 >
                     <div className="w-4 flex items-center justify-center shrink-0">
-                        <Folder size={16} strokeWidth={1} className="text-[#002FA7]/70 dark:text-[#002FA7]/70 shrink-0" />
+                        <Folder size={16} strokeWidth={1} className="text-[#002FA7]/70 dark:text-blue-400/80 shrink-0" />
                     </div>
                     <span className="truncate">{node.name}</span>
                 </div>
@@ -179,6 +181,7 @@ export function TeamTreeItem({
                                 onDirClick={onDirClick}
                                 activeDirPath={activeDirPath}
                                 activeNotePath={activeNotePath}
+                                activeNoteFileId={activeNoteFileId}
                                 isAdmin={isAdmin}
                                 isMaintenanceMode={isMaintenanceMode}
                                 onDeleteDir={onDeleteDir}
@@ -199,14 +202,15 @@ export function TeamTreeItem({
     }
 
     // 文件节点
-    const isFileActive = activeNotePath === `__team__/${node.path}`;
+    const isFileActive = activeNotePath === `__team__/${node.path}`
+        || Boolean(activeNoteFileId && node.file_id && activeNoteFileId === node.file_id);
 
     const fileContent = (
         <button
             ref={isAdmin ? setDragRef : undefined}
             {...(isAdmin ? dragListeners : {})}
             {...(isAdmin ? dragAttributes : {})}
-            onClick={() => onFileClick(node.path, node.editor_display_name || node.editor_username || undefined)}
+            onClick={() => onFileClick(node.path, node.editor_display_name || node.editor_username || undefined, node.file_id)}
             className={cn(
                 'w-full flex items-center gap-1 py-[5px] px-2 text-sm rounded-sm transition-colors duration-150 select-none',
                 'text-zinc-600 dark:text-zinc-400',

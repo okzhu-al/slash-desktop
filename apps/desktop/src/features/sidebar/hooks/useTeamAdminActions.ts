@@ -114,6 +114,12 @@ export function useTeamAdminActions({
                 const targetId = `__team__/${filePath}`;
                 console.log(`[AdminDeleteFile] Forcing close for virtual: ${targetId}`);
                 onNoteDeleted(targetId);
+                for (const tab of useTabsStore.getState().tabs) {
+                    if (tab.teamPath === filePath) {
+                        console.log(`[AdminDeleteFile] Forcing close for stable team tab: ${tab.id}`);
+                        onNoteDeleted(tab.id);
+                    }
+                }
 
                 const physPaths = resolveTeamToPhysicalPaths(filePath);
                 for (const phys of physPaths) {
@@ -219,7 +225,10 @@ export function useTeamAdminActions({
                 for (const tab of tabs) {
                     console.log(`[AdminDeleteDir] Checking tab: ${tab.id}`);
 
-                    let shouldClose = tab.id.startsWith(dirPrefix) || tab.id === exactDirMatch;
+                    const teamPath = tab.teamPath ? `__team__/${tab.teamPath}` : null;
+                    let shouldClose = tab.id.startsWith(dirPrefix)
+                        || tab.id === exactDirMatch
+                        || Boolean(teamPath && (teamPath.startsWith(dirPrefix) || teamPath === exactDirMatch));
                     if (!shouldClose) {
                         for (const physPrefix of physicalPrefixes) {
                             if (tab.id.startsWith(physPrefix + '/') || tab.id === physPrefix) {

@@ -23,6 +23,9 @@ pub struct FileManifest {
     /// 如果文件无 slash_id（外部编辑器创建）则为 None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_id: Option<String>,
+    /// 文件当前所属团队目录身份。Personal 同步或旧服务端可为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory_id: Option<String>,
     /// 用户开始编辑此文件的时间（Unix timestamp, seconds）
     /// 客户端记录编辑生命周期开始时间，服务端保存为历史版本的 session_started_at
     /// None = 未知，服务端使用 push 到达时间
@@ -476,6 +479,8 @@ pub struct UpdateMemberRoleRequest {
 /// 目录权限信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DirectoryPermissionInfo {
+    #[serde(default)]
+    pub directory_id: Option<String>,
     pub directory_path: String,
     pub user_id: String,
     pub username: String,
@@ -488,6 +493,9 @@ pub struct DirectoryPermissionInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DirectoryPermissionsQuery {
     pub vault_id: String,
+    #[serde(default)]
+    pub directory_id: Option<String>,
+    #[serde(default)]
     pub directory_path: String,
 }
 
@@ -495,6 +503,9 @@ pub struct DirectoryPermissionsQuery {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateDirectoryPermissionsRequest {
     pub vault_id: String,
+    #[serde(default)]
+    pub directory_id: Option<String>,
+    #[serde(default)]
     pub directory_path: String,
     pub user_id: String,
     pub dir_role: DirectoryRole,
@@ -530,6 +541,9 @@ pub struct DirectoryFileInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DirectoryFilesQuery {
     pub vault_id: String,
+    #[serde(default)]
+    pub directory_id: Option<String>,
+    #[serde(default)]
     pub directory_path: String,
 }
 
@@ -537,6 +551,9 @@ pub struct DirectoryFilesQuery {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RemoveDirectoryPermissionRequest {
     pub vault_id: String,
+    #[serde(default)]
+    pub directory_id: Option<String>,
+    #[serde(default)]
     pub directory_path: String,
     pub user_id: String,
 }
@@ -545,7 +562,10 @@ pub struct RemoveDirectoryPermissionRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RenameDirectoryRequest {
     pub vault_id: String,
+    #[serde(default)]
+    pub directory_id: Option<String>,
     /// 旧目录前缀，如 "01_PROJECTS/P-3"
+    #[serde(default)]
     pub old_prefix: String,
     /// 新目录前缀，如 "01_PROJECTS/P-3改"
     pub new_prefix: String,
@@ -726,6 +746,10 @@ pub struct AssetDownloadInfo {
 pub struct TaskBypassEvent {
     pub vault_id: String,
     pub file_path: String,
+    #[serde(default)]
+    pub file_id: Option<String>,
+    #[serde(default)]
+    pub directory_id: Option<String>,
     /// 目标 checkbox 所在行号（0-indexed）
     pub line_number: usize,
     /// 该行内容的 hash（防行号偏移）
@@ -758,6 +782,7 @@ mod tests {
             mtime: 1709280000,
             logical_clock: 42,
             file_id: None,
+            directory_id: None,
             edit_started_at: None,
             edit_session_id: None,
             is_user_edit: false,
@@ -918,6 +943,8 @@ mod tests {
 /// 团队 Scope 中的一个目录条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeamScopeDir {
+    #[serde(default)]
+    pub directory_id: Option<String>,
     pub directory_path: String, // 团队 vault 中的路径 e.g. "01_PROJECTS/NAS项目/"
     pub role: String,           // "owner" / "team_member"
 }
@@ -932,4 +959,7 @@ pub struct TeamScopeResponse {
     /// 用于客户端同步时实现目录级隔离（父映射不递归进独立子目录）
     #[serde(default)]
     pub managed_dirs: Vec<String>,
+    /// `managed_dirs` 的 UUID-first 版本。旧客户端继续读取 `managed_dirs`。
+    #[serde(default)]
+    pub managed_scope_dirs: Vec<TeamScopeDir>,
 }

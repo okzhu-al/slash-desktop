@@ -12,6 +12,8 @@ export interface CollabEvent {
     seq: number;
     kind: 'annotation' | 'comment';
     file_path: string;
+    file_id?: string | null;
+    directory_id?: string | null;
     author_name: string;
     created_at: string;
     payload?: Record<string, unknown>;
@@ -19,6 +21,8 @@ export interface CollabEvent {
 
 export interface UnreadFile {
     file_path: string;
+    file_id?: string | null;
+    directory_id?: string | null;
     unread_count: number;
     latest_seq: number;
     unread_since: string | null;
@@ -119,7 +123,13 @@ class CollabServiceImpl {
     }
 
     /** 标记文件已读（打开协作历史 Tab 时调用或强清除目录红点） */
-    async markFileRead(vaultId: string, filePath: string, readSeq: number, clearChildren?: boolean): Promise<void> {
+    async markFileRead(
+        vaultId: string,
+        filePath: string,
+        readSeq: number,
+        clearChildren?: boolean,
+        identity?: { fileId?: string | null; directoryId?: string | null },
+    ): Promise<void> {
         const auth = await this.getFreshAuth();
         if (!auth) return;
 
@@ -127,7 +137,14 @@ class CollabServiceImpl {
             await fetch(`${auth.base}/api/collab/read`, {
                 method: 'PUT',
                 headers: { ...auth.headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ vault_id: vaultId, file_path: filePath, read_seq: readSeq, clear_children: clearChildren }),
+                body: JSON.stringify({
+                    vault_id: vaultId,
+                    file_path: filePath,
+                    file_id: identity?.fileId,
+                    directory_id: identity?.directoryId,
+                    read_seq: readSeq,
+                    clear_children: clearChildren,
+                }),
             });
         } catch { /* 静默忽略 */ }
     }
@@ -151,12 +168,13 @@ class CollabServiceImpl {
     }
 
     /** 查询指定文件的状态切换记录（Solo/Collab 互切） */
-    async getStatusEvents(vaultId: string, filePath: string): Promise<StatusEventInfo[]> {
+    async getStatusEvents(vaultId: string, filePath: string, fileId?: string | null): Promise<StatusEventInfo[]> {
         const auth = await this.getFreshAuth();
         if (!auth) return [];
 
         try {
             const params = new URLSearchParams({ vault_id: vaultId, file_path: filePath });
+            if (fileId) params.set('file_id', fileId);
             const resp = await fetch(`${auth.base}/api/collab/status_events?${params}`, { headers: auth.headers });
             if (!resp.ok) return [];
             const data = await resp.json();

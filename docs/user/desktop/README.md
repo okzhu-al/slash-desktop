@@ -2,8 +2,8 @@
 
 > 状态：当前
 > 受众：用户
-> 负责人：产品
-> 最后审阅：2026-05-30
+> 负责：Slash
+> 最后审阅：2026-05-31
 
 Slash 是一个本地优先的 Markdown 知识工作台。你可以用它记录笔记、整理资料、管理任务、搜索知识库、使用 AI 辅助归档与总结，并按需要连接自托管的 Slash Server 做个人同步或团队协作。
 
@@ -87,3 +87,4 @@ Slash 适合：
 
 - [[Slash Input Guide]]
 - [[Slash AI Guide]]
+- [[Slash Team Guide]]

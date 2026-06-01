@@ -2,7 +2,7 @@
 
 > Status: Current
 > Audience: Users
-> Owner: Product
+> Owner: Slash
 > Last reviewed: 2026-05-31
 
 Slash AI is a local-first assistant. It can help summarize, tag, process selected text, discover related notes, and classify Inbox material. It does not silently move, delete, or rewrite your notes for you.

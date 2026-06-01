@@ -197,7 +197,7 @@ export const GhostLinkPanel = ({ notePath, onNavigate, onConfirmLink, initialGho
                         title={t('graph.refresh') || '刷新推荐'}
                         className={cn(
                             "p-1 rounded-md transition-all duration-300",
-                            "text-[#002FA7] dark:text-[#002FA7]",
+                            "text-[#002FA7] dark:text-blue-400",
                             "magic-wand-breathe"
                         )}
                     >

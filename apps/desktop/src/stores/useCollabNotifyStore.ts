@@ -18,9 +18,31 @@ import { create } from 'zustand';
 import type { CollabEvent } from '@/services/CollabService';
 
 interface UnreadFileEntry {
+    filePath: string;
+    fileId?: string | null;
+    directoryId?: string | null;
     latestSeq: number;   // 该文件当前最新事件 seq（用于 markFileRead 调用）
     unreadSince: number; // 当前未读事件的绝对最老时间点锚（毫秒戳）
     unreadCount: number; // 当前未被本地消费的有效新事件总数
+}
+
+function unreadKey(input: { file_path: string; file_id?: string | null; directory_id?: string | null }): string {
+    if (input.file_id) return `file:${input.file_id}`;
+    if (input.directory_id && !input.file_path.endsWith('.md')) return `dir:${input.directory_id}`;
+    return input.file_path;
+}
+
+function findEntryByPath(map: Map<string, UnreadFileEntry>, path: string): [string, UnreadFileEntry] | undefined {
+    const direct = map.get(path);
+    if (direct) return [path, direct];
+    for (const pair of map) {
+        if (pair[1].filePath === path) return pair;
+    }
+    return undefined;
+}
+
+function isEntryUnderPath(entry: UnreadFileEntry, path: string): boolean {
+    return entry.filePath === path || entry.filePath.startsWith(path + '/');
 }
 
 interface CollabNotifyState {
@@ -61,9 +83,9 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
     unreadFolders: new Map(),
     lastReadAt: {},
 
-    isUnread: (path) => get().unreadFiles.has(path),
+    isUnread: (path) => Boolean(findEntryByPath(get().unreadFiles, path)),
 
-    getUnreadEntry: (path) => get().unreadFiles.get(path),
+    getUnreadEntry: (path) => findEntryByPath(get().unreadFiles, path)?.[1],
 
     markUnreadFromEvents: (events) => {
         set((state) => {
@@ -72,9 +94,13 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
             for (const ev of events) {
                 const isFolder = !ev.file_path.endsWith('.md');
                 const targetMap = isFolder ? nextFolders : nextFiles;
-                const existing = targetMap.get(ev.file_path);
+                const key = unreadKey(ev);
+                const existing = targetMap.get(key);
                 const evTs = new Date(ev.created_at).getTime();
-                targetMap.set(ev.file_path, {
+                targetMap.set(key, {
+                    filePath: ev.file_path,
+                    fileId: ev.file_id,
+                    directoryId: ev.directory_id,
                     latestSeq: Math.max(ev.seq, existing?.latestSeq ?? 0),
                     // 如果已经记录了 unreadSince 则保持旧的绝对时间起点以囊括所有后续点；否则设为新事件
                     unreadSince: existing?.unreadSince || evTs,
@@ -97,7 +123,10 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
                 for (const item of unreadList) {
                     const isFolder = !item.file_path.endsWith('.md');
                     const targetMap = isFolder ? nextFolders : nextFiles;
-                    targetMap.set(item.file_path, {
+                    targetMap.set(unreadKey(item), {
+                        filePath: item.file_path,
+                        fileId: item.file_id,
+                        directoryId: item.directory_id,
                         latestSeq: item.latest_seq,
                         unreadSince: item.unread_since ? new Date(item.unread_since).getTime() : fallbackTime,
                         unreadCount: item.unread_count,
@@ -109,12 +138,14 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
     },
 
     markRead: (path, vaultId) => {
-        const entry = get().unreadFiles.get(path);
+        const found = findEntryByPath(get().unreadFiles, path);
+        const key = found?.[0] ?? path;
+        const entry = found?.[1];
         const latestSeq = entry?.latestSeq ?? 0;
 
         set((state) => {
             const next = new Map(state.unreadFiles);
-            next.delete(path);
+            next.delete(key);
             return {
                 unreadFiles: next,
                 lastReadAt: { ...state.lastReadAt, [path]: Date.now() },
@@ -124,13 +155,18 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         // 异步通知服务端更新已读游标（非阻塞）
         if (latestSeq > 0) {
             import('@/services/CollabService').then(({ collabService }) => {
-                collabService.markFileRead(vaultId, path, latestSeq);
+                collabService.markFileRead(vaultId, entry?.filePath ?? path, latestSeq, false, {
+                    fileId: entry?.fileId,
+                    directoryId: entry?.directoryId,
+                });
             });
         }
     },
 
     markFolderRead: async (path, vaultId) => {
-        const entry = get().unreadFolders.get(path);
+        const found = findEntryByPath(get().unreadFolders, path);
+        const key = found?.[0] ?? path;
+        const entry = found?.[1];
         const latestSeq = entry?.latestSeq ?? 0;
 
         set((state) => {
@@ -138,14 +174,14 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
             const nextFiles = new Map(state.unreadFiles);
             
             // 乐观更新：立刻在前端抹除该 folder 本身
-            nextF.delete(path);
+            nextF.delete(key);
 
             // 清理子项（彻底解决透出短效红点残影）
-            for (const key of nextF.keys()) {
-                if (key.startsWith(path + '/')) nextF.delete(key);
+            for (const [childKey, childEntry] of nextF) {
+                if (isEntryUnderPath(childEntry, path)) nextF.delete(childKey);
             }
-            for (const key of nextFiles.keys()) {
-                if (key.startsWith(path + '/')) nextFiles.delete(key);
+            for (const [childKey, childEntry] of nextFiles) {
+                if (isEntryUnderPath(childEntry, path)) nextFiles.delete(childKey);
             }
 
             return {
@@ -157,21 +193,26 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         // 强时序等待：带上 clearChildren，压跨后端的所有内层文件红点
         if (latestSeq > 0) {
             const { collabService } = await import('@/services/CollabService');
-            await collabService.markFileRead(vaultId, path, latestSeq, true);
+            await collabService.markFileRead(vaultId, entry?.filePath ?? path, latestSeq, true, {
+                fileId: entry?.fileId,
+                directoryId: entry?.directoryId,
+            });
             // 必须在上方的数据落库请求完成后，才能开始拉取新的校验，否则查询跑在写入前面，就会死灰复燃
             await get().refreshUnread(vaultId);
         }
     },
 
     markFolderBadgeRead: async (path, vaultId) => {
-        const entry = get().unreadFolders.get(path);
+        const found = findEntryByPath(get().unreadFolders, path);
+        const key = found?.[0] ?? path;
+        const entry = found?.[1];
         if (!entry) return; // 防止重复请求
         const latestSeq = entry.latestSeq ?? 0;
 
         set((state) => {
             const nextF = new Map(state.unreadFolders);
             // 仅乐观更新该 folder 本身，绝不动内部的子文件和子目录的散户红点
-            nextF.delete(path);
+            nextF.delete(key);
             return {
                 unreadFolders: nextF,
             };
@@ -180,7 +221,10 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         if (latestSeq > 0) {
             const { collabService } = await import('@/services/CollabService');
             // 只覆盖本身的 seq，严禁 clearChildren
-            await collabService.markFileRead(vaultId, path, latestSeq, false);
+            await collabService.markFileRead(vaultId, entry.filePath, latestSeq, false, {
+                fileId: entry.fileId,
+                directoryId: entry.directoryId,
+            });
         }
     },
 
@@ -196,24 +240,26 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
             const nextFolders = new Map(state.unreadFolders);
             let updated = false;
 
-            if (nextFiles.has(path)) {
-                nextFiles.delete(path);
+            const fileEntry = findEntryByPath(nextFiles, path);
+            if (fileEntry) {
+                nextFiles.delete(fileEntry[0]);
                 updated = true;
             }
-            if (nextFolders.has(path)) {
-                nextFolders.delete(path);
+            const folderEntry = findEntryByPath(nextFolders, path);
+            if (folderEntry) {
+                nextFolders.delete(folderEntry[0]);
                 updated = true;
             }
 
             // 对受影响的级联内层散户红点一并收割
-            for (const key of nextFiles.keys()) {
-                if (key.startsWith(path + '/')) {
+            for (const [key, entry] of nextFiles) {
+                if (isEntryUnderPath(entry, path)) {
                     nextFiles.delete(key);
                     updated = true;
                 }
             }
-            for (const key of nextFolders.keys()) {
-                if (key.startsWith(path + '/')) {
+            for (const [key, entry] of nextFolders) {
+                if (isEntryUnderPath(entry, path)) {
                     nextFolders.delete(key);
                     updated = true;
                 }
@@ -237,14 +283,20 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         try {
             const { collabService } = await import('@/services/CollabService');
             const promises: Promise<void>[] = [];
-            for (const [path, entry] of unreadFiles) {
+            for (const [, entry] of unreadFiles) {
                 if (entry.latestSeq > 0) {
-                    promises.push(collabService.markFileRead(vaultId, path, entry.latestSeq));
+                    promises.push(collabService.markFileRead(vaultId, entry.filePath, entry.latestSeq, false, {
+                        fileId: entry.fileId,
+                        directoryId: entry.directoryId,
+                    }));
                 }
             }
-            for (const [path, entry] of unreadFolders) {
+            for (const [, entry] of unreadFolders) {
                 if (entry.latestSeq > 0) {
-                    promises.push(collabService.markFileRead(vaultId, path, entry.latestSeq));
+                    promises.push(collabService.markFileRead(vaultId, entry.filePath, entry.latestSeq, false, {
+                        fileId: entry.fileId,
+                        directoryId: entry.directoryId,
+                    }));
                 }
             }
             await Promise.all(promises);

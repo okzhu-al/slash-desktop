@@ -859,6 +859,7 @@
         "revoke_success": "已清理 {{count}} 个会话，{{name}} 已被强制下线",
         "revoke_failed": "强制下线失败: {{error}}",
         "toggle_role_failed": "角色切换失败: {{error}}",
+        "self_revoke_admin_forbidden": "无法删除自己的 admin 角色，该项操作需由其他 admin 进行。",
         "dir_section_members": "目录成员",
         "dir_empty": "空目录",
         "dir_files": "文件列表",

@@ -1,22 +1,49 @@
 import { useState, useEffect } from 'react';
 import { useFileSystemStore } from '@/core/fs/store';
 import { readTextFile } from '@tauri-apps/plugin-fs';
-export async function isTeamNoteAsync(vaultPath: string | undefined | null, notePath: string): Promise<boolean> {
-    if (!vaultPath || !notePath) return false;
-    if (notePath.startsWith('__team__/')) return true;
+
+async function loadTeamSourceMappings(vaultPath: string): Promise<Record<string, string>> {
+    const allMappings: Record<string, string> = {};
+
+    try {
+        const raw = await readTextFile(`${vaultPath}/.slash/team_directory_mappings.json`);
+        const data = JSON.parse(raw);
+        for (const team of Object.values(data?.teams || {}) as Array<any>) {
+            for (const mapping of Object.values(team?.directories || {}) as Array<any>) {
+                if (mapping?.status !== 'active') continue;
+                if (typeof mapping.local_path === 'string' && typeof mapping.remote_path === 'string') {
+                    allMappings[mapping.local_path] = mapping.remote_path;
+                }
+            }
+        }
+    } catch {
+        // v3 mapping is optional during migration.
+    }
 
     try {
         const raw = await readTextFile(`${vaultPath}/.slash/team_path_mappings.json`);
         const data = JSON.parse(raw);
-        let allMappings: Record<string, string> = {};
-        
+
         if (data.teams) {
             for (const teamId of Object.keys(data.teams)) {
                 Object.assign(allMappings, data.teams[teamId]);
             }
         } else if (data.mappings) {
-            allMappings = data.mappings;
+            Object.assign(allMappings, data.mappings);
         }
+    } catch {
+        // Legacy mapping is optional after v3 migration.
+    }
+
+    return allMappings;
+}
+
+export async function isTeamNoteAsync(vaultPath: string | undefined | null, notePath: string): Promise<boolean> {
+    if (!vaultPath || !notePath) return false;
+    if (notePath.startsWith('__team__/')) return true;
+
+    try {
+        const allMappings = await loadTeamSourceMappings(vaultPath);
 
         // 🛡️ Windows 兼容：统一转换为正斜杠，并将盘符转为小写
         let normNote = notePath.replace(/\\/g, '/');
@@ -29,7 +56,6 @@ export async function isTeamNoteAsync(vaultPath: string | undefined | null, note
             ? normNote.slice(normVault.length + 1)
             : normNote;
 
-        console.log('[isTeamNote] relPath=', relPath, 'sources=', Object.keys(allMappings));
         for (const source of Object.keys(allMappings)) {
             if (relPath === source || relPath.startsWith(source + '/')) {
                 return true;

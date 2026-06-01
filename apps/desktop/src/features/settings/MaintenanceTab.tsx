@@ -255,7 +255,7 @@ export const MaintenanceTab = () => {
 
                     {rebuildStatus === 'done' && rebuildResult !== null && (
                         <div className="mt-4 p-3 bg-[#002FA7]/10 border border-[#002FA7]/30 rounded-lg">
-                            <p className="text-sm text-[#002FA7] dark:text-[#002FA7]">
+                            <p className="text-sm text-[#002FA7] dark:text-blue-400">
                                 {t("settings.rebuild_done", { count: rebuildResult })}
                             </p>
                         </div>

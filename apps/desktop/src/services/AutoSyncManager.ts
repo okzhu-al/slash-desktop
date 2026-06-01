@@ -213,12 +213,14 @@ class AutoSyncManager {
             if (!teamVaultId) return false;
 
             // 🛡️ 多团队强物理隔离保护：
-            // 只有当当前仓库物理根目录下本身就含有 team_sync_state.json 或 team_path_mappings.json 时，
+            // 只有当当前仓库物理根目录下本身就含有团队同步状态或团队目录映射时，
             // 才能去更新和写入。如果是完全干净的未绑定任何团队的新个人仓库，绝对禁止强制创建 team_sync_state.json，
             // 保证其纯净的个人库属性不被任何全局 Session 会话污染。
             const { exists } = await import('@tauri-apps/plugin-fs');
             const hasState = await exists(`${this.vaultPath}/.slash/team_sync_state.json`);
-            const hasMappings = await exists(`${this.vaultPath}/.slash/team_path_mappings.json`);
+            const hasLegacyMappings = await exists(`${this.vaultPath}/.slash/team_path_mappings.json`);
+            const hasDirectoryMappings = await exists(`${this.vaultPath}/.slash/team_directory_mappings.json`);
+            const hasMappings = hasLegacyMappings || hasDirectoryMappings;
 
             if (hasState || hasMappings) {
                 // 1. 确保本地 team_sync_state.json 存在
@@ -284,16 +286,36 @@ class AutoSyncManager {
                 try {
                     const vaultRoot = localStorage.getItem('slash_vault_path');
                     if (vaultRoot) {
-                        const raw = await import('@tauri-apps/plugin-fs').then(r => r.readTextFile(`${vaultRoot}/.slash/team_path_mappings.json`));
-                        const data = JSON.parse(raw);
-                        if (data.teams) {
-                            const { useSessionStore } = await import('@/stores/useSessionStore');
-                            const teamId = useSessionStore.getState().teamVaultId;
-                            if (teamId && data.teams[teamId]) {
-                                mappings = data.teams[teamId];
+                        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                        const { useSessionStore } = await import('@/stores/useSessionStore');
+                        const teamId = useSessionStore.getState().teamVaultId;
+
+                        try {
+                            const raw = await readTextFile(`${vaultRoot}/.slash/team_directory_mappings.json`);
+                            const data = JSON.parse(raw);
+                            const directories = teamId ? data?.teams?.[teamId]?.directories : undefined;
+                            if (directories && typeof directories === 'object') {
+                                for (const mapping of Object.values(directories) as Array<any>) {
+                                    if (mapping?.status !== 'active') continue;
+                                    if (typeof mapping.local_path === 'string' && typeof mapping.remote_path === 'string') {
+                                        mappings[mapping.local_path] = mapping.remote_path;
+                                    }
+                                }
                             }
-                        } else {
-                            mappings = data.mappings || data;
+                        } catch { }
+
+                        try {
+                            const raw = await readTextFile(`${vaultRoot}/.slash/team_path_mappings.json`);
+                            const data = JSON.parse(raw);
+                            if (data.teams) {
+                                if (teamId && data.teams[teamId]) {
+                                    Object.assign(mappings, data.teams[teamId]);
+                                }
+                            } else {
+                                Object.assign(mappings, data.mappings || data);
+                            }
+                        } catch {
+                            // Suppress read errors if legacy mappings missing.
                         }
                     }
                 } catch { /* Suppress read errors if mappings missing */ }
@@ -376,6 +398,8 @@ class AutoSyncManager {
                                 window.dispatchEvent(new CustomEvent('slash:remote-task-toggle', {
                                     detail: {
                                         notePath: path,
+                                        fileId: ev.file_id,
+                                        directoryId: ev.directory_id,
                                         lineNumber: payload.line_number,
                                         rawText: payload.raw_text,
                                         isCompleted: payload.checked

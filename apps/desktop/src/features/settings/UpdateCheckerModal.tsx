@@ -64,22 +64,24 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
         if (!updateInstance) return;
         setState('downloading');
         setProgress(0);
+        setDownloadedSize('0 KB');
+        setTotalSize('0 KB');
         
         try {
-            let downloadedBytes = 0;
-            let totalBytes = 0;
+            let downloadedBytesValue = 0;
+            let totalBytesValue = 0;
 
             await updateInstance.downloadAndInstall((event: any) => {
                 switch (event.event) {
                     case 'Started':
-                        totalBytes = event.data.contentLength || 0;
-                        setTotalSize(formatBytes(totalBytes));
+                        totalBytesValue = event.data.contentLength || 0;
+                        setTotalSize(formatBytes(totalBytesValue));
                         break;
                     case 'Progress':
-                        downloadedBytes += event.data.chunkLength;
-                        setDownloadedSize(formatBytes(downloadedBytes));
-                        if (totalBytes > 0) {
-                            const pct = Math.round((downloadedBytes / totalBytes) * 100);
+                        downloadedBytesValue += event.data.chunkLength;
+                        setDownloadedSize(formatBytes(downloadedBytesValue));
+                        if (totalBytesValue > 0) {
+                            const pct = Math.round((downloadedBytesValue / totalBytesValue) * 100);
                             setProgress(pct);
                         }
                         break;
@@ -211,7 +213,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 size={32} className="animate-spin text-[#002FA7]" />
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.downloading_update', '正在下载更新包')}</h3>
-                            <div className="grid grid-cols-[5.5rem_1rem_5.5rem] items-center justify-center text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums">
+                            <div className="grid grid-cols-[5.5rem_1rem_auto] items-center justify-center text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums">
                                 <span className="text-right">{downloadedSize}</span>
                                 <span className="text-center">/</span>
                                 <span className="text-left">{totalSize}</span>

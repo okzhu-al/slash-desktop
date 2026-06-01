@@ -67,6 +67,119 @@ impl TeamPathMappingsFile {
     }
 }
 
+/// UUID-first 团队目录映射条目。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TeamDirectoryMapping {
+    pub directory_id: String,
+    pub local_path: String,
+    pub remote_path: String,
+    pub role: String,
+    pub status: String,
+}
+
+/// 单个 team vault 下的目录映射。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct TeamDirectoryMappings {
+    pub directories: std::collections::HashMap<String, TeamDirectoryMapping>,
+}
+
+/// 磁盘持久化格式：.slash/team_directory_mappings.json
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TeamDirectoryMappingsFile {
+    pub version: u8,
+    pub teams: std::collections::HashMap<String, TeamDirectoryMappings>,
+}
+
+impl Default for TeamDirectoryMappingsFile {
+    fn default() -> Self {
+        Self {
+            version: 3,
+            teams: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl TeamDirectoryMappingsFile {
+    pub fn load(path: &std::path::Path) -> Self {
+        if !path.exists() {
+            return Self::default();
+        }
+        let data = std::fs::read_to_string(path).unwrap_or_default();
+        serde_json::from_str::<Self>(&data).unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &std::path::Path) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let tmp_path = path.with_extension("json.tmp");
+            if std::fs::write(&tmp_path, &json).is_ok() {
+                if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&tmp_path) {
+                    let _ = f.sync_all();
+                }
+                let _ = std::fs::rename(&tmp_path, path);
+            }
+        }
+    }
+
+    pub fn upsert(
+        &mut self,
+        team_vault_id: &str,
+        directory_id: String,
+        local_path: String,
+        remote_path: String,
+        role: String,
+    ) {
+        let team = self
+            .teams
+            .entry(team_vault_id.to_string())
+            .or_default();
+        team.directories.insert(
+            directory_id.clone(),
+            TeamDirectoryMapping {
+                directory_id,
+                local_path,
+                remote_path,
+                role,
+                status: "active".to_string(),
+            },
+        );
+    }
+
+    pub fn to_path_mappings(
+        &self,
+        team_vault_id: &str,
+    ) -> std::collections::HashMap<String, String> {
+        self.teams
+            .get(team_vault_id)
+            .map(|team| {
+                team.directories
+                    .values()
+                    .filter(|entry| entry.status == "active")
+                    .map(|entry| (entry.local_path.clone(), entry.remote_path.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn to_directory_id_mappings(
+        &self,
+        team_vault_id: &str,
+    ) -> std::collections::HashMap<String, String> {
+        self.teams
+            .get(team_vault_id)
+            .map(|team| {
+                team.directories
+                    .values()
+                    .filter(|entry| entry.status == "active")
+                    .map(|entry| (entry.local_path.clone(), entry.directory_id.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
 /// PARA 团队→个人映射表
 pub const PARA_TEAM_TO_PERSONAL: &[(&str, &str)] = &[
     ("01_PROJECTS", "01_Projects"),

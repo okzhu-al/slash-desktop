@@ -179,14 +179,14 @@ export function StorageDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                 {/* A. Team Space */}
-                <div className="rounded-xl border border-[#002FA7]/30 dark:border-[#002FA7]/50 p-5 space-y-4 bg-white dark:bg-zinc-900 border-t-4 border-t-[#002FA7] shadow-sm flex flex-col">
+                <div className="rounded-xl border border-[#002FA7]/30 dark:border-blue-500/35 p-5 space-y-4 bg-white dark:bg-zinc-900 border-t-4 border-t-[#002FA7] shadow-sm flex flex-col">
                     <div className="flex items-center gap-2 mb-2">
                         <Users size={16} className="text-[#002FA7]" />
-                        <h3 className="font-semibold text-[#002FA7] dark:text-[#002FA7]">A. {t('team.storage_team_space')}</h3>
+                        <h3 className="font-semibold text-[#002FA7] dark:text-blue-400">A. {t('team.storage_team_space')}</h3>
                     </div>
                     <div className="flex-1 space-y-3">
-                        <StatItem icon={<FileText size={14} />} label={t('team.storage_team_markdown')} stats={team_space.markdown} color="text-[#002FA7] dark:text-[#002FA7]" />
-                        <StatItem icon={<Image size={14} />} label={t('team.storage_team_media')} stats={team_space.media} color="text-[#002FA7] dark:text-[#002FA7]" />
+                        <StatItem icon={<FileText size={14} />} label={t('team.storage_team_markdown')} stats={team_space.markdown} color="text-[#002FA7] dark:text-blue-400" />
+                        <StatItem icon={<Image size={14} />} label={t('team.storage_team_media')} stats={team_space.media} color="text-[#002FA7] dark:text-blue-400" />
                         <StatItem icon={<Trash2 size={14} />} label={t('team.storage_team_trash')} stats={team_space.trash} color="text-[#A42227]" />
                     </div>
                     {team_space.trash.size_bytes > 0 && (
@@ -319,7 +319,7 @@ function MemberRow({ member, maxBytes }: { member: MemberUsage; maxBytes: number
     return (
         <div className="px-5 py-4 flex items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/20 transition-colors">
             {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center text-xs font-bold text-[#002FA7] dark:text-[#002FA7] shrink-0 uppercase shadow-sm border border-[#002FA7]/30 dark:border-[#002FA7]/50">
+            <div className="w-8 h-8 rounded-full bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center text-xs font-bold text-[#002FA7] dark:text-blue-400 shrink-0 uppercase shadow-sm border border-[#002FA7]/30 dark:border-blue-500/35">
                 {member.display_name.charAt(0)}
             </div>
 

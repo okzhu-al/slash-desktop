@@ -5,6 +5,7 @@ import { KeyRound, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/utils/cn';
 import { BackButton } from '../components/BackButton';
+import { syncInputClass } from '../components/formStyles';
 import type { SyncFlowContext } from '../useSyncFlow';
 
 export const ReconnectPersonalStep = ({ ctx }: { ctx: SyncFlowContext }) => {
@@ -19,13 +20,13 @@ export const ReconnectPersonalStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <div>
                     <label className="text-xs font-medium text-[#545454] dark:text-[#C8C8C8] mb-1 block">{t('sync.server_url')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.serverUrl} onChange={(e) => ctx.setServerUrl(e.target.value)} placeholder="http://your-server:3721"
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#002FA7]/50" />
+                        className={syncInputClass('blue')} />
                 </div>
                 <div>
                     <label className="text-xs font-medium text-[#545454] dark:text-[#C8C8C8] mb-1 block">{ctx.codeResetMode ? t('sync.pair_code') : t('sync.pin_label')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.accessCode} onChange={(e) => ctx.setAccessCode(e.target.value)}
                         placeholder={ctx.codeResetMode ? t('sync.pair_code_placeholder') : t('sync.pin_input_placeholder')} onKeyDown={(e) => e.key === 'Enter' && ctx.serverUrl.trim() && ctx.accessCode.trim() && ctx.handlePair()}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#002FA7]/50 font-mono" />
+                        className={cn(syncInputClass('blue'), 'font-mono')} />
                 </div>
                 {ctx.error && (
                     <div className="space-y-2">

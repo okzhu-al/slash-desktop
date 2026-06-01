@@ -75,9 +75,23 @@ echo "📚 Publishing desktop user documentation..."
 rm -rf docs
 mkdir -p docs/user/desktop
 rsync -av "$SRC_ROOT/docs/user/desktop/" docs/user/desktop/
-cp "$SRC_ROOT/docs/user/desktop/README.md" README.md
 if [ -f "$SRC_ROOT/docs/user/desktop/en/README.md" ]; then
   cp "$SRC_ROOT/docs/user/desktop/en/README.md" README.en.md
+  python3 - "$SRC_ROOT/docs/user/desktop/README.md" "$SRC_ROOT/docs/user/desktop/en/README.md" README.md <<'PY'
+import pathlib
+import sys
+
+zh_path, en_path, out_path = map(pathlib.Path, sys.argv[1:])
+zh = zh_path.read_text(encoding="utf-8").rstrip()
+en = en_path.read_text(encoding="utf-8").rstrip()
+
+pathlib.Path(out_path).write_text(
+    f"{zh}\n\n---\n\n{en}\n",
+    encoding="utf-8",
+)
+PY
+else
+  cp "$SRC_ROOT/docs/user/desktop/README.md" README.md
 fi
 
 echo "📝 Generating public release notes..."

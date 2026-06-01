@@ -5,9 +5,11 @@ import i18n from '@/core/i18n/config';
 import aboutSlashGuide from '../../../../../docs/user/desktop/README.md?raw';
 import aiGuide from '../../../../../docs/user/desktop/ai-guide.md?raw';
 import inputGuide from '../../../../../docs/user/desktop/input-guide.md?raw';
+import teamGuide from '../../../../../docs/user/desktop/team-guide.md?raw';
 import aboutSlashGuideEn from '../../../../../docs/user/desktop/en/README.md?raw';
 import aiGuideEn from '../../../../../docs/user/desktop/en/ai-guide.md?raw';
 import inputGuideEn from '../../../../../docs/user/desktop/en/input-guide.md?raw';
+import teamGuideEn from '../../../../../docs/user/desktop/en/team-guide.md?raw';
 
 const STORAGE_KEY_VAULTS = 'slash-vaults-history';
 const CONFIG_DIR_NAME = '.slash';
@@ -16,6 +18,7 @@ const DESKTOP_USER_GUIDE_PATHS = {
     aboutSlash: '00_Inbox/About Slash.md',
     inputGuide: '03_Resources/Slash Input Guide.md',
     aiGuide: '03_Resources/Slash AI Guide.md',
+    teamGuide: '03_Resources/Slash Team Guide.md',
 } as const;
 
 const DESKTOP_USER_GUIDES_BY_LANGUAGE = {
@@ -35,6 +38,11 @@ const DESKTOP_USER_GUIDES_BY_LANGUAGE = {
             path: DESKTOP_USER_GUIDE_PATHS.aiGuide,
             content: aiGuide,
         },
+        {
+            seedKey: 'team-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.teamGuide,
+            content: teamGuide,
+        },
     ],
     en: [
         {
@@ -51,6 +59,11 @@ const DESKTOP_USER_GUIDES_BY_LANGUAGE = {
             seedKey: 'ai-guide',
             path: DESKTOP_USER_GUIDE_PATHS.aiGuide,
             content: aiGuideEn,
+        },
+        {
+            seedKey: 'team-guide',
+            path: DESKTOP_USER_GUIDE_PATHS.teamGuide,
+            content: teamGuideEn,
         },
     ],
 } as const;

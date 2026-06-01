@@ -20,6 +20,7 @@ import { SnapshotReadonlyEditor } from './SnapshotReadonlyEditor';
 import { confirm, message } from '@tauri-apps/plugin-dialog';
 import type { DocStatus } from '@/features/editor/components/DocStatusBar';
 import { normalizePath, getBasename } from '@/shared/utils/pathUtils';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 // ─────────────────────────────────────────
 // Types
@@ -50,12 +51,17 @@ const PARA_MAP: Record<string, string> = {
     '03_Resources': '03_RESOURCE', '04_Archives': '04_ARCHIVE',
 };
 
-function resolveTeamPath(notePath: string): { vaultId: string; filePath: string } | null {
+function resolveTeamPath(notePath: string): { vaultId: string; filePath: string; fileId: string | null } | null {
     const config = syncService.getConfig();
     if (!config) return null;
     const teamVaultId = useSessionStore.getState().teamVaultId;
     if (notePath.startsWith('__team__/')) {
-        return { vaultId: teamVaultId || config.vaultId, filePath: notePath.slice('__team__/'.length) };
+        const parsed = parseTeamNoteId(notePath);
+        return {
+            vaultId: parsed.teamVaultId || teamVaultId || config.vaultId,
+            filePath: parsed.filePath || '',
+            fileId: parsed.fileId,
+        };
     }
     const vaultRoot = (window as any).__slashVaultPath || '';
     let fp = normalizePath(notePath);
@@ -64,7 +70,33 @@ function resolveTeamPath(notePath: string): { vaultId: string; filePath: string 
     const firstDir = fp.split('/')[0];
     const teamDir = PARA_MAP[firstDir];
     const teamFp = teamDir ? teamDir + fp.slice(firstDir.length) : fp;
-    return { vaultId: teamVaultId || config.vaultId, filePath: teamVaultId ? teamFp : fp };
+    return { vaultId: teamVaultId || config.vaultId, filePath: teamVaultId ? teamFp : fp, fileId: null };
+}
+
+function extractSlashId(raw: string): string | null {
+    const match = raw.match(/^---\s*[\r\n]+([\s\S]*?)\r?\n---/);
+    const frontmatter = match?.[1] ?? '';
+    return frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m)?.[1] ?? null;
+}
+
+async function resolveNoteFileId(
+    notePath: string | null,
+    resolved: { vaultId: string; filePath: string; fileId: string | null } | null,
+): Promise<string | null> {
+    if (!notePath) return null;
+    try {
+        if (notePath.startsWith('__team__/')) {
+            if (!resolved) return null;
+            const parsed = parseTeamNoteId(notePath);
+            if (parsed.fileId) return parsed.fileId;
+            return extractSlashId(await syncService.getVaultFile(resolved.vaultId, resolved.filePath));
+        }
+
+        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+        return extractSlashId(await readTextFile(notePath));
+    } catch {
+        return null;
+    }
 }
 
 function hhmm(ts: number): string {
@@ -726,7 +758,7 @@ function GroupRow({ item, onPreview, clickedTs, onItemClick, activeUnreadTsSet, 
 
 export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, readOnly = false }: { notePath: string | null; docStatus?: DocStatus; vaultPath?: string | null; readOnly?: boolean }) {
     const { t } = useTranslation();
-    const { setLastRead, markRead, clearAllUnread } = useCollabNotifyStore();
+    const { setLastRead, markRead, clearAllUnread, getUnreadEntry } = useCollabNotifyStore();
     const globalUnreadFiles = useCollabNotifyStore(s => s.unreadFiles);
     const globalUnreadFolders = useCollabNotifyStore(s => s.unreadFolders);
     const hasAnyUnread = globalUnreadFiles.size > 0 || globalUnreadFolders.size > 0;
@@ -741,6 +773,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
     const [replyingTo,  setReplyingTo]  = useState<string | null>(null);
     const [showCompose, setShowCompose] = useState(false);
     const [composing,   setComposing]   = useState('');
+    const [currentFileId, setCurrentFileId] = useState<string | null>(null);
     // 记录由于交互已消除的事件时间戳
     const [clickedTs,   setClickedTs]   = useState<Set<number>>(new Set());
     const listEndRef = useRef<HTMLDivElement>(null);
@@ -757,17 +790,25 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
 
     const currentStoreUnreadSince = useMemo(() => {
         if (!relPath) return 0;
-        let entry = unreadFiles.get(relPath);
+        let entry = getUnreadEntry(relPath);
+        if (!entry && currentFileId) {
+            for (const v of unreadFiles.values()) {
+                if (v.fileId === currentFileId) {
+                    entry = v;
+                    break;
+                }
+            }
+        }
         if (!entry && basename) {
-            for (const [k, v] of unreadFiles) {
-                if (k === basename || k.endsWith('/' + basename)) {
+            for (const v of unreadFiles.values()) {
+                if (v.filePath === basename || v.filePath.endsWith('/' + basename)) {
                     entry = v;
                     break;
                 }
             }
         }
         return entry?.unreadSince || 0;
-    }, [relPath, basename, unreadFiles]);
+    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId]);
 
     // 冻结当前会话的界定游标，防止 markRead 后界面 NEW 瞬间蒸发
     const [frozenUnreadSince, setFrozenUnreadSince] = useState(0);
@@ -785,7 +826,31 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         setEverLoaded(false); setReplyingTo(null); setShowCompose(false);
         setClickedTs(new Set());
         setFrozenUnreadSince(0); // 切换笔记时强制解冻游标
+        setCurrentFileId(null);
     }, [notePath]); // eslint-disable-line
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadIdentity = async () => {
+            if (resolved?.fileId && !resolved.filePath) {
+                const file = await syncService.getVaultFileById(resolved.vaultId, resolved.fileId);
+                return { fileId: file.fileId, filePath: file.filePath };
+            }
+            return { fileId: await resolveNoteFileId(notePath, resolved), filePath: resolved?.filePath ?? '' };
+        };
+        loadIdentity().then(({ fileId, filePath }) => {
+            if (cancelled) return;
+            setCurrentFileId(fileId);
+            if (resolved && !resolved.filePath && filePath) {
+                resolved.filePath = filePath;
+            }
+        }).catch(() => {
+            if (!cancelled) setCurrentFileId(resolved?.fileId ?? null);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [notePath, resolved?.vaultId, resolved?.filePath]);
 
     // Build groups
     const globalReplies = useMemo(() => comments.filter(c => !!c.parent_id), [comments]);
@@ -857,13 +922,15 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
 
         let hasGlobalRedDot = false;
         let matchedPath = relPath;
-        if (st.unreadFiles.has(relPath)) {
+        const directEntry = st.getUnreadEntry(relPath);
+        if (directEntry || (currentFileId && [...st.unreadFiles.values()].some(entry => entry.fileId === currentFileId))) {
             hasGlobalRedDot = true;
+            matchedPath = directEntry?.filePath ?? relPath;
         } else {
-            for (const [p] of st.unreadFiles) {
-                if (p === basename || p.endsWith('/' + basename)) {
+            for (const entry of st.unreadFiles.values()) {
+                if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
                     hasGlobalRedDot = true;
-                    matchedPath = p;
+                    matchedPath = entry.filePath;
                     break;
                 }
             }
@@ -884,10 +951,10 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         setLoading(true);
         try {
             const [sRes, aRes, cRes, stRes] = await Promise.allSettled([
-                snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 200),
-                annotationService.listAnnotations(resolved.vaultId, resolved.filePath),
-                commentService.listComments(resolved.vaultId, resolved.filePath),
-                collabService.getStatusEvents(resolved.vaultId, resolved.filePath)
+                snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 200, currentFileId),
+                annotationService.listAnnotations(resolved.vaultId, resolved.filePath, currentFileId),
+                commentService.listComments(resolved.vaultId, resolved.filePath, currentFileId),
+                collabService.getStatusEvents(resolved.vaultId, resolved.filePath, currentFileId)
             ]);
             if (sRes.status === 'fulfilled') {
                 setSnapshots(await keepSnapshotsVisibleFromLocalState(sRes.value.snapshots, notePath));
@@ -901,7 +968,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
             window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { annotations: anns } }));
         } finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [notePath]);
+    }, [notePath, currentFileId]);
 
     useEffect(() => {
         loadAll();
@@ -935,12 +1002,12 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
     };
     const handleSendReply = async (parentId: string, parentType: string, text: string) => {
         if (!resolved) return;
-        await commentService.createComment(resolved.vaultId, resolved.filePath, text, parentId, parentType);
+        await commentService.createComment(resolved.vaultId, resolved.filePath, text, parentId, parentType, currentFileId);
         setReplyingTo(null); await loadAll();
     };
     const handleSendComment = async () => {
         if (!resolved || !composing.trim()) return;
-        await commentService.createComment(resolved.vaultId, resolved.filePath, composing.trim());
+        await commentService.createComment(resolved.vaultId, resolved.filePath, composing.trim(), undefined, undefined, currentFileId);
         setComposing(''); setShowCompose(false); await loadAll();
         setTimeout(() => listEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };

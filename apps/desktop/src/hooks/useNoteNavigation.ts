@@ -79,7 +79,12 @@ export function useNoteNavigation(
         const tabTitle = fileName.replace(/\.[^/.]+$/, '');
 
         // Open/activate tab
-        openTab(note.id, tabTitle);
+        openTab(
+            note.id,
+            tabTitle,
+            note.metadata?.slash_id as string | undefined,
+            note.metadata?.team_path as string | undefined,
+        );
 
         // Immediately persist tab state to vault-specific localStorage
         // This ensures the correct note is restored on next app launch

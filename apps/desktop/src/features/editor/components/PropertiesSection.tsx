@@ -90,7 +90,7 @@ export function PropertiesSection({
                             "focus:outline-none focus:ring-2 focus:ring-[#002FA7]/30",
                             // Running: spinner
                             isAIRunning && [
-                                "text-[#002FA7] dark:text-[#002FA7]",
+                                "text-[#002FA7] dark:text-blue-400",
                                 "bg-[#002FA7]/5 dark:bg-[#002FA7]/10",
                                 "cursor-wait",
                             ],
@@ -101,7 +101,7 @@ export function PropertiesSection({
                             ],
                             // Default: brand color with breathing
                             !isAIRunning && !showDone && [
-                                "text-[#002FA7] dark:text-[#002FA7]",
+                                "text-[#002FA7] dark:text-blue-400",
                                 "magic-wand-breathe",
                             ],
                         )}

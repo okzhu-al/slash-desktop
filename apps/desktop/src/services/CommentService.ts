@@ -38,7 +38,7 @@ class CommentServiceImpl {
     }
 
     /** 获取指定文件的评论列表 */
-    async listComments(vaultId: string, filePath: string): Promise<CommentInfo[]> {
+    async listComments(vaultId: string, filePath: string, fileId?: string | null): Promise<CommentInfo[]> {
         const base = this.getBaseUrl();
         const headers = this.getHeaders();
         if (!base || !headers) throw new Error('Sync not configured');
@@ -47,6 +47,7 @@ class CommentServiceImpl {
             vault_id: vaultId,
             file_path: filePath,
         });
+        if (fileId) params.set('file_id', fileId);
 
         const resp = await fetch(`${base}/api/comment/list?${params}`, { headers });
         if (!resp.ok) throw new Error(`Failed to list comments: ${resp.status}`);
@@ -56,7 +57,14 @@ class CommentServiceImpl {
     }
 
     /** 创建评论/回复 */
-    async createComment(vaultId: string, filePath: string, content: string, parentId?: string, parentType?: string): Promise<string> {
+    async createComment(
+        vaultId: string,
+        filePath: string,
+        content: string,
+        parentId?: string,
+        parentType?: string,
+        fileId?: string | null,
+    ): Promise<string> {
         const base = this.getBaseUrl();
         const headers = this.getHeaders();
         if (!base || !headers) throw new Error('Sync not configured');
@@ -64,7 +72,14 @@ class CommentServiceImpl {
         const resp = await fetch(`${base}/api/comment`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ vault_id: vaultId, file_path: filePath, content, parent_id: parentId, parent_type: parentType }),
+            body: JSON.stringify({
+                vault_id: vaultId,
+                file_path: filePath,
+                file_id: fileId,
+                content,
+                parent_id: parentId,
+                parent_type: parentType,
+            }),
         });
         if (!resp.ok) throw new Error(`Failed to create comment: ${resp.status}`);
 

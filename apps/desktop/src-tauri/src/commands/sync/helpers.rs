@@ -223,6 +223,7 @@ fn mapped_file_to_payload(
                 mtime: source_manifest.mtime,
                 logical_clock: 0,
                 file_id: source_manifest.file_id.clone(),
+                directory_id: None,
                 edit_started_at: None,
                 edit_session_id: None,
                 is_user_edit: false,
@@ -255,6 +256,7 @@ fn mapped_file_to_payload(
             mtime: source_manifest.mtime,
             logical_clock: 0,
             file_id,
+            directory_id: None,
             edit_started_at: None,
             edit_session_id: None,
             is_user_edit: false,
@@ -288,6 +290,7 @@ pub fn manifest_to_payload(
                 mtime: m.mtime,
                 logical_clock: 1,
                 file_id: m.file_id.clone(),
+                directory_id: None,
                 edit_started_at: None,
                 edit_session_id: None,
                 is_user_edit: false,
@@ -320,6 +323,7 @@ pub fn manifest_to_payload(
             mtime: m.mtime,
             logical_clock: 1,
             file_id: m.file_id.clone(),
+            directory_id: None,
             edit_started_at: None,
             edit_session_id: None,
             is_user_edit: true,
@@ -445,4 +449,3 @@ pub fn validate_path_in_vault(path: &std::path::Path, vault: &std::path::Path) -
 
     Ok(cleaned_path)
 }
-

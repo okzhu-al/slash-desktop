@@ -17,6 +17,7 @@ import { syncService } from '@/services/SyncService';
 import { useNoteContextOptional } from '@/contexts/NoteContext';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { normalizePath } from '@/shared/utils/pathUtils';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 interface AIBubbleMenuProps {
     editor: Editor | null;
@@ -25,6 +26,12 @@ interface AIBubbleMenuProps {
     notePath?: string;
     /** 是否团队笔记（批注仅在团队笔记中可用）*/
     isTeamNote?: boolean;
+}
+
+function extractSlashId(raw: string): string | null {
+    const match = raw.match(/^---\s*[\r\n]+([\s\S]*?)\r?\n---/);
+    const frontmatter = match?.[1] ?? '';
+    return frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m)?.[1] ?? null;
 }
 
 export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _notePath = '', isTeamNote = false }: AIBubbleMenuProps) {
@@ -216,7 +223,10 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
         };
         const vaultRoot = (window as any).__slashVaultPath || '';
         let rawPath: string = noteCtx?.noteIdRef.current || '';
-        let filePath = normalizePath(rawPath);
+        const parsedTeamNote = parseTeamNoteId(rawPath);
+        let filePath = parsedTeamNote.filePath ?? normalizePath(rawPath);
+        let fileId: string | null = null;
+        if (filePath.startsWith('__team__/')) filePath = filePath.slice('__team__/'.length);
         if (vaultRoot && filePath.startsWith(normalizePath(vaultRoot) + '/')) filePath = filePath.slice(vaultRoot.length + 1);
         if (filePath && !filePath.endsWith('.md')) filePath += '.md';
         if (teamVaultId) {
@@ -224,10 +234,27 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
             const teamDir = PARA_MAP[firstDir];
             if (teamDir) filePath = teamDir + filePath.slice(firstDir.length);
         }
+        try {
+            if (rawPath.startsWith('__team__/')) {
+                if (parsedTeamNote.fileId) {
+                    const file = await syncService.getVaultFileById(parsedTeamNote.teamVaultId || vaultId, parsedTeamNote.fileId);
+                    fileId = file.fileId;
+                    filePath = file.filePath;
+                } else {
+                    fileId = extractSlashId(await syncService.getVaultFile(vaultId, filePath));
+                }
+            } else if (vaultRoot || rawPath) {
+                const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                const absPath = rawPath.startsWith(vaultRoot) ? rawPath : `${vaultRoot.replace(/\/$/, '')}/${filePath}`;
+                fileId = extractSlashId(await readTextFile(absPath));
+            }
+        } catch {
+            fileId = null;
+        }
 
         setAnnotationSubmitting(true);
         try {
-            const id = await annotationService.createAnnotation(vaultId, filePath, anchorId, selectedText, content);
+            const id = await annotationService.createAnnotation(vaultId, filePath, anchorId, selectedText, content, undefined, fileId);
 
             const annotationMark = editor.schema.marks.annotation;
             if (annotationMark) {
@@ -324,4 +351,3 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
         </div>
     );
 }
-

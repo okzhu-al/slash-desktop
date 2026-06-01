@@ -398,7 +398,7 @@ export function TeamDirPanel({
                         className="flex items-center gap-2 cursor-pointer"
                     >
                         <ChevronRight size={14} className={cn('shrink-0 transition-transform text-zinc-400', membersExpanded && 'rotate-90')} />
-                        <Users size={18} className="text-violet-500" />
+                        <Users size={18} className="text-indigo-500 dark:text-blue-400" />
                         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             {t('team.dir_section_members')}
                         </h3>
@@ -409,7 +409,7 @@ export function TeamDirPanel({
                     <div className="flex items-center gap-2">
                         {/* ② 精致紧凑型 邀请成员 (Admin/Owner) */}
                         {canManageDir && availableObservers.length > 0 && (
-                            <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-200/50 dark:border-zinc-700/50 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all">
+                            <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/60 rounded-lg p-0.5 border border-zinc-200/50 dark:border-zinc-700/50 focus-within:border-indigo-500/50 dark:focus-within:border-blue-400/50 focus-within:ring-1 focus-within:ring-indigo-500/20 dark:focus-within:ring-blue-400/20 transition-all">
                                 <div className="relative">
                                     <select
                                         value={inviteUserId}
@@ -431,7 +431,7 @@ export function TeamDirPanel({
                                     className={cn(
                                         "p-1 rounded-md transition-all flex items-center justify-center",
                                         inviteUserId
-                                            ? "text-indigo-600 dark:text-indigo-400 bg-white dark:bg-zinc-700 shadow-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/40"
+                                            ? "text-indigo-600 dark:text-blue-300 bg-white dark:bg-blue-500/10 shadow-sm hover:bg-indigo-50 dark:hover:bg-blue-500/15"
                                             : "text-zinc-400 opacity-50 cursor-not-allowed"
                                     )}
                                     title={t('common.add', '确认添加')}
@@ -463,7 +463,7 @@ export function TeamDirPanel({
                                             {m.dir_role === 'Owner' ? (
                                                 <Crown size={14} className="text-amber-500" />
                                             ) : (
-                                                <User size={14} className="text-indigo-400" />
+                                                <User size={14} className="text-indigo-500 dark:text-blue-400" />
                                             )}
                                             <span className="text-sm text-zinc-800 dark:text-zinc-200">
                                                 {m.display_name || m.username}
@@ -477,7 +477,7 @@ export function TeamDirPanel({
                                                 <button
                                                     onClick={() => handleToggleRole(m.user_id, m.dir_role)}
                                                     disabled={actionLoading === m.user_id}
-                                                    className="px-2 py-0.5 text-xs rounded-md text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-colors"
+                                                    className="px-2 py-0.5 text-xs rounded-md text-indigo-600 dark:text-blue-300 hover:bg-indigo-50 dark:hover:bg-blue-500/15 transition-colors"
                                                     title={m.dir_role === 'Owner' ? t('team.dir_role_demote', '降为 Member') : t('team.dir_role_promote', '升为 Owner')}
                                                 >
                                                     {m.dir_role === 'Owner' ? t('team.dir_role_to_member', '→ Member') : t('team.dir_role_to_owner', '→ Owner')}
@@ -545,7 +545,7 @@ export function TeamDirPanel({
                                                 <td className="px-3 py-2">
                                                     <div className="flex items-center gap-1.5">
                                                         {f.is_dir ? (
-                                                            <Folder size={14} className="text-indigo-400 shrink-0" />
+                                                            <Folder size={14} className="text-indigo-500 dark:text-blue-400 shrink-0" />
                                                         ) : (
                                                             <FileText size={14} className="text-zinc-400 shrink-0" />
                                                         )}
@@ -570,7 +570,7 @@ export function TeamDirPanel({
                                 {files.length > fileVisibleCount && (
                                     <button
                                         onClick={() => setFileVisibleCount(v => v + FILE_PAGE_SIZE)}
-                                        className="w-full py-2 text-sm text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors border-t border-zinc-200 dark:border-zinc-700"
+                                        className="w-full py-2 text-sm text-indigo-600 dark:text-blue-400 hover:text-indigo-700 dark:hover:text-blue-300 hover:bg-indigo-50 dark:hover:bg-blue-500/10 transition-colors border-t border-zinc-200 dark:border-zinc-700"
                                     >
                                         {t('team.dir_show_more', { count: files.length - fileVisibleCount })}
                                     </button>
@@ -682,4 +682,3 @@ export function TeamDirPanel({
         </div>
     );
 }
-

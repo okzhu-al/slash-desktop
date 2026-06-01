@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/utils/cn';
 import { BackButton } from '../components/BackButton';
 import { PasswordInput } from '../components/PasswordInput';
+import { syncInputClass, syncLabelClass } from '../components/formStyles';
 import type { SyncFlowContext } from '../useSyncFlow';
 
 export const JoinTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
@@ -81,21 +82,21 @@ export const JoinTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <div className="space-y-3.5">
 
                     <div className="space-y-1">
-                        <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.server_url')}</label>
-                        <div className="flex w-full rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 focus-within:border-[#002FA7]/60 focus-within:ring-2 focus-within:ring-[#002FA7]/10 transition-all hover:border-zinc-300 dark:hover:border-zinc-500 overflow-hidden text-[13px] shadow-sm">
+                        <label className={syncLabelClass}>{t('sync.server_url')}</label>
+                        <div className="flex w-full gap-2 text-[13px]">
                             <input autoCapitalize="off" autoCorrect="off" type="text"
                                 value={ctx.serverUrl}
                                 onChange={(e) => { ctx.setServerUrl(e.target.value); ctx.setError(''); }}
                                 onBlur={handleUrlBlur}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && ctx.serverUrl.trim()) { (e.target as HTMLInputElement).blur(); } }}
                                 placeholder="http://your-server:3721"
-                                className="flex-1 px-3.5 py-2 bg-transparent text-zinc-800 dark:text-zinc-200 focus:outline-none placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454] min-w-0 font-mono"
+                                className={cn(syncInputClass('blue'), 'min-w-0 flex-1 font-mono')}
                             />
 
                             <div className={cn(
-                                "shrink-0 border-l border-zinc-200 dark:border-zinc-600/60 min-w-[120px] flex items-center relative transition-colors duration-300",
+                                "shrink-0 min-w-[120px] flex items-center relative rounded-lg border border-zinc-200 dark:border-zinc-600/60 transition-colors duration-300 shadow-sm overflow-hidden",
                                 teams.length > 1
-                                    ? "bg-[#002FA7] dark:bg-[#002FA7]/10 hover:bg-[#002FA7] dark:hover:bg-[#002FA7]/20"
+                                    ? "bg-[#002FA7] dark:bg-blue-500/15 hover:bg-[#002FA7] dark:hover:bg-blue-500/20"
                                     : "bg-zinc-100/60 dark:bg-zinc-700/30"
                             )}>
                                 {teams.length > 1 ? (
@@ -103,11 +104,11 @@ export const JoinTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                                         <select
                                             value={ctx.selectedTeamId}
                                             onChange={(e) => ctx.setSelectedTeamId(e.target.value)}
-                                            className="w-full h-full pl-3 pr-8 py-2 bg-transparent text-[#002FA7] dark:text-[#002FA7] focus:outline-none appearance-none cursor-pointer truncate font-medium z-10"
+                                            className="w-full h-full pl-3 pr-8 py-2 bg-transparent text-white dark:text-blue-300 focus:outline-none appearance-none cursor-pointer truncate font-medium z-10"
                                         >
                                             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                         </select>
-                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#002FA7] z-0">
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white dark:text-blue-300 z-0">
                                             <ChevronDown size={14} />
                                         </div>
                                     </>
@@ -121,25 +122,25 @@ export const JoinTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.invite_code_label', 'Invite Code')}</label>
+                        <label className={syncLabelClass}>{t('sync.invite_code_label', 'Invite Code')}</label>
                         <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.inviteCode} onChange={(e) => ctx.setInviteCode(e.target.value)} placeholder={t('sync.invite_code_placeholder')}
-                            className="w-full px-3.5 py-2 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10 transition-all font-mono tracking-widest hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]" />
+                            className={cn(syncInputClass('blue'), 'font-mono tracking-widest')} />
                     </div>
 
                     <div className="border-t border-zinc-100 dark:border-zinc-700/40 my-2" />
 
                     <div className="space-y-1">
-                        <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.username_label')}</label>
+                        <label className={syncLabelClass}>{t('sync.username_label')}</label>
                         <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.username} onChange={(e) => ctx.setUsername(e.target.value)} placeholder={t('sync.username_placeholder')}
-                            className="w-full px-3.5 py-2 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10 transition-all hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]" />
+                            className={syncInputClass('blue')} />
                     </div>
 
                     <div className="space-y-1">
                         <PasswordInput label={t('sync.password_label')} value={ctx.password} onChange={ctx.setPassword}
                             placeholder={t('sync.password_placeholder')} showPassword={ctx.showPassword} onToggleShow={() => ctx.setShowPassword(v => !v)}
                             wrapperClassName=""
-                            labelClassName="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block"
-                            inputClassName="px-3.5 py-2 text-[13px] bg-zinc-50 dark:bg-zinc-800/50 font-mono hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]"
+                            labelClassName={syncLabelClass}
+                            inputClassName="font-mono"
                             focusTheme="blue" />
                     </div>
 
@@ -147,17 +148,17 @@ export const JoinTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                         <PasswordInput label={t('sync.confirm_password_label', 'Confirm Password')} value={ctx.passwordConfirm} onChange={ctx.setPasswordConfirm}
                             placeholder={t('sync.confirm_password_placeholder')} showPassword={ctx.showPassword} onToggleShow={() => ctx.setShowPassword(v => !v)}
                             wrapperClassName=""
-                            labelClassName="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block"
-                            inputClassName="px-3.5 py-2 text-[13px] bg-zinc-50 dark:bg-zinc-800/50 font-mono hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]"
+                            labelClassName={syncLabelClass}
+                            inputClassName="font-mono"
                             focusTheme="blue"
                         />
                     </div>
 
                     <div className="space-y-1">
-                        <label className="text-[11px] font-semibold text-[#545454] dark:text-[#C8C8C8] uppercase tracking-wider mb-1.5 block">{t('sync.team_display_name_label', 'Team Display Name')}</label>
+                        <label className={syncLabelClass}>{t('sync.team_display_name_label', 'Team Display Name')}</label>
                         <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.displayName} onChange={(e) => ctx.setDisplayName(e.target.value)} placeholder={t('sync.display_name_placeholder')}
                             onKeyDown={(e) => e.key === 'Enter' && canSubmit && ctx.handleTeamJoin()}
-                            className="w-full px-3.5 py-2 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10 transition-all hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]" />
+                            className={syncInputClass('blue')} />
                     </div>
                 </div>
 

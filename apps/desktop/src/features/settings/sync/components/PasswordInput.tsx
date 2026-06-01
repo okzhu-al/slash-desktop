@@ -3,6 +3,7 @@
  */
 import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { syncInputBaseClass, syncInputFocusClass } from './formStyles';
 
 interface PasswordInputProps {
     label: string;
@@ -15,7 +16,7 @@ interface PasswordInputProps {
     wrapperClassName?: string;
     inputClassName?: string;
     labelClassName?: string;
-    focusTheme?: 'green' | 'blue';
+    focusTheme?: 'green' | 'blue' | 'amber';
 }
 
 export const PasswordInput = ({
@@ -45,10 +46,9 @@ export const PasswordInput = ({
                 placeholder={placeholder}
                 onKeyDown={onKeyDown}
                 className={cn(
-                    "w-full pr-9 text-[13px] rounded-lg border border-zinc-200 dark:border-zinc-600/60 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-800 dark:text-zinc-200 focus:outline-none transition-all hover:border-zinc-300 dark:hover:border-zinc-500 shadow-sm placeholder:text-[#C8C8C8] dark:placeholder:text-[#545454]",
-                    focusTheme === 'green'
-                        ? "focus:border-[#006540]/60 focus:ring-2 focus:ring-[#006540]/10"
-                        : "focus:border-[#002FA7]/60 focus:ring-2 focus:ring-[#002FA7]/10",
+                    syncInputBaseClass,
+                    syncInputFocusClass[focusTheme],
+                    "pr-9",
                     inputClassName
                 )}
             />

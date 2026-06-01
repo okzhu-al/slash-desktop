@@ -114,7 +114,7 @@ export const WelcomeScreen = ({ onVaultOpened }: WelcomeScreenProps) => {
                 <img 
                     src={slashLogo} 
                     alt="Slash" 
-                    className="w-20 h-20 mb-6 shadow-xl shadow-indigo-900/20 select-none pointer-events-none"
+                    className="w-20 h-20 mb-6 shadow-xl shadow-blue-900/20 select-none pointer-events-none"
                     style={{ borderRadius: '22.5%' }}
                 />
                 <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 mb-2 font-serif">
@@ -131,9 +131,9 @@ export const WelcomeScreen = ({ onVaultOpened }: WelcomeScreenProps) => {
                     <button
                         onClick={() => setIsVaultListOpen(!isVaultListOpen)}
                         disabled={isCreating || availableVaults.length === 0}
-                        className="group relative w-full flex items-center gap-4 p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="group relative w-full flex items-center gap-4 p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-[#002FA7] dark:hover:border-blue-400/60 hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <div className="p-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/20 text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        <div className="p-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-lg group-hover:bg-[#002FA7]/10 dark:group-hover:bg-blue-500/10 text-zinc-500 dark:text-zinc-400 group-hover:text-[#002FA7] dark:group-hover:text-blue-400 transition-colors">
                             <FolderOpen size={24} />
                         </div>
                         <div className="flex-1">
@@ -183,9 +183,9 @@ export const WelcomeScreen = ({ onVaultOpened }: WelcomeScreenProps) => {
                 <button
                     onClick={handleCreateVault}
                     disabled={isCreating}
-                    className="group relative flex items-center gap-4 p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="group relative flex items-center gap-4 p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl hover:border-[#002FA7] dark:hover:border-blue-400/60 hover:shadow-md transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <div className="p-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/20 text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    <div className="p-3 bg-zinc-100 dark:bg-zinc-700/50 rounded-lg group-hover:bg-[#002FA7]/10 dark:group-hover:bg-blue-500/10 text-zinc-500 dark:text-zinc-400 group-hover:text-[#002FA7] dark:group-hover:text-blue-400 transition-colors">
                         <PlusSquare size={24} />
                     </div>
                     <div>

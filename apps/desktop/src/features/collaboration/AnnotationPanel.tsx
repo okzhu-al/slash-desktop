@@ -9,6 +9,7 @@ import { MessageCircle, Trash2, RefreshCw, CornerDownRight, ChevronDown, Chevron
 import { annotationService, AnnotationInfo } from '@/services/AnnotationService';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { syncService } from '@/services/SyncService';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 interface AnnotationPanelProps {
     notePath: string | null;
@@ -82,7 +83,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
 
     const currentUser = useSessionStore.getState().displayName || '';
 
-    const resolveFilePath = useCallback((): { vaultId: string; filePath: string } | null => {
+    const resolveFilePath = useCallback((): { vaultId: string; filePath: string; fileId: string | null } | null => {
         if (!notePath) return null;
         const config = syncService.getConfig();
         if (!config) return null;
@@ -91,9 +92,11 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
 
         // 🛡️ team 笔记路径以 __team__/ 开头，直接剥离即得 server relative_path
         if (notePath.startsWith('__team__/')) {
+            const parsed = parseTeamNoteId(notePath);
             return {
-                vaultId: teamVaultId || config.vaultId,
-                filePath: notePath.slice('__team__/'.length),
+                vaultId: parsed.teamVaultId || teamVaultId || config.vaultId,
+                filePath: parsed.filePath || '',
+                fileId: parsed.fileId,
             };
         }
 
@@ -111,6 +114,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
         return {
             vaultId: teamVaultId || config.vaultId,
             filePath: teamVaultId ? teamFilePath : filePath,
+            fileId: null,
         };
     }, [notePath]);
 
@@ -121,7 +125,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
         setLoading(true);
         setError(null);
         try {
-            const result = await annotationService.listAnnotations(resolved.vaultId, resolved.filePath);
+            const result = await annotationService.listAnnotations(resolved.vaultId, resolved.filePath, resolved.fileId);
             setAnnotations(result);
             // 通知编辑器重新施加高亮 mark（重启后恢复）
             window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { annotations: result } }));
@@ -159,7 +163,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
         try {
             await annotationService.createAnnotation(
                 resolved.vaultId, resolved.filePath,
-                parent.anchor_id, parent.anchor_preview || '', replyContent.trim(), parentId
+                parent.anchor_id, parent.anchor_preview || '', replyContent.trim(), parentId, resolved.fileId
             );
             setReplyContent('');
             setReplyingTo(null);

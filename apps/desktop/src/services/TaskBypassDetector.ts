@@ -9,6 +9,9 @@
  */
 import { syncService } from './SyncService';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useFileSystemStore } from '@/core/fs/store';
+import { readTextFile } from '@tauri-apps/plugin-fs';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 // ============================================================
 // Types
@@ -116,6 +119,46 @@ export async function calculateContentHash(content: string): Promise<string> {
     return hashHex.slice(0, 16);
 }
 
+async function resolveLocalFileId(filePath: string): Promise<string | null> {
+    const parsedTeamNote = parseTeamNoteId(filePath);
+    if (parsedTeamNote.fileId) return parsedTeamNote.fileId;
+
+    const vaultRoot = useFileSystemStore.getState().root?.path;
+    if (!vaultRoot) return null;
+
+    let localPath = filePath;
+    if (filePath.startsWith('__team__/')) {
+        localPath = filePath.slice('__team__/'.length);
+    }
+
+    try {
+        const content = await readTextFile(`${vaultRoot}/${localPath}`);
+        const match = content.match(/^---\s*[\r\n]+([\s\S]*?)\r?\n---/);
+        const frontmatter = match?.[1] ?? '';
+        const idMatch = frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m);
+        return idMatch?.[1] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+async function resolveTaskBypassTarget(filePath: string): Promise<{ filePath: string; fileId: string | null }> {
+    const parsedTeamNote = parseTeamNoteId(filePath);
+    if (parsedTeamNote.fileId) {
+        const teamVaultId = parsedTeamNote.teamVaultId || useSessionStore.getState().teamVaultId;
+        if (teamVaultId) {
+            try {
+                const file = await syncService.getVaultFileById(teamVaultId, parsedTeamNote.fileId);
+                return { filePath: file.filePath, fileId: file.fileId };
+            } catch {
+                return { filePath: parsedTeamNote.filePath ?? '', fileId: parsedTeamNote.fileId };
+            }
+        }
+    }
+
+    return { filePath, fileId: await resolveLocalFileId(filePath) };
+}
+
 // ============================================================
 // 执行旁路同步
 // ============================================================
@@ -147,13 +190,15 @@ export async function executeTaskBypass(
     } catch { /* ignore */ }
 
     let successCount = 0;
+    const target = await resolveTaskBypassTarget(filePath);
 
     for (const change of changes) {
         try {
             const lineHash = await calculateContentHash(change.originalLine);
             const result = await syncService.taskBypass({
                 vault_id: teamVaultId,
-                file_path: filePath,
+                file_path: target.filePath,
+                file_id: target.fileId,
                 line_number: change.lineNumber,
                 line_content_hash: lineHash,
                 checked: change.checked,

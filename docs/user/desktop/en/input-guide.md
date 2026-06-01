@@ -2,7 +2,7 @@
 
 > Status: Current
 > Audience: Users
-> Owner: Product
+> Owner: Slash
 > Last reviewed: 2026-05-31
 
 This guide covers common input patterns, Markdown syntax, and editing actions in the Slash editor.

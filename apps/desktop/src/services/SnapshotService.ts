@@ -5,6 +5,7 @@
 
 import { syncService } from './SyncService';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 // ============================================================
 // Types
@@ -63,7 +64,19 @@ async function resolveTeamNoteCandidates(teamNotePath: string): Promise<string[]
     const vaultRoot = (window as any).__slashVaultPath || '';
     if (!vaultRoot) return [];
 
-    const teamPath = teamNotePath.slice('__team__/'.length).replace(/\\/g, '/');
+    const parsed = parseTeamNoteId(teamNotePath);
+    let teamPath = parsed.filePath?.replace(/\\/g, '/') ?? '';
+    if (!teamPath && parsed.fileId) {
+        try {
+            const teamVaultId = parsed.teamVaultId || useSessionStore.getState().teamVaultId;
+            if (teamVaultId) {
+                teamPath = (await syncService.getVaultFileById(teamVaultId, parsed.fileId)).filePath;
+            }
+        } catch {
+            teamPath = '';
+        }
+    }
+    if (!teamPath) return [];
     const candidates: string[] = [];
 
     for (const [teamPrefix, personalPrefix] of Object.entries(PARA_TEAM_TO_PERSONAL)) {
@@ -112,6 +125,13 @@ export async function getLocalNoteContentHash(notePath: string | null | undefine
                 return await calculateSnapshotHash(await readTextFile(candidate));
             } catch {
                 // Try the next possible local path.
+            }
+        }
+        const parsed = parseTeamNoteId(notePath);
+        if (parsed.fileId) {
+            const teamVaultId = parsed.teamVaultId || useSessionStore.getState().teamVaultId;
+            if (teamVaultId) {
+                return await calculateSnapshotHash((await syncService.getVaultFileById(teamVaultId, parsed.fileId)).content);
             }
         }
     } catch {
@@ -215,7 +235,12 @@ class SnapshotServiceImpl {
     }
 
     /** 获取指定文件的版本快照列表（含 can_revert 权限标志） */
-    async listSnapshots(vaultId: string, filePath: string, limit = 50): Promise<SnapshotListResult> {
+    async listSnapshots(
+        vaultId: string,
+        filePath: string,
+        limit = 50,
+        fileId?: string | null,
+    ): Promise<SnapshotListResult> {
         const base = this.getBaseUrl();
         const headers = this.getHeaders();
         if (!base || !headers) throw new Error('Sync not configured');
@@ -225,6 +250,7 @@ class SnapshotServiceImpl {
             file_path: filePath,
             limit: String(limit),
         });
+        if (fileId) params.set('file_id', fileId);
 
         const resp = await fetch(`${base}/api/snapshot/list?${params}`, { headers });
         if (!resp.ok) throw new Error(`Failed to list snapshots: ${resp.status}`);

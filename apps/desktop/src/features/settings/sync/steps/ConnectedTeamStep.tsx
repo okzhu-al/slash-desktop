@@ -53,7 +53,7 @@ export const ConnectedTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                         <div className="space-y-1.5 text-xs text-[#545454] dark:text-[#C8C8C8]">
                             <p>👥 {ctx.teamVault.name}</p>
                             <p>📄 {t('sync.file_count_label', { count: ctx.teamVault.file_count })}</p>
-                            <div className="flex items-center gap-1 text-[#002FA7] dark:text-[#002FA7]">
+                            <div className="flex items-center gap-1 text-[#002FA7] dark:text-blue-400">
                                 <Link size={10} /><span>{t('sync.binding', { name: ctx.localVaultName })}</span>
                             </div>
                             {tokenUsername && tokenUsername !== '__personal__' && (

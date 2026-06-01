@@ -361,13 +361,13 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
                             {isFolder ? (
                                 <Folder size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7]/70 dark:text-[#002FA7]/70'
+                                        ? 'text-[#002FA7]/70 dark:text-blue-400/80'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             ) : (
                                 <FileText size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7]/70 dark:text-[#002FA7]/70'
+                                        ? 'text-[#002FA7]/70 dark:text-blue-400/80'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             )}

@@ -31,6 +31,7 @@ import {
 } from "@/shared/ui/context-menu";
 import { useSessionStore } from '@/stores/useSessionStore';
 import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
+import { buildLegacyTeamNoteId, buildStableTeamNoteId } from "@/shared/utils/teamNoteIdentity";
 
 export interface SidebarProps {
     onSelectNote: (note: Note) => void;
@@ -53,6 +54,7 @@ export interface SidebarProps {
     activeFolderPath?: string;
     activeFolderMode?: 'personal' | 'team';
     activeTeamNotePath?: string;
+    activeTeamNoteFileId?: string | null;
     onFolderDeleted?: (folderPath: string) => void;
 }
 
@@ -77,6 +79,7 @@ export const Sidebar = ({
     activeFolderPath,
     activeFolderMode,
     activeTeamNotePath,
+    activeTeamNoteFileId,
     onFolderDeleted,
 }: SidebarProps) => {
     const { t } = useTranslation();
@@ -524,13 +527,14 @@ export const Sidebar = ({
                                                         onDirClick={onSelectTeamDir}
                                                         activeDirPath={activeFolderMode === 'team' ? activeFolderPath : undefined}
                                                         activeNotePath={activeTeamNotePath}
+                                                        activeNoteFileId={activeTeamNoteFileId}
                                                         isAdmin={isTeamAdmin}
                                                         isMaintenanceMode={isAdminManageMode}
                                                         onDeleteDir={handleAdminDeleteDir}
                                                         onDeleteFile={handleAdminDeleteFile}
                                                         onRenameDir={handleAdminRenameDir}
                                                         onRenameFile={handleAdminRenameFile}
-                                                        onFileClick={(filePath, editorName) => {
+                                                        onFileClick={(filePath, editorName, fileId) => {
                                                             const teamVaultId = useSessionStore.getState().teamVaultId;
                                                             if (!teamVaultId) return;
                                                             syncService.getVaultFile(teamVaultId, filePath)
@@ -538,10 +542,16 @@ export const Sidebar = ({
                                                                     const fileName = filePath.split('/').pop()?.replace(/\.md$/, '') || filePath;
                                                                     const { metadataService } = await import('@/core/metadata/MetadataService');
                                                                     const { metadata, content: parsedContent } = metadataService.parse(filePath, content);
+                                                                    if (fileId && !metadata.slash_id) metadata.slash_id = fileId;
                                                                     if (editorName) metadata.editor = editorName;
+                                                                    metadata.team_path = filePath;
+                                                                    metadata.team_vault_id = teamVaultId;
+                                                                    const noteId = fileId
+                                                                        ? buildStableTeamNoteId(teamVaultId, fileId)
+                                                                        : buildLegacyTeamNoteId(filePath);
                                                                     onSelectNote({
-                                                                        id: `__team__/${filePath}`,
-                                                                        path: `__team__/${filePath}`,
+                                                                        id: noteId,
+                                                                        path: noteId,
                                                                         title: metadata.title || fileName,
                                                                         content: parsedContent,
                                                                         metadata,

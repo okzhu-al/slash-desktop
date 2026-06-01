@@ -24,7 +24,7 @@ export const ChooseModeStep = ({ ctx }: { ctx: SyncFlowContext }) => {
             <p className="text-sm font-medium text-zinc-700 dark:text-[#C8C8C8]">{t('sync.choose_mode_title', '需要进一步的团队协作？')}</p>
             <div className="space-y-2">
                 <button onClick={() => ctx.setStep('join_team')}
-                    className="w-full text-left rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-[#002FA7] dark:hover:border-[#002FA7] bg-white dark:bg-zinc-800/50 hover:bg-[#002FA7]/50 dark:hover:bg-[#002FA7]/10 p-4 transition-colors group">
+                    className="w-full text-left rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-[#002FA7] dark:hover:border-blue-400 bg-white dark:bg-zinc-800/50 hover:bg-[#002FA7]/50 dark:hover:bg-[#002FA7]/10 p-4 transition-colors group">
                     <div className="flex items-center gap-3">
                         <span className="text-xl leading-none filter grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-300">🎫</span>
                         <div>

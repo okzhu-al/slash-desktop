@@ -59,8 +59,8 @@ export const VaultsTab = ({
                             className={cn(
                                 "group flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer",
                                 currentVault === vault.path
-                                    ? "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 border-[#002FA7]/30 dark:border-[#002FA7]/50"
-                                    : "bg-white dark:bg-zinc-900 border-[#C8C8C8] dark:border-[#C8C8C8]/30 hover:border-[#002FA7]/40 dark:hover:border-[#002FA7]/40"
+                                    ? "bg-[#002FA7]/10 dark:bg-[#002FA7]/20 border-[#002FA7]/30 dark:border-blue-500/35"
+                                    : "bg-white dark:bg-zinc-900 border-[#C8C8C8] dark:border-[#C8C8C8]/30 hover:border-[#002FA7]/40 dark:hover:border-blue-400/45"
                             )}
                         >
                             <div className="flex items-center gap-3 overflow-hidden">

@@ -13,8 +13,9 @@ import { useSessionStore } from '@/stores/useSessionStore';
 import { confirm, message } from '@tauri-apps/plugin-dialog';
 import { CloudOff } from 'lucide-react';
 import { getBasename } from '@/shared/utils/pathUtils';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
-function resolveFilePath(notePath: string | null): { vaultId: string; filePath: string } | null {
+function resolveFilePath(notePath: string | null): { vaultId: string; filePath: string; fileId: string | null } | null {
     if (!notePath) return null;
     const config = syncService.getConfig();
     if (!config) return null;
@@ -24,9 +25,11 @@ function resolveFilePath(notePath: string | null): { vaultId: string; filePath: 
 
     // 🛡️ team 笔记路径以 __team__/ 开头，直接剥离该前缀即得到 server 端 relative_path
     if (notePath.startsWith('__team__/')) {
+        const parsed = parseTeamNoteId(notePath);
         return {
-            vaultId: teamVaultId || config.vaultId,
-            filePath: notePath.slice('__team__/'.length),
+            vaultId: parsed.teamVaultId || teamVaultId || config.vaultId,
+            filePath: parsed.filePath || '',
+            fileId: parsed.fileId,
         };
     }
 
@@ -47,7 +50,34 @@ function resolveFilePath(notePath: string | null): { vaultId: string; filePath: 
     return {
         vaultId: config.vaultId,
         filePath,
+        fileId: null,
     };
+}
+
+function extractSlashId(raw: string): string | null {
+    const match = raw.match(/^---\s*[\r\n]+([\s\S]*?)\r?\n---/);
+    const frontmatter = match?.[1] ?? '';
+    return frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m)?.[1] ?? null;
+}
+
+async function resolveNoteFileId(
+    notePath: string | null,
+    resolved: { vaultId: string; filePath: string; fileId: string | null } | null,
+): Promise<string | null> {
+    if (!notePath) return null;
+    try {
+        if (notePath.startsWith('__team__/')) {
+            if (!resolved) return null;
+            const parsed = parseTeamNoteId(notePath);
+            if (parsed.fileId) return parsed.fileId;
+            return extractSlashId(await syncService.getVaultFile(resolved.vaultId, resolved.filePath));
+        }
+
+        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+        return extractSlashId(await readTextFile(notePath));
+    } catch {
+        return null;
+    }
 }
 
 
@@ -277,6 +307,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [previewSnap, setPreviewSnap] = useState<SnapshotInfo | null>(null);
+    const [currentFileId, setCurrentFileId] = useState<string | null>(null);
 
     // everLoaded: 当前 notePath 下是否已完成一次有效加载（控制空状态显示时机）
     const [everLoaded, setEverLoaded] = useState(false);
@@ -293,6 +324,18 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
     useEffect(() => {
         setSnapshots([]);
         setEverLoaded(false);
+        setCurrentFileId(null);
+    }, [notePath]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const resolved = resolveFilePath(notePath);
+        resolveNoteFileId(notePath, resolved).then((fileId) => {
+            if (!cancelled) setCurrentFileId(fileId);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [notePath]);
 
     // ── 后台无感拉取：有数据才替换，永远不清空 ──
@@ -300,7 +343,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
         const resolved = resolveFilePath(notePath);
         if (!resolved) return;
         try {
-            const result: SnapshotListResult = await snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 50);
+            const result: SnapshotListResult = await snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 50, currentFileId);
             const visibleSnapshots = await keepSnapshotsVisibleFromLocalState(result.snapshots, notePath);
             if (visibleSnapshots.length > 0) {
                 setSnapshots(visibleSnapshots);
@@ -308,7 +351,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
                 setEverLoaded(true);
             }
         } catch { /* 静默失败 */ }
-    }, [notePath]);
+    }, [notePath, currentFileId]);
 
     // ── 主加载：notePath 切换时触发，stale-while-revalidate ──
     const loadSnapshots = useCallback(async () => {
@@ -317,7 +360,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
         setLoading(true);
         setError(null);
         try {
-            const result: SnapshotListResult = await snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 50);
+            const result: SnapshotListResult = await snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 50, currentFileId);
             const visibleSnapshots = await keepSnapshotsVisibleFromLocalState(result.snapshots, notePath);
             if (visibleSnapshots.length > 0) {
                 // 有数据：立即替换
@@ -338,7 +381,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
         } finally {
             setLoading(false);
         }
-    }, [notePath]);
+    }, [notePath, currentFileId]);
 
     useEffect(() => {
         if (isConfigured) {

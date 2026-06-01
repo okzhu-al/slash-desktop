@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/shared/utils/cn';
 import { BackButton } from '../components/BackButton';
 import { PasswordInput } from '../components/PasswordInput';
+import { syncInputClass } from '../components/formStyles';
 import type { SyncFlowContext } from '../useSyncFlow';
 
 export const ReconnectTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
@@ -20,12 +21,12 @@ export const ReconnectTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <div>
                     <label className="text-xs font-medium text-[#545454] dark:text-[#C8C8C8] mb-1 block">{t('sync.server_url')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.serverUrl} onChange={(e) => ctx.setServerUrl(e.target.value)} placeholder="http://your-server:3721"
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#002FA7]/50" />
+                        className={syncInputClass('blue')} />
                 </div>
                 <div>
                     <label className="text-xs font-medium text-[#545454] dark:text-[#C8C8C8] mb-1 block">{t('sync.username_label')}</label>
                     <input autoCapitalize="off" autoCorrect="off" type="text" value={ctx.username} onChange={(e) => ctx.setUsername(e.target.value)} placeholder={t('sync.username_placeholder')}
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[#002FA7]/50" />
+                        className={syncInputClass('blue')} />
                 </div>
                 <PasswordInput label={t('sync.password_label')} value={ctx.password} onChange={ctx.setPassword}
                     placeholder={t('sync.password_placeholder')} showPassword={ctx.showPassword} onToggleShow={() => ctx.setShowPassword(v => !v)}

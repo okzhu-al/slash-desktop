@@ -136,13 +136,22 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
         const config = syncService.getConfig();
         if (!config || !teamVaultId) return;
         const newRole: TeamRole = currentRole === 'Admin' ? 'Observer' : 'Admin';
+        if (userId === currentUserId && newRole === 'Observer') {
+            toast.error(t('team.self_revoke_admin_forbidden'));
+            return;
+        }
         setTogglingRoleId(userId);
         try {
             await teamService.updateMemberRole(config.serverUrl, config.accessToken, teamVaultId, userId, newRole);
             toast.success(newRole === 'Admin' ? t('team.grant_admin') : t('team.revoke_admin'));
             loadData();
         } catch (err) {
-            toast.error(t('team.toggle_role_failed', { error: err instanceof Error ? err.message : err }));
+            const message = err instanceof Error ? err.message : String(err);
+            toast.error(
+                message.includes('Cannot change your own role')
+                    ? t('team.self_revoke_admin_forbidden')
+                    : t('team.toggle_role_failed', { error: message })
+            );
         } finally {
             setTogglingRoleId(null);
         }
@@ -300,8 +309,8 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
             {/* ── 顶栏 ── */}
             <div className="flex items-center justify-between px-8 py-5 border-b border-[#C8C8C8] dark:border-zinc-800">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center shrink-0">
-                        <Users size={18} className="text-[#002FA7]" />
+                    <div className="w-9 h-9 rounded-lg bg-[#002FA7]/10 dark:bg-blue-500/10 flex items-center justify-center shrink-0">
+                        <Users size={18} className="text-[#002FA7] dark:text-blue-400" />
                     </div>
                     <div className="h-9 flex flex-col justify-between py-0.5">
                         <h1 className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100 leading-none">{teamVaultName}</h1>
@@ -369,8 +378,8 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
                         className={cn(
                             'px-4 py-2 text-xs font-medium rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5',
                             activeTab === 'members'
-                                ? 'bg-white dark:bg-zinc-900 border border-b-0 border-[#C8C8C8] dark:border-zinc-800 text-[#002FA7] dark:text-[#002FA7] -mb-px'
-                                : 'text-[#C8C8C8] hover:text-zinc-700 dark:hover:text-zinc-300'
+                                ? 'bg-white dark:bg-zinc-900 border border-b-0 border-[#C8C8C8] dark:border-zinc-800 text-[#002FA7] dark:text-blue-400 -mb-px'
+                                : 'text-[#C8C8C8] hover:text-zinc-700 dark:hover:text-blue-300'
                         )}
                     >
                         <Users size={13} />
@@ -381,8 +390,8 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
                         className={cn(
                             'px-4 py-2 text-xs font-medium rounded-t-lg transition-colors cursor-pointer flex items-center gap-1.5',
                             activeTab === 'storage'
-                                ? 'bg-white dark:bg-zinc-900 border border-b-0 border-[#C8C8C8] dark:border-zinc-800 text-[#002FA7] dark:text-[#002FA7] -mb-px'
-                                : 'text-[#C8C8C8] hover:text-zinc-700 dark:hover:text-zinc-300'
+                                ? 'bg-white dark:bg-zinc-900 border border-b-0 border-[#C8C8C8] dark:border-zinc-800 text-[#002FA7] dark:text-blue-400 -mb-px'
+                                : 'text-[#C8C8C8] hover:text-zinc-700 dark:hover:text-blue-300'
                         )}
                     >
                         <HardDrive size={13} />
@@ -568,7 +577,7 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
                                         className="group flex items-center gap-4 px-5 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors"
                                     >
                                         {/* 头像 */}
-                                        <div className="w-8 h-8 rounded-full bg-[#002FA7]/10 dark:bg-[#002FA7]/20 flex items-center justify-center text-xs font-bold text-[#002FA7] dark:text-[#002FA7] shrink-0 uppercase shadow-sm border border-[#002FA7]/30 dark:border-[#002FA7]/50">
+                                        <div className="w-8 h-8 rounded-full bg-[#002FA7]/10 dark:bg-blue-500/10 flex items-center justify-center text-xs font-bold text-[#002FA7] dark:text-blue-400 shrink-0 uppercase shadow-sm border border-[#002FA7]/30 dark:border-blue-500/30">
                                             {(m.display_name || m.username).charAt(0).toUpperCase()}
                                         </div>
 
@@ -681,19 +690,19 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
 
                     {/* ── 邀请码显示（生成后） ── */}
                     {inviteCode && (
-                        <div className="rounded-xl border border-violet-200 dark:border-violet-800/50 bg-violet-50/50 dark:bg-violet-900/10 p-5 space-y-2">
-                            <p className="text-xs text-violet-500 dark:text-violet-400 font-medium">{t('team.invite_title')}</p>
+                        <div className="rounded-xl border border-blue-200 dark:border-blue-500/25 bg-blue-50/60 dark:bg-blue-500/[0.08] p-5 space-y-2">
+                            <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">{t('team.invite_title')}</p>
                             <div className="flex items-center gap-2">
-                                <code className="flex-1 px-3 py-2 text-sm font-mono bg-white dark:bg-zinc-800 rounded-lg border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300 select-all truncate">
+                                <code className="flex-1 px-3 py-2 text-sm font-mono bg-white dark:bg-zinc-900/80 rounded-lg border border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-200 select-all truncate">
                                     {inviteCode}
                                 </code>
                                 <button
                                     onClick={handleCopyInvite}
-                                    className="p-2 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-800/30 transition-colors cursor-pointer"
+                                    className="p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/15 transition-colors cursor-pointer"
                                 >
                                     {inviteCopied
                                         ? <Check size={16} className="text-[#006540]" />
-                                        : <Copy size={16} className="text-violet-500" />}
+                                        : <Copy size={16} className="text-blue-600 dark:text-blue-300" />}
                                 </button>
                             </div>
                         </div>
@@ -706,5 +715,3 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
         </div>
     );
 }
-
-

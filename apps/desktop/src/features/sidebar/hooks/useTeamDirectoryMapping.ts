@@ -2,8 +2,8 @@
  * useTeamDirectoryMapping — 团队目录映射推导
  *
  * 职责：
- * 1. 加载磁盘 team_path_mappings.json（promoted 目录映射）
- * 2. 从 teamTree + PARA 反向映射推导 teamDirectories
+ * 1. 加载磁盘 team_directory_mappings.json / team_path_mappings.json（promoted 目录映射）
+ * 2. 仅从显式路径映射推导 teamDirectories，避免同名个人目录被远端 teamTree 接管
  * 3. 计算 teamRoots（用于 FileTreeItem 的 team badge 标记）
  */
 
@@ -25,49 +25,69 @@ interface UseTeamDirectoryMappingOptions {
     teamTree: TeamTreeNode[];
 }
 
+async function loadActiveTeamMappings(rootDir: string, teamVaultId: string): Promise<Map<string, string>> {
+    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+    const active = new Map<string, string>();
+
+    try {
+        const raw = await readTextFile(`${rootDir}/.slash/team_directory_mappings.json`);
+        const data = JSON.parse(raw);
+        const directories = data?.teams?.[teamVaultId]?.directories;
+        if (directories && typeof directories === 'object') {
+            for (const mapping of Object.values(directories) as Array<any>) {
+                if (mapping?.status !== 'active') continue;
+                if (typeof mapping.local_path === 'string' && typeof mapping.remote_path === 'string') {
+                    active.set(mapping.local_path, mapping.remote_path);
+                }
+            }
+        }
+    } catch {
+        // v3 mapping is optional during migration.
+    }
+
+    try {
+        const raw = await readTextFile(`${rootDir}/.slash/team_path_mappings.json`);
+        const data = JSON.parse(raw);
+
+        let parsedTeams: Record<string, Record<string, string>> = {};
+
+        if (data.teams) {
+            parsedTeams = data.teams;
+        } else if (data.vault_id && data.mappings) {
+            // V1 兼容 fallback
+            parsedTeams[data.vault_id] = data.mappings;
+        }
+
+        const legacyMappings = parsedTeams[teamVaultId] || {};
+        for (const [sourcePath, targetPath] of Object.entries(legacyMappings)) {
+            if (![...active.values()].includes(targetPath)) {
+                active.set(sourcePath, targetPath);
+            }
+        }
+    } catch {
+        // Legacy mapping is also optional after v3 migration.
+    }
+
+    return active;
+}
+
 export function useTeamDirectoryMapping({ rootDir, hasTeamVault, teamTree }: UseTeamDirectoryMappingOptions) {
     const [activeMappings, setActiveMappings] = useState<Map<string, string>>(new Map());
-    const [hasTeamSyncState, setHasTeamSyncState] = useState(false);
 
-    // 加载磁盘上的 team_path_mappings.json 来区分 Online 与 Offline 目录
+    // 加载磁盘上的显式 mapping 来区分 Online 与 Offline 目录
     useEffect(() => {
         if (!rootDir || !hasTeamVault) {
             setActiveMappings(new Map());
-            setHasTeamSyncState(false);
             return;
         }
         const currentTeamVaultId = useSessionStore.getState().teamVaultId;
+        if (!currentTeamVaultId) {
+            setActiveMappings(new Map());
+            return;
+        }
         (async () => {
             try {
-                const { exists } = await import('@tauri-apps/plugin-fs');
-                const hasState = await exists(`${rootDir}/.slash/team_sync_state.json`);
-                setHasTeamSyncState(hasState);
-            } catch {
-                setHasTeamSyncState(false);
-            }
-
-            try {
-                const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                const raw = await readTextFile(`${rootDir}/.slash/team_path_mappings.json`);
-                const data = JSON.parse(raw);
-
-                let parsedTeams: Record<string, Record<string, string>> = {};
-                
-                if (data.teams) {
-                    parsedTeams = data.teams;
-                } else if (data.vault_id && data.mappings) {
-                    // V1 兼容 fallback
-                    parsedTeams[data.vault_id] = data.mappings;
-                }
-
-                const active = new Map<string, string>();
-                for (const [vaultId, maps] of Object.entries(parsedTeams)) {
-                    if (vaultId === currentTeamVaultId) {
-                        for (const [sourcePath, targetPath] of Object.entries(maps)) {
-                            active.set(sourcePath, targetPath);
-                        }
-                    }
-                }
+                const active = await loadActiveTeamMappings(rootDir, currentTeamVaultId);
                 setActiveMappings(active);
             } catch {
                 setActiveMappings(new Map());
@@ -87,34 +107,63 @@ export function useTeamDirectoryMapping({ rootDir, hasTeamVault, teamTree }: Use
         try {
             const { readTextFile, writeTextFile } = await import('@tauri-apps/plugin-fs');
             const mappingPath = `${rootDir}/.slash/team_path_mappings.json`;
-            const raw = await readTextFile(mappingPath);
-            const data = JSON.parse(raw);
+            let updated = false;
+            const prefixNorm = prefixMatch.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 
-            let parsedTeams: Record<string, Record<string, string>> = {};
-            if (data.teams) {
-                parsedTeams = data.teams;
-            } else if (data.vault_id && data.mappings) {
-                parsedTeams[data.vault_id] = data.mappings;
+            try {
+                const raw = await readTextFile(mappingPath);
+                const data = JSON.parse(raw);
+
+                let parsedTeams: Record<string, Record<string, string>> = {};
+                if (data.teams) {
+                    parsedTeams = data.teams;
+                } else if (data.vault_id && data.mappings) {
+                    parsedTeams[data.vault_id] = data.mappings;
+                }
+
+                const teamMappings = parsedTeams[currentTeamVaultId];
+                if (teamMappings) {
+                    for (const [src, tgt] of Object.entries(teamMappings)) {
+                        const cmpStr = matchRef === 'source' ? src : tgt;
+                        const cmpNorm = cmpStr.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+
+                        if (cmpNorm === prefixNorm || cmpNorm.startsWith(prefixNorm + '/')) {
+                            delete teamMappings[src];
+                            updated = true;
+                        }
+                    }
+
+                    if (updated) {
+                        await writeTextFile(mappingPath, JSON.stringify({ teams: parsedTeams }, null, 2));
+                    }
+                }
+            } catch {
+                // Legacy mapping may not exist in v3-only vaults.
             }
 
-            const teamMappings = parsedTeams[currentTeamVaultId];
-            if (!teamMappings) return;
-
-            const prefixNorm = prefixMatch.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-            let updated = false;
-
-            for (const [src, tgt] of Object.entries(teamMappings)) {
-                const cmpStr = matchRef === 'source' ? src : tgt;
-                const cmpNorm = cmpStr.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-
-                if (cmpNorm === prefixNorm || cmpNorm.startsWith(prefixNorm + '/')) {
-                    delete teamMappings[src];
-                    updated = true;
+            try {
+                const v3Path = `${rootDir}/.slash/team_directory_mappings.json`;
+                const raw = await readTextFile(v3Path);
+                const data = JSON.parse(raw);
+                const directories = data?.teams?.[currentTeamVaultId]?.directories;
+                if (directories && typeof directories === 'object') {
+                    for (const [id, mapping] of Object.entries(directories) as Array<[string, any]>) {
+                        const cmpStr = matchRef === 'source' ? mapping?.local_path : mapping?.remote_path;
+                        const cmpNorm = String(cmpStr || '').replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                        if (cmpNorm === prefixNorm || cmpNorm.startsWith(prefixNorm + '/')) {
+                            delete directories[id];
+                            updated = true;
+                        }
+                    }
+                    if (updated) {
+                        await writeTextFile(v3Path, JSON.stringify(data, null, 2));
+                    }
                 }
+            } catch {
+                // v3 mapping may not exist yet.
             }
 
             if (updated) {
-                await writeTextFile(mappingPath, JSON.stringify({ teams: parsedTeams }, null, 2));
                 setActiveMappings(prev => {
                     const next = new Map(prev);
                     for (const [src, tgt] of next) {
@@ -132,7 +181,8 @@ export function useTeamDirectoryMapping({ rootDir, hasTeamVault, teamTree }: Use
         }
     }, [rootDir]);
 
-    // 从 teamTree 推导 teamDirectories (仅针对 Active Team 同步)
+    // 从显式 mapping 推导 teamDirectories。不能只靠 teamTree + PARA 反推本地路径，
+    // 否则其他成员创建的同名团队目录会把本地同名个人目录误判为团队目录。
     const teamDirectories = useMemo(() => {
         const result = new Map<string, any>();
         if (!rootDir || teamTree.length === 0) return result;
@@ -156,27 +206,6 @@ export function useTeamDirectoryMapping({ rootDir, hasTeamVault, teamTree }: Use
 
         const allTeamPaths = collectPaths(teamTree);
 
-        for (const teamPath of allTeamPaths) {
-            if (
-                teamPath === '01_PROJECTS' ||
-                teamPath === '02_AREAS' ||
-                teamPath === '03_RESOURCE' ||
-                teamPath === '04_ARCHIVE'
-            ) {
-                continue;
-            }
-
-            for (const [teamPrefix, personalPrefix] of Object.entries(PARA_TEAM_TO_PERSONAL)) {
-                if (teamPath === teamPrefix || teamPath.startsWith(teamPrefix + '/')) {
-                    const subPath = teamPath === teamPrefix ? '' : teamPath.slice(teamPrefix.length);
-                    const personalRelPath = personalPrefix + subPath;
-                    const fullPath = `${normRoot}/${personalRelPath}`;
-                    result.set(fullPath, { vaultId: currentTeamVaultId, remotePath: teamPath });
-                    break;
-                }
-            }
-        }
-
         for (const [sourceDir, targetDir] of activeMappings) {
             const fullPath = `${normRoot}/${sourceDir}`;
             if (!result.has(fullPath)) {
@@ -196,19 +225,11 @@ export function useTeamDirectoryMapping({ rootDir, hasTeamVault, teamTree }: Use
         // 🛡️ Windows 兼容
         const normRoot = rootDir.replace(/\\/g, '/').replace(/\/$/, '');
 
-        // 🛡️ 安全加固判定：必须物理存在 team_sync_state.json，且 activeMappings 为空时，才视为全同步模式
-        const isFullTeamVault = hasTeamSyncState && activeMappings.size === 0;
-        if (isFullTeamVault) {
-            Object.values(PARA_TEAM_TO_PERSONAL).forEach(p => {
-                roots.add(`${normRoot}/${p}`);
-            });
-        }
-
         for (const localRelPath of activeMappings.keys()) {
             roots.add(`${normRoot}/${localRelPath}`);
         }
         return roots;
-    }, [rootDir, hasTeamVault, activeMappings, hasTeamSyncState]);
+    }, [rootDir, hasTeamVault, activeMappings]);
 
     return {
         teamDirectories,

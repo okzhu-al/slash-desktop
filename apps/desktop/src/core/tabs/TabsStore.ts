@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { normalizePath } from '@/shared/utils/pathUtils';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 // Note: We use manual saveForVault/loadForVault for per-vault tab persistence
 // instead of Zustand persist middleware to avoid cross-vault state conflicts
 
@@ -7,6 +8,8 @@ export interface Tab {
     id: string;          // Note path (unique identifier)
     title: string;       // Display title (filename without extension)
     isDirty: boolean;    // Has unsaved changes
+    fileId?: string | null; // Stable note identity when known
+    teamPath?: string | null; // Current remote path for stable team note tabs
 }
 
 const normalizeTabId = (id: string): string => {
@@ -24,7 +27,7 @@ interface TabsState {
     activeTabId: string | null;
 
     // Actions
-    openTab: (id: string, title: string) => void;
+    openTab: (id: string, title: string, fileId?: string | null, teamPath?: string | null) => void;
     closeTab: (id: string) => void;
     setActiveTab: (id: string) => void;
     updateTabTitle: (id: string, title: string) => void;
@@ -42,22 +45,26 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
     tabs: [],
     activeTabId: null,
 
-    openTab: (id: string, title: string) => {
+    openTab: (id: string, title: string, fileId?: string | null, teamPath?: string | null) => {
         const normalizedId = normalizeTabId(id);
         const { tabs } = get();
-        const existingTab = tabs.find(t => normalizeTabId(t.id) === normalizedId);
+        const existingTab = tabs.find(t =>
+            (fileId && t.fileId === fileId) || normalizeTabId(t.id) === normalizedId
+        );
 
         if (existingTab) {
-            // Tab already open - update title and activate
+            // Tab already open - update title/path and activate
             set(state => ({
-                activeTabId: existingTab.id,
+                activeTabId: normalizedId,
                 tabs: state.tabs.map(t =>
-                    t.id === existingTab.id ? { ...t, title } : t
+                    t.id === existingTab.id
+                        ? { ...t, id: normalizedId, title, fileId: fileId ?? t.fileId, teamPath: teamPath ?? t.teamPath }
+                        : t
                 ),
             }));
         } else {
             // Add new tab and activate it
-            const newTab: Tab = { id: normalizedId, title, isDirty: false };
+            const newTab: Tab = { id: normalizedId, title, isDirty: false, fileId, teamPath };
             set({
                 tabs: [...tabs, newTab],
                 activeTabId: normalizedId,
@@ -161,6 +168,10 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
                 const { tabs, activeTabId } = JSON.parse(saved);
                 const normalizedTabs: Tab[] = [];
                 for (const tab of (tabs || []) as Tab[]) {
+                    const parsedTeamNote = parseTeamNoteId(tab.id);
+                    if (parsedTeamNote.isTeamNote && !parsedTeamNote.isStable && !tab.fileId) {
+                        continue;
+                    }
                     const normalizedId = normalizeTabId(tab.id);
                     if (!normalizedTabs.some(t => t.id === normalizedId)) {
                         normalizedTabs.push({ ...tab, id: normalizedId });

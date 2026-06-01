@@ -41,6 +41,7 @@ import { syncService } from "@/services/SyncService";
 import { useSessionStore, migrateFromLegacyLocalStorage } from '@/stores/useSessionStore';
 import { getBasename, getParentPath, normalizePath, getRelativePath } from '@/shared/utils/pathUtils';
 import { historyCache } from '@/features/editor/utils/historyCache';
+import { buildLegacyTeamNoteId, buildStableTeamNoteId, parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 function App() {
 
   
@@ -262,7 +263,12 @@ function App() {
     const handleSyncPulled = async (e: Event) => {
       const customEvent = e as CustomEvent;
       const paths = (customEvent.detail?.actually_pulled_paths || customEvent.detail?.pulled_paths) as string[] | undefined;
-      const selectedId = selectedNote?.id ? normalizePath(selectedNote.id).replace(/^__team__\//, '') : '';
+      const selectedTeamPath = selectedNote?.id?.startsWith('__team__/')
+        ? (selectedNote.metadata?.team_path as string | undefined)
+        : undefined;
+      const selectedId = selectedTeamPath
+        ? normalizePath(selectedTeamPath)
+        : selectedNote?.id ? normalizePath(selectedNote.id).replace(/^__team__\//, '') : '';
       // If we don't have paths, or the active note's path is in the pulled_paths
       const shouldRefresh = !paths || (selectedId && paths.some((p: string) => {
         const pulled = normalizePath(p).replace(/^__team__\//, '');
@@ -359,16 +365,29 @@ function App() {
     } else if (tabId.startsWith('__team__/')) {
       // 团队笔记标签：从服务端重新加载内容
       setSelectedFolder(null); setShowTeamManage(false); setShowGlobalGraph(false);
-      const filePath = tabId.replace('__team__/', '');
-      const teamVaultId = useSessionStore.getState().teamVaultId;
+      const parsedTeamNote = parseTeamNoteId(tabId);
+      const teamVaultId = parsedTeamNote.teamVaultId || useSessionStore.getState().teamVaultId;
       if (teamVaultId) {
-        syncService.getVaultFile(teamVaultId, filePath)
-          .then(content => {
+        const loader = parsedTeamNote.fileId
+          ? syncService.getVaultFileById(teamVaultId, parsedTeamNote.fileId)
+          : syncService.getVaultFile(teamVaultId, parsedTeamNote.filePath || '').then(content => ({
+              content,
+              filePath: parsedTeamNote.filePath || '',
+              fileId: '',
+            }));
+        loader
+          .then(({ content, filePath, fileId }) => {
             const fileName = getBasename(filePath).replace(/\.md$/, '') || filePath;
             const { metadata, content: parsedContent } = metadataService.parse(filePath, content);
+            if (fileId && !metadata.slash_id) metadata.slash_id = fileId;
+            metadata.team_path = filePath;
+            metadata.team_vault_id = teamVaultId;
+            const noteId = fileId
+              ? buildStableTeamNoteId(teamVaultId, fileId)
+              : buildLegacyTeamNoteId(filePath);
             selectNote({
-              id: `__team__/${filePath}`,
-              path: `__team__/${filePath}`,
+              id: noteId,
+              path: noteId,
               title: metadata.title || fileName,
               content: parsedContent,
               metadata,
@@ -547,6 +566,7 @@ function App() {
         activeFolderPath={selectedFolder?.path}
         activeFolderMode={selectedFolder?.mode as 'personal' | 'team' | undefined}
         activeTeamNotePath={selectedNote?.id?.startsWith('__team__/') ? selectedNote.id : undefined}
+        activeTeamNoteFileId={selectedNote?.id?.startsWith('__team__/') ? (selectedNote.metadata?.slash_id as string | undefined) : undefined}
         isOpen={sidebarOpen}
         onSettingsClick={() => setIsSettingsOpen(true)}
         onOpenSyncSettings={() => { setSettingsInitialTab('sync'); setIsSettingsOpen(true); }}

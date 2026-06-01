@@ -38,7 +38,7 @@ function LocalFolderNode({ data, selected }: { data: any, selected: boolean }) {
     return (
         <div
             className={`px-4 py-2 border rounded shadow-sm text-center min-w-[120px] transition-colors antialiased
-                        ${selected ? 'border-[#002FA7] dark:border-[#002FA7] ring-1 ring-[#002FA7]' : 'border-zinc-300 dark:border-zinc-500'} 
+                        ${selected ? 'border-[#002FA7] dark:border-blue-500 ring-1 ring-[#002FA7]' : 'border-zinc-300 dark:border-zinc-500'}
                         bg-white dark:bg-[#EFE0CC]`}
             style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
         >

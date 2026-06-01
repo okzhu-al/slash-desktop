@@ -19,6 +19,23 @@ import { syncService } from '@/services/SyncService';
 import { useCollabNotifyStore } from '@/stores/useCollabNotifyStore';
 import { getBasename } from '@/shared/utils/pathUtils';
 import type { RightPanelMode } from '@/shared/ui/layout/TitleBar';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
+
+async function readCurrentFileId(vaultPath: string | null, notePath: string): Promise<string | null> {
+  const parsedTeamNote = parseTeamNoteId(notePath);
+  if (parsedTeamNote.fileId) return parsedTeamNote.fileId;
+  if (!vaultPath) return null;
+  const relPath = notePath.replace(/^__team__\//, '').replace(/^\/|^\.\//g, '');
+  try {
+    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+    const raw = await readTextFile(`${vaultPath.replace(/\/$/, '')}/${relPath}`);
+    const match = raw.match(/^---\s*[\r\n]+([\s\S]*?)\r?\n---/);
+    const frontmatter = match?.[1] ?? '';
+    return frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 interface UseAppEventListenersOptions {
   /** 当前笔记路径的 stable ref */
@@ -221,7 +238,7 @@ export function useAppEventListeners({
 
   // ── 协作事件提示：监听 collab:new-events ──
   useEffect(() => {
-    const handleCollabEvents = (e: Event) => {
+    const handleCollabEvents = async (e: Event) => {
       const { events } = (e as CustomEvent).detail as { events: import('@/services/CollabService').CollabEvent[] };
       if (!events?.length) return;
       markUnreadFromEvents(events);
@@ -229,7 +246,12 @@ export function useAppEventListeners({
       const currentPath = currentNotePathRef.current;
       if (currentPath) {
         const normCurrent = currentPath.replace(/^__team__\//, '').replace(/^\/|^\.\//g, '');
-        const hit = events.some(ev => normCurrent.endsWith(ev.file_path) || ev.file_path.endsWith(getBasename(normCurrent) || ''));
+        const currentFileId = await readCurrentFileId(vaultPath, currentPath);
+        const hit = events.some(ev =>
+          (currentFileId && ev.file_id === currentFileId)
+          || normCurrent.endsWith(ev.file_path)
+          || ev.file_path.endsWith(getBasename(normCurrent) || '')
+        );
         if (hit) {
           setRightPanelMode('activity');
         }
@@ -237,16 +259,20 @@ export function useAppEventListeners({
     };
     window.addEventListener('collab:new-events', handleCollabEvents);
     return () => window.removeEventListener('collab:new-events', handleCollabEvents);
-  }, [markUnreadFromEvents]);
+  }, [markUnreadFromEvents, vaultPath]);
 
   // ── 笔记切换时：有未读事件 → 自动打开协作面板 ──
   useEffect(() => {
     if (!selectedNoteId) return;
+    const parsedTeamNote = parseTeamNoteId(selectedNoteId);
     const relPath = selectedNoteId.replace(/^__team__\//, '').replace(/^\/|^\.\//g, '');
     const basename = getBasename(selectedNoteId) ?? '';
-    const { unreadFiles } = useCollabNotifyStore.getState();
-    const hasUnread = unreadFiles.has(relPath) ||
-      (basename.endsWith('.md') && [...unreadFiles.keys()].some(p => p === basename || p.endsWith('/' + basename)));
+    const { unreadFiles, getUnreadEntry } = useCollabNotifyStore.getState();
+    const hasUnread = Boolean(getUnreadEntry(relPath)) ||
+      Boolean(parsedTeamNote.fileId && [...unreadFiles.values()].some(entry => entry.fileId === parsedTeamNote.fileId)) ||
+      (basename.endsWith('.md') && [...unreadFiles.values()].some(entry =>
+        entry.filePath === basename || entry.filePath.endsWith('/' + basename)
+      ));
     if (hasUnread) {
       setRightPanelMode('activity');
       setGraphPanelOpen(true);

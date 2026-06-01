@@ -16,6 +16,7 @@ import { useNoteContext } from '@/contexts';
 import { syncService } from '@/services/SyncService';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { TextSelection } from '@tiptap/pm/state';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 interface EditorEventsProps {
     editorRef: React.MutableRefObject<any>;
@@ -50,19 +51,35 @@ export function useEditorEvents({
     const unlistenersRef = useRef<Map<string, UnlistenFn | (() => void)>>(new Map());
 
     const matchesPulledPath = (currentNoteId: string, pulledPath: string) => {
-        const current = currentNoteId.replace(/^__team__\//, '').replace(/\\/g, '/');
+        const parsed = parseTeamNoteId(currentNoteId);
+        const current = (parsed.filePath || currentNoteId.replace(/^__team__\//, '')).replace(/\\/g, '/');
         const pulled = pulledPath.replace(/^__team__\//, '').replace(/\\/g, '/');
         return current === pulled || current.endsWith(`/${pulled}`) || pulled.endsWith(`/${current}`);
     };
 
     const readCurrentNoteContent = async (currentNoteId: string) => {
         if (currentNoteId.startsWith('__team__/')) {
-            const teamVaultId = useSessionStore.getState().teamVaultId;
+            const parsed = parseTeamNoteId(currentNoteId);
+            const teamVaultId = parsed.teamVaultId || useSessionStore.getState().teamVaultId;
             if (!teamVaultId) return null;
-            const filePath = currentNoteId.slice('__team__/'.length);
-            return syncService.getVaultFile(teamVaultId, filePath);
+            if (parsed.fileId) {
+                return (await syncService.getVaultFileById(teamVaultId, parsed.fileId)).content;
+            }
+            if (!parsed.filePath) return null;
+            return syncService.getVaultFile(teamVaultId, parsed.filePath);
         }
         return readTextFile(currentNoteId);
+    };
+
+    const readCurrentFileId = async (currentNoteId: string) => {
+        try {
+            const content = await readCurrentNoteContent(currentNoteId);
+            if (!content) return null;
+            const parsed = matter(content);
+            return typeof parsed.data?.slash_id === 'string' ? parsed.data.slash_id : null;
+        } catch {
+            return null;
+        }
     };
 
     const replaceEditorContent = (body: string, logPrefix: string) => {
@@ -325,18 +342,24 @@ export function useEditorEvents({
         window.addEventListener('sync:pulled', handleSyncPulled);
 
         // Visual task toggle event (From Local task panel or Remote collab event)
-        const handleVisualTaskToggle = (e: Event) => {
+        const handleVisualTaskToggle = async (e: Event) => {
             const detail = (e as CustomEvent).detail;
             if (!detail) return;
-            const { notePath, lineNumber, rawText, isCompleted } = detail;
+            const { notePath, fileId, lineNumber, rawText, isCompleted } = detail;
             
             // Only apply if it's the current active note
-            if (noteIdRef.current !== notePath) return;
+            const currentNoteId = noteIdRef.current;
+            if (!currentNoteId) return;
+            if (currentNoteId !== notePath) {
+                if (!fileId) return;
+                const currentFileId = await readCurrentFileId(currentNoteId);
+                if (currentFileId !== fileId) return;
+            }
 
             const editor = editorRef.current;
             if (!editor || editor.isDestroyed) return;
 
-            const targetText = rawText.trim();
+            const targetText = rawText?.trim();
             if (!targetText) return;
 
             let foundPos: number | null = null;

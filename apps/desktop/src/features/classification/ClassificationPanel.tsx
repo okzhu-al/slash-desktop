@@ -316,7 +316,7 @@ export function ClassificationPanel({
                     disabled={loading || isMovingCustom}
                     className={cn(
                         "p-1 rounded-md transition-all duration-300 disabled:opacity-50",
-                        "text-[#002FA7] dark:text-[#002FA7]",
+                        "text-[#002FA7] dark:text-blue-400",
                         "magic-wand-breathe"
                     )}
                     title={t('classification.reanalyze')}
@@ -351,7 +351,7 @@ export function ClassificationPanel({
                                     {step.status === 'completed' ? (
                                         <Check className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
                                     ) : step.status === 'running' ? (
-                                        <Loader2 className="w-4 h-4 text-[#002FA7] dark:text-[#002FA7] animate-spin mt-0.5 shrink-0" />
+                                        <Loader2 className="w-4 h-4 text-[#002FA7] dark:text-blue-400 animate-spin mt-0.5 shrink-0" />
                                     ) : (
                                         <div className="w-4 h-4 rounded-full border border-zinc-200 dark:border-zinc-700 mt-0.5 shrink-0" />
                                     )}
