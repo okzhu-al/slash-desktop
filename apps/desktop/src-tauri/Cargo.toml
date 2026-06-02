@@ -56,3 +56,4 @@ log = "0.4.29"
 dirs = "5"
 semver = "1"
 uuid = { version = "1.23.1", features = ["v4"] }
+arboard = "3.6"

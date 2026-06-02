@@ -12,8 +12,13 @@ export class FileSystemService {
             entries = await readDir(path);
         } catch (e) {
             const msg = String(e);
+            const isMissingPath = msg.includes('No such file')
+                || msg.includes('os error 2')
+                || msg.includes('os error 3')
+                || msg.includes('not found')
+                || msg.includes('找不到指定的路径');
             // Ignore access denied/forbidden path errors, common with system folders or .trash
-            if (!msg.includes('forbidden path') && !msg.includes('Operation not permitted')) {
+            if (!isMissingPath && !msg.includes('forbidden path') && !msg.includes('Operation not permitted')) {
                 console.warn(`[FileSystemService] Failed to read dir ${path}:`, e);
             }
             return [];

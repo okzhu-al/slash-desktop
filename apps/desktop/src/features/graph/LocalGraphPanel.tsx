@@ -175,7 +175,7 @@ function LocalGraphInner({ notePath, onNavigate, refreshKey }: LocalGraphPanelPr
             <div className="flex-1 min-h-0">
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center h-full">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent" />
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 dark:border-blue-400 border-t-transparent dark:border-t-transparent" />
                     </div>
                 ) : visibleNodes.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center h-full text-zinc-400 text-sm">

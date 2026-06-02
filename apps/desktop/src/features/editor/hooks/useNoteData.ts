@@ -244,6 +244,8 @@ export function useNoteData(): UseNoteDataReturn {
             // Emit event for Sidebar to refresh pending title list
             const { emit } = await import('@tauri-apps/api/event');
             await emit('title-confirmed', { path: newPath });
+            const { autoSyncManager } = await import('@/services/AutoSyncManager');
+            autoSyncManager.forceSync('title_renamed');
             return newPath;
         } catch (e) {
             console.error('[useNoteData] Failed to set user title:', e);

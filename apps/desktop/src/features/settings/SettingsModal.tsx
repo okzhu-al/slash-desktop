@@ -167,7 +167,7 @@ export const SettingsModal = ({ isOpen, onClose, onSwitchVault, initialTab, vaul
                                     tab.icon && "flex items-center gap-2",
                                     activeTab === tab.id
                                         ? "bg-white dark:bg-zinc-800 text-[#002FA7] dark:text-blue-400 shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-700"
-                                        : "text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 hover:text-[#002FA7] dark:hover:text-blue-400 hover:shadow-sm hover:ring-1 hover:ring-zinc-200 dark:hover:ring-zinc-700"
+                                        : "text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 hover:text-[#002FA7]/80 dark:hover:text-blue-300 hover:shadow-sm hover:ring-1 hover:ring-zinc-200 dark:hover:ring-zinc-700"
                                 )}
                             >
                                 {tab.icon}

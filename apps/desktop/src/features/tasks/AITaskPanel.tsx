@@ -156,7 +156,7 @@ export const AITaskPanel = ({ notePath, noteContent, onInsertTask }: AITaskPanel
             {/* Header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
                 <ListChecks size={16} className={cn(
-                    suggestions.length > 0 ? "text-indigo-500" : "text-zinc-400"
+                    suggestions.length > 0 ? "text-indigo-500 dark:text-blue-400" : "text-zinc-400"
                 )} />
                 <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     {suggestions.length > 0
@@ -173,7 +173,7 @@ export const AITaskPanel = ({ notePath, noteContent, onInsertTask }: AITaskPanel
                         "ml-auto flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors",
                         extracting
                             ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                            : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-400"
+                            : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200 dark:bg-indigo-900/50 dark:text-blue-400"
                     )}
                 >
                     {extracting ? (

@@ -16,7 +16,7 @@ export const ReconnectTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
             <BackButton to="welcome" onNavigate={ctx.setStep} onClearError={() => ctx.setError('')} />
             <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 space-y-3">
                 <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                    <Users size={16} className="text-[#002FA7]" /> {t('sync.reconnect_team_title')}
+                    <Users size={16} className="text-[#002FA7] dark:text-blue-400" /> {t('sync.reconnect_team_title')}
                 </h4>
                 <div>
                     <label className="text-xs font-medium text-[#545454] dark:text-[#C8C8C8] mb-1 block">{t('sync.server_url')}</label>

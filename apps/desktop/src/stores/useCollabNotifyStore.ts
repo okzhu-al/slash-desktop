@@ -139,9 +139,10 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
 
     markRead: (path, vaultId) => {
         const found = findEntryByPath(get().unreadFiles, path);
-        const key = found?.[0] ?? path;
-        const entry = found?.[1];
-        const latestSeq = entry?.latestSeq ?? 0;
+        if (!found) return;
+
+        const [key, entry] = found;
+        const latestSeq = entry.latestSeq;
 
         set((state) => {
             const next = new Map(state.unreadFiles);
@@ -155,9 +156,9 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         // 异步通知服务端更新已读游标（非阻塞）
         if (latestSeq > 0) {
             import('@/services/CollabService').then(({ collabService }) => {
-                collabService.markFileRead(vaultId, entry?.filePath ?? path, latestSeq, false, {
-                    fileId: entry?.fileId,
-                    directoryId: entry?.directoryId,
+                collabService.markFileRead(vaultId, entry.filePath, latestSeq, false, {
+                    fileId: entry.fileId,
+                    directoryId: entry.directoryId,
                 });
             });
         }

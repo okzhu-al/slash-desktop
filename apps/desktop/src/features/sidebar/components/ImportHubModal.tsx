@@ -205,7 +205,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-blue-400">
                             <CloudDownload className="w-5 h-5" />
                         </div>
                         <div>
@@ -251,7 +251,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                                         key={i}
                                         className="text-[13px] text-zinc-500 dark:text-zinc-400 font-mono text-left animate-in slide-in-from-bottom-2 fade-in duration-300"
                                     >
-                                        <span className="text-indigo-400 font-bold mr-2">&gt;</span>{log}
+                                        <span className="text-indigo-400 dark:text-blue-300 font-bold mr-2">&gt;</span>{log}
                                     </div>
                                 ))}
                             </div>
@@ -276,13 +276,13 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                                     inputUrl.trim()
                                         ? "opacity-50 cursor-not-allowed border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50"
                                         : selectedFile
-                                            ? "border-indigo-500/50 bg-indigo-50/30 dark:bg-indigo-500/5 cursor-pointer"
-                                            : "border-zinc-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
+                                            ? "border-indigo-500/50 dark:border-blue-400/50 bg-indigo-50/30 dark:bg-indigo-500/5 cursor-pointer"
+                                            : "border-zinc-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-blue-400/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer"
                                 )}
                             >
                                 {selectedFile ? (
                                     <div className="flex flex-col items-center text-center">
-                                        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mb-3">
+                                        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-blue-400 rounded-full flex items-center justify-center mb-3">
                                             <Check className="w-6 h-6" />
                                         </div>
                                         <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 break-all max-w-[90%] line-clamp-2">
@@ -292,7 +292,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                                     </div>
                                 ) : (
                                     <div className="flex flex-col items-center text-center text-zinc-500 dark:text-zinc-400">
-                                        <FileUp className="w-10 h-10 mb-3 opacity-50 text-indigo-500" />
+                                        <FileUp className="w-10 h-10 mb-3 opacity-50 text-indigo-500 dark:text-blue-400" />
                                         <span className="text-[15px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                                             {t('import.drop_zone_title', '点击选择文件')}
                                         </span>
@@ -314,7 +314,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                             <div className="flex flex-col">
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <Link2 className={cn("w-5 h-5", selectedFile ? "text-zinc-300 dark:text-zinc-600" : "text-indigo-500/70")} />
+                                        <Link2 className={cn("w-5 h-5", selectedFile ? "text-zinc-300 dark:text-zinc-600" : "text-indigo-500/70 dark:text-blue-400/80")} />
                                     </div>
                                     <input
                                         type="url"
@@ -329,7 +329,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                                             "w-full pl-12 pr-4 py-3.5 bg-zinc-50 dark:bg-zinc-900/50 border rounded-xl outline-none text-sm transition-all text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500",
                                             selectedFile
                                                 ? "border-zinc-200 dark:border-zinc-800 opacity-50 cursor-not-allowed"
-                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:ring-indigo-500/10"
+                                                : "border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-indigo-500/20 dark:focus:ring-blue-400/20 focus:border-indigo-500 dark:focus:border-blue-400/60"
                                         )}
                                     />
                                 </div>
@@ -352,7 +352,7 @@ export const ImportHubModal: React.FC<ImportHubModalProps> = ({ vaultPath, onClo
                                         <select
                                             value={selectedModel}
                                             onChange={(e) => setSelectedModel(e.target.value)}
-                                            className="w-full appearance-none px-4 py-3 pr-10 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+                                            className="w-full appearance-none px-4 py-3 pr-10 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl focus:ring-2 focus:ring-indigo-500 dark:focus:ring-blue-400/30 focus:border-indigo-500 dark:focus:border-blue-400 outline-none text-sm transition-all text-zinc-900 dark:text-zinc-100 font-medium"
                                         >
 
                                             {localModels.length > 0 ? (

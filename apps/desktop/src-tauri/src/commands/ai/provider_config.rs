@@ -642,7 +642,7 @@ pub async fn check_ollama_model(
     let client = ollama_rs::Ollama::new(host, port);
 
     let models = match tokio::time::timeout(
-        std::time::Duration::from_millis(1500),
+        std::time::Duration::from_millis(5000),
         client.list_local_models()
     ).await {
         Ok(Ok(m)) => m,
@@ -680,7 +680,7 @@ pub async fn list_ollama_models(host: String, port: u16) -> Result<Vec<String>, 
     let client = ollama_rs::Ollama::new(host, port);
 
     let models = match tokio::time::timeout(
-        std::time::Duration::from_millis(1500),
+        std::time::Duration::from_millis(5000),
         client.list_local_models()
     ).await {
         Ok(Ok(m)) => m,

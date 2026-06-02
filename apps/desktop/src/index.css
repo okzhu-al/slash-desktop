@@ -193,7 +193,7 @@
 
   /* 🔗 WikiLink 样式 */
   .wiki-link {
-    @apply text-indigo-600 dark:text-indigo-400 cursor-pointer;
+    @apply text-indigo-600 dark:text-blue-400 cursor-pointer;
     text-decoration: none;
     transition: all 0.15s ease;
   }
@@ -253,11 +253,10 @@
      ========================================= */
 
   /* 🛡️ WebKit 帧合并修复：
-     问题：WebKit 将代码块高度变化和光标位置更新拆到两个渲染帧，
-     导致按 Enter 时先看到代码块增高、然后光标才跟上来。
-     修复：contain:content 建立独立渲染边界，强制内容变化和光标更新在同一帧完成。*/
+     避免 paint containment 裁剪代码块 toolbar 浮层；布局隔离仍保留。 */
   .code-block-wrapper {
-    contain: content;
+    contain: layout style;
+    overflow: visible !important;
   }
 
   .prose pre {
@@ -274,8 +273,8 @@
     font-family: var(--font-mono);
     line-height: 1.6;
 
-    /* 避免 overflow-x:auto 在高度变化时触发同步布局重计算 */
-    overflow-x: hidden;
+    /* 菜单和 toolbar 需要能越过代码块边界，横向滚动交给内部 code。 */
+    overflow: visible;
   }
 
   .prose pre code {
@@ -1357,7 +1356,7 @@
   input[type="checkbox"] { @apply mr-2 accent-indigo-500; }
 
   /* 链接 */
-  a { @apply text-indigo-500 hover:underline; }
+  a { @apply text-indigo-500 dark:text-blue-400 hover:underline dark:hover:text-blue-300; }
 
   /* 水平线 */
   hr { @apply my-4 border-zinc-200 dark:border-zinc-700; }

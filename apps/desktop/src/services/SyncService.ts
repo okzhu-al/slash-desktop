@@ -21,11 +21,25 @@ export type SyncStatusType =
     | 'offline';
 
 
+export interface SyncConfig {
+    serverUrl: string;
+    accessToken: string;
+    vaultId: string;
+    userId?: string;
+    accessCode?: string;
+}
+
+export interface DeletedFileInfo {
+    path: string;
+    file_id?: string | null;
+}
+
 export interface SyncResult {
     status: { [key: string]: unknown };
     files_pushed: number;
     files_pulled: number;
     conflicts: string[];
+    server_deleted: DeletedFileInfo[];
     skipped_pulls: string[];
     /** 团队同步 Pull 下来的本地相对路径列表（含 task scan 路径） */
     pulled_paths: string[];
@@ -35,14 +49,6 @@ export interface SyncResult {
     is_maintenance?: boolean;
     /** 维护模式开启时间（Unix 秒）。非 Admin 客户端用此计算剩余倒计时 */
     maintenance_started_at?: number | null;
-}
-
-export interface SyncConfig {
-    serverUrl: string;
-    accessToken: string;
-    vaultId: string;
-    userId?: string;
-    accessCode?: string;
 }
 
 
@@ -180,6 +186,53 @@ class SyncServiceImpl {
                         serverUrl: newConfig.serverUrl,
                         accessToken: newConfig.accessToken,
                         vaultId: newConfig.vaultId,
+                        vaultPath,
+                        editingPaths,
+                        editorName: editorName || null,
+                    });
+                    localStorage.setItem(this.keys.LAST_SYNC, Date.now().toString());
+                    return result;
+                }
+            }
+            throw err;
+        }
+    }
+
+    async syncTeamVault(vaultPath: string, editingPath?: string | null, editorName?: string): Promise<SyncResult> {
+        const config = this.getConfig();
+        if (!config) throw new Error('Sync not configured');
+
+        const editingPaths: string[] = editingPath ? [editingPath] : [];
+
+        try {
+            const result = await invoke<SyncResult>('sync_team_vault', {
+                serverUrl: config.serverUrl,
+                accessToken: config.accessToken,
+                vaultPath,
+                editingPaths,
+                editorName: editorName || null,
+            });
+
+            localStorage.setItem(this.keys.LAST_SYNC, Date.now().toString());
+            return result;
+        } catch (err) {
+            const errMsg = String(err);
+
+            if (errMsg.includes('403') || errMsg.includes('Forbidden')) {
+                const { useSessionStore } = await import('@/stores/useSessionStore');
+                this.clearConfig();
+                useSessionStore.getState().clearAll();
+                window.dispatchEvent(new CustomEvent('sync:auth-expired'));
+                throw err;
+            }
+
+            if (errMsg.includes('401') || errMsg.includes('Unauthorized')) {
+                const refreshed = await this.refreshToken();
+                if (refreshed) {
+                    const newConfig = this.getConfig()!;
+                    const result = await invoke<SyncResult>('sync_team_vault', {
+                        serverUrl: newConfig.serverUrl,
+                        accessToken: newConfig.accessToken,
                         vaultPath,
                         editingPaths,
                         editorName: editorName || null,
@@ -424,6 +477,7 @@ export interface TeamTreeNode {
     path: string;
     is_dir: boolean;
     file_id?: string | null;
+    editor_id?: string | null;
     children?: TeamTreeNode[];
     size?: number;
     editor_username?: string;

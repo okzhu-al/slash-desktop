@@ -8,25 +8,132 @@
 use std::path::PathBuf;
 
 use slash_core::scan_directory_manifests;
-use slash_sync_proto::{SpaceType, SyncNegotiateRequest, SyncPullRequest, SyncPushRequest};
+use slash_sync_proto::{
+    SpaceType, SyncNegotiateRequest, SyncPullRequest, SyncPushRequest, SyncResult, SyncStatus,
+};
 
 use super::client::SyncClient;
 use super::helpers::collect_mapped_files_for_push;
 use super::helpers::filter_oversized_assets;
 use super::path_mapping::{
-    normalize_prefix, resolve_team_pull_path, TeamDirectoryMappingsFile, TeamPathMappingsFile,
-    PARA_TEAM_TO_PERSONAL,
+    normalize_prefix, resolve_team_pull_path, TeamDirectoryMappingsFile, TeamFileMappingsFile,
+    TeamPathMappingsFile, PARA_TEAM_TO_PERSONAL,
 };
 use super::state::{
     expire_edit_session_if_idle, load_unified_state, make_edit_session_id, save_unified_state,
     UnifiedSyncState,
 };
 
+struct TeamSyncingGuard(tauri::AppHandle);
+
+impl TeamSyncingGuard {
+    fn new(app: tauri::AppHandle) -> Self {
+        use tauri::Manager;
+        if let Some(syncing_state) = app.try_state::<crate::state::SyncingState>() {
+            syncing_state
+                .0
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            log::debug!("🔒 [Sync] Set is_syncing = true");
+        }
+        Self(app)
+    }
+}
+
+impl Drop for TeamSyncingGuard {
+    fn drop(&mut self) {
+        use tauri::Manager;
+        if let Some(syncing_state) = self.0.try_state::<crate::state::SyncingState>() {
+            syncing_state
+                .0
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            log::debug!("🔓 [Sync] Set is_syncing = false");
+        }
+    }
+}
+
 /// 检查 server 连接状态
 #[tauri::command]
 pub async fn check_sync_connection(server_url: String) -> Result<bool, String> {
     let sync_client = SyncClient::with_timeout(&server_url, "", 5)?;
     sync_client.check_health().await
+}
+
+/// 触发一次纯团队同步。
+///
+/// 用于 30s team remote poll，避免空闲轮询同时跑个人空间 negotiate。
+#[tauri::command]
+pub async fn sync_team_vault(
+    app: tauri::AppHandle,
+    server_url: String,
+    access_token: String,
+    vault_path: String,
+    editing_paths: Option<Vec<String>>,
+    #[allow(unused_variables)] editor_name: Option<String>,
+) -> Result<SyncResult, String> {
+    let _guard = TeamSyncingGuard::new(app.clone());
+    let editing_set: std::collections::HashSet<String> =
+        editing_paths.unwrap_or_default().into_iter().collect();
+    let root = PathBuf::from(&vault_path);
+    if !root.exists() {
+        return Err("Vault path does not exist".into());
+    }
+
+    let sync_client = SyncClient::new(&server_url, &access_token);
+
+    {
+        use tauri::Manager;
+        let session = app.state::<crate::state::SessionStateWrapper>();
+        let mut s = session.0.lock().unwrap();
+        s.active_server_url = Some(server_url.clone());
+        s.cached_access_token = Some(access_token.clone());
+    }
+
+    let (
+        files_pushed,
+        files_pulled,
+        pulled_paths,
+        actually_pulled_paths,
+        server_deleted,
+        is_maintenance,
+        maintenance_started_at,
+        _caps,
+    ) = match sync_team_full(app.clone(), &sync_client, &root, &editing_set).await {
+        Ok(res) => res,
+        Err(e) => {
+            log::error!("[TeamSync] Failed: {e}");
+            if e.contains("401")
+                || e.contains("Unauthorized")
+                || e.contains("403")
+                || e.contains("Forbidden")
+            {
+                return Err(e);
+            }
+            (0, 0, vec![], vec![], vec![], false, None, None)
+        }
+    };
+
+    let should_refresh_vault = files_pushed > 0
+        || files_pulled > 0
+        || !server_deleted.is_empty()
+        || !actually_pulled_paths.is_empty();
+    std::mem::drop(_guard);
+    if should_refresh_vault {
+        use tauri::Emitter;
+        let _ = app.emit("vault:refresh", ());
+    }
+
+    Ok(SyncResult {
+        status: SyncStatus::Idle,
+        files_pushed,
+        files_pulled,
+        conflicts: vec![],
+        server_deleted,
+        skipped_pulls: vec![],
+        pulled_paths,
+        actually_pulled_paths,
+        is_maintenance,
+        maintenance_started_at,
+    })
 }
 
 /// 获取当前缓存在客户端的同步能力限制
@@ -62,6 +169,7 @@ pub(super) async fn sync_team_full(
         u32,
         Vec<String>,
         Vec<String>,
+        Vec<slash_sync_proto::DeletedFile>,
         bool,
         Option<i64>,
         Option<slash_sync_proto::ServerCapabilities>,
@@ -91,6 +199,7 @@ async fn sync_team_single(
         u32,
         Vec<String>,
         Vec<String>,
+        Vec<slash_sync_proto::DeletedFile>,
         bool,
         Option<i64>,
         Option<slash_sync_proto::ServerCapabilities>,
@@ -104,12 +213,12 @@ async fn sync_team_single(
             if e.contains("HTTP 401") || e.contains("HTTP 403") {
                 return Err(e);
             }
-            return Ok((0, 0, vec![], vec![], false, None, None)); // 其它网络瞬态等非致命错误可以跳过
+            return Ok((0, 0, vec![], vec![], vec![], false, None, None)); // 其它网络瞬态等非致命错误可以跳过
         }
     };
 
     if scope.vault_id.is_empty() {
-        return Ok((0, 0, vec![], vec![], false, None, None)); // 无团队 vault
+        return Ok((0, 0, vec![], vec![], vec![], false, None, None)); // 无团队 vault
     }
 
     let team_vault_id = &scope.vault_id;
@@ -120,6 +229,10 @@ async fn sync_team_single(
     // Step 2: 读取并更新路径映射
     let (path_mappings, reverse_mappings_owned, directory_id_mappings) =
         resolve_path_mappings(root, team_vault_id, &scope);
+    let file_mappings_path = root.join(".slash").join("team_file_mappings.json");
+    let mut file_mappings_file = TeamFileMappingsFile::load(&file_mappings_path);
+    let mut file_mappings = file_mappings_file.active_for_team(team_vault_id);
+    let mut file_mappings_changed = false;
 
     // 构建 target→source 反向映射（用于 Pull）
     let reverse_mappings: std::collections::HashMap<&str, &str> = reverse_mappings_owned
@@ -156,7 +269,7 @@ async fn sync_team_single(
         if cleaned {
             save_unified_state(root, &unified_state);
         }
-        return Ok((0, 0, vec![], vec![], false, None, None)); // 无可同步的目录
+        return Ok((0, 0, vec![], vec![], vec![], false, None, None)); // 无可同步的目录
     }
 
     // Step 3.5: 为所有映射的 scope 目录在本地创建空目录（确保空目录也可见）
@@ -239,6 +352,7 @@ async fn sync_team_single(
     let mut mapped_files = build_team_mapped_files(
         &manifests,
         &path_mappings,
+        &file_mappings,
         &directory_id_mappings,
         &source_dirs,
         &scope,
@@ -271,6 +385,45 @@ async fn sync_team_single(
         }
     }
 
+    for (target_path, manifest) in &mapped_files {
+        if !manifest.relative_path.ends_with(".md") {
+            continue;
+        }
+        let Some(file_id) = manifest.file_id.as_deref() else {
+            continue;
+        };
+        let directory_id =
+            resolve_directory_id_for_team_path(target_path, &path_mappings, &directory_id_mappings);
+        let should_upsert = file_mappings
+            .get(file_id)
+            .map(|existing| {
+                existing.local_path != manifest.relative_path
+                    || existing.remote_path != *target_path
+                    || existing.directory_id != directory_id
+            })
+            .unwrap_or(true);
+        if should_upsert {
+            file_mappings_file.upsert(
+                team_vault_id,
+                file_id.to_string(),
+                manifest.relative_path.clone(),
+                target_path.clone(),
+                directory_id.clone(),
+            );
+            file_mappings.insert(
+                file_id.to_string(),
+                super::path_mapping::TeamFileMapping {
+                    file_id: file_id.to_string(),
+                    local_path: manifest.relative_path.clone(),
+                    remote_path: target_path.clone(),
+                    directory_id,
+                    status: "active".to_string(),
+                },
+            );
+            file_mappings_changed = true;
+        }
+    }
+
     for (_, manifest) in &mapped_files {
         if let Some(entry) = unified_state.get_mut(&manifest.relative_path) {
             expire_edit_session_if_idle(entry, now_secs_for_session);
@@ -287,20 +440,27 @@ async fn sync_team_single(
         root,
         &mapped_files,
     );
+    let deleted_files = deleted_paths
+        .iter()
+        .map(|path| slash_sync_proto::DeletedFile {
+            path: path.clone(),
+            file_id: resolve_deleted_file_id(path, &unified_state, &reverse_mappings),
+        })
+        .collect::<Vec<_>>();
 
     // 🔍 诊断日志
-    log::info!(
+    log::trace!(
         "[TeamSync] source_dirs={:?}, is_full_scope={}, scope_dirs_count={}",
         source_dirs,
         scope.is_full_scope,
         scope.scope_dirs.len()
     );
-    log::info!(
+    log::trace!(
         "[TeamSync] mapped_files count={}, paths:",
         mapped_files.len()
     );
     for (i, (tp, sm)) in mapped_files.iter().enumerate() {
-        log::debug!(
+        log::trace!(
             "[TeamSync]   mapped[{}]: target='{}' source='{}' hash='{}'",
             i,
             tp,
@@ -308,7 +468,11 @@ async fn sync_team_single(
             sm.content_hash
         );
     }
-    log::debug!("[TeamSync] deleted_paths={:?}", deleted_paths);
+    if !deleted_paths.is_empty() {
+        log::debug!("[TeamSync] deleted_paths={:?}", deleted_paths);
+    } else {
+        log::trace!("[TeamSync] deleted_paths=[]");
+    }
 
     // Step 5.5: 存量脏 snapshot 自愈（disk == team_hash 安全重置）
     //
@@ -383,7 +547,7 @@ async fn sync_team_single(
             };
 
             let state_info = unified_state.get(&m.relative_path);
-            log::debug!(
+            log::trace!(
                 "[TeamSync] 📊 file='{}' disk_hash={} team_hash={} local_snapshot={} effective={} base={} eff_base={} guard={}",
                 m.relative_path,
                 &m.content_hash[..8],
@@ -438,9 +602,10 @@ async fn sync_team_single(
         client_clock: 0,
         client_files,
         deleted_paths: deleted_paths.clone(),
+        deleted_files: deleted_files.clone(),
     };
 
-    log::info!(
+    log::trace!(
         "[TeamSync] Negotiate: vault={}, files={}, scope={}",
         team_vault_id,
         negotiate_req.client_files.len(),
@@ -453,12 +618,21 @@ async fn sync_team_single(
 
     let negotiate_resp = sync_client.negotiate(&negotiate_req).await?;
 
-    log::info!(
-        "[TeamSync] Negotiate result: server_needs={}, client_needs={}, server_deleted={}",
-        negotiate_resp.server_needs.len(),
-        negotiate_resp.client_needs.len(),
-        negotiate_resp.server_deleted.len()
-    );
+    if negotiate_resp.server_needs.is_empty()
+        && negotiate_resp.client_needs.is_empty()
+        && negotiate_resp.server_deleted.is_empty()
+    {
+        log::trace!(
+            "[TeamSync] Negotiate result: server_needs=0, client_needs=0, server_deleted=0"
+        );
+    } else {
+        log::info!(
+            "[TeamSync] Negotiate result: server_needs={}, client_needs={}, server_deleted={}",
+            negotiate_resp.server_needs.len(),
+            negotiate_resp.client_needs.len(),
+            negotiate_resp.server_deleted.len()
+        );
+    }
 
     // Step 8: Push — server 需要的文件
     let mut files_pushed = 0u32;
@@ -470,6 +644,9 @@ async fn sync_team_single(
     // 🛡️ BUG-E07 Fix 1: 收集被 server_deleted 删除的本地路径，防止 Step 10 复活状态
     let mut server_deleted_local_paths: std::collections::HashSet<String> =
         std::collections::HashSet::new();
+    let mut frontend_server_deleted: Vec<slash_sync_proto::DeletedFile> = Vec::new();
+    let mut frontend_server_deleted_keys: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
     if !negotiate_resp.server_deleted.is_empty() {
         log::debug!(
             "[TeamSync] Server marked {} files as deleted, removing locally...",
@@ -477,20 +654,30 @@ async fn sync_team_single(
         );
         for deleted_file in &negotiate_resp.server_deleted {
             let deleted_team_path = &deleted_file.path;
-            // 反向查找本地路径：优先使用 reverse_mappings（子目录精确映射）
-            let local_rel = reverse_mappings
-                .iter()
-                .find_map(|(tgt_dir, src_dir)| {
-                    let tgt_prefix = normalize_prefix(tgt_dir);
-                    let src_prefix = normalize_prefix(src_dir);
-                    if deleted_team_path.starts_with(&tgt_prefix) {
-                        let rel = deleted_team_path
-                            .strip_prefix(&tgt_prefix)
-                            .unwrap_or(deleted_team_path);
-                        Some(format!("{src_prefix}{rel}"))
-                    } else {
-                        None
-                    }
+            let mut record_frontend_deleted = |path: String, file_id: Option<String>| {
+                let key = format!("{}:{}", path, file_id.as_deref().unwrap_or(""));
+                if frontend_server_deleted_keys.insert(key) {
+                    frontend_server_deleted.push(slash_sync_proto::DeletedFile { path, file_id });
+                }
+            };
+            // 反向查找本地路径：优先 file_id 文件映射，再使用目录 reverse_mappings。
+            let local_rel = deleted_file
+                .file_id
+                .as_deref()
+                .and_then(|file_id| file_mappings.get(file_id).map(|m| m.local_path.clone()))
+                .or_else(|| {
+                    reverse_mappings.iter().find_map(|(tgt_dir, src_dir)| {
+                        let tgt_prefix = normalize_prefix(tgt_dir);
+                        let src_prefix = normalize_prefix(src_dir);
+                        if deleted_team_path.starts_with(&tgt_prefix) {
+                            let rel = deleted_team_path
+                                .strip_prefix(&tgt_prefix)
+                                .unwrap_or(deleted_team_path);
+                            Some(format!("{src_prefix}{rel}"))
+                        } else {
+                            None
+                        }
+                    })
                 })
                 .or_else(|| {
                     // 回退到 PARA 根级映射（01_PROJECTS→01_Projects 等）
@@ -514,14 +701,20 @@ async fn sync_team_single(
             if let Some(local_rel) = local_rel {
                 // Safety invariant: Ensure local_rel is not actively mapped to a different, valid team_path.
                 // If it is, the server deletion was for an OLD path (due to Admin rename/move), and we MUST NOT delete the expressly mapped local file that is safely synced in the new remote path.
-                let mut current_team_path = None;
-                for (src_dir, tgt_dir) in &path_mappings {
-                    let src_prefix = normalize_prefix(src_dir);
-                    if local_rel.starts_with(&src_prefix) || local_rel == src_dir.as_str() {
-                        let rel = local_rel.strip_prefix(&src_prefix).unwrap_or(&local_rel);
-                        let tgt_prefix = normalize_prefix(tgt_dir);
-                        current_team_path = Some(format!("{tgt_prefix}{rel}"));
-                        break;
+                let mut current_team_path = deleted_file
+                    .file_id
+                    .as_deref()
+                    .and_then(|file_id| file_mappings.get(file_id))
+                    .map(|mapping| mapping.remote_path.clone());
+                if current_team_path.is_none() {
+                    for (src_dir, tgt_dir) in &path_mappings {
+                        let src_prefix = normalize_prefix(src_dir);
+                        if local_rel.starts_with(&src_prefix) || local_rel == src_dir.as_str() {
+                            let rel = local_rel.strip_prefix(&src_prefix).unwrap_or(&local_rel);
+                            let tgt_prefix = normalize_prefix(tgt_dir);
+                            current_team_path = Some(format!("{tgt_prefix}{rel}"));
+                            break;
+                        }
                     }
                 }
 
@@ -539,8 +732,14 @@ async fn sync_team_single(
                 let local_full_path = root.join(&local_rel);
 
                 // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-                if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&local_full_path, &root) {
-                    log::error!("[TeamSync] 🚫 Path traversal blocked on delete: path={}, err={}", local_rel, e);
+                if let Err(e) =
+                    crate::commands::sync::helpers::validate_path_in_vault(&local_full_path, &root)
+                {
+                    log::error!(
+                        "[TeamSync] 🚫 Path traversal blocked on delete: path={}, err={}",
+                        local_rel,
+                        e
+                    );
                     continue;
                 }
 
@@ -573,14 +772,26 @@ async fn sync_team_single(
                         if let Some(parent) = local_full_path.parent() {
                             let _ = std::fs::remove_dir(parent); // 仅删除空目录，非空会自动失败
                         }
+                        record_frontend_deleted(local_rel.clone(), deleted_file.file_id.clone());
                         server_deleted_local_paths.insert(local_rel.clone());
+                        if let Some(file_id) = deleted_file.file_id.as_deref() {
+                            file_mappings_file.mark_deleted(team_vault_id, file_id);
+                            file_mappings.remove(file_id);
+                            file_mappings_changed = true;
+                        }
                         if let Some(entry) = unified_state.get_mut(&local_rel) {
                             entry.team_hash.clear();
                             entry.local_snapshot.clear();
                         }
                     }
                 } else {
+                    record_frontend_deleted(local_rel.clone(), deleted_file.file_id.clone());
                     server_deleted_local_paths.insert(local_rel.clone());
+                    if let Some(file_id) = deleted_file.file_id.as_deref() {
+                        file_mappings_file.mark_deleted(team_vault_id, file_id);
+                        file_mappings.remove(file_id);
+                        file_mappings_changed = true;
+                    }
                     if let Some(entry) = unified_state.get_mut(&local_rel) {
                         entry.team_hash.clear();
                         entry.local_snapshot.clear();
@@ -591,6 +802,7 @@ async fn sync_team_single(
                     "[TeamSync] Cannot resolve local path for deleted team file: {}",
                     deleted_team_path
                 );
+                record_frontend_deleted(deleted_team_path.clone(), deleted_file.file_id.clone());
             }
         }
     }
@@ -640,6 +852,14 @@ async fn sync_team_single(
     if !negotiate_resp.server_needs.is_empty() {
         let mut files_to_push =
             collect_mapped_files_for_push(root, &mapped_files, &negotiate_resp.server_needs);
+
+        for payload in &mut files_to_push {
+            payload.manifest.directory_id = resolve_directory_id_for_team_path(
+                &payload.manifest.relative_path,
+                &path_mappings,
+                &directory_id_mappings,
+            );
+        }
 
         // OPT-04 第二道保险：剥离超出 Team 大小限制的资产引用
         for payload in &mut files_to_push {
@@ -785,7 +1005,10 @@ async fn sync_team_single(
                         let local_path = root.join(&m.relative_path);
 
                         // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-                        if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&local_path, root) {
+                        if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(
+                            &local_path,
+                            root,
+                        ) {
                             log::error!("[Phase6 TeamSync] 🚫 Path traversal blocked on asset check: path={}, err={}", m.relative_path, e);
                             continue;
                         }
@@ -932,11 +1155,12 @@ async fn sync_team_single(
 
     let mut files_pulled = 0u32;
     let mut pulled_local_paths: Vec<String> = Vec::new();
-    let mut pulled_hashes: Vec<(String, String)> = Vec::new();
+    let mut pulled_hashes: Vec<(String, String, String)> = Vec::new();
     let mut pull_dl_created = 0u32;
     let mut pull_dl_revived = 0u32;
     let mut pull_dl_skipped_valid = 0u32;
     let mut pull_dl_skipped_inflight = 0u32;
+    let mut moved_team_file_paths: Vec<(String, String)> = Vec::new();
     if !pullable_paths.is_empty() {
         let pull_req = SyncPullRequest {
             vault_id: team_vault_id.clone(),
@@ -946,13 +1170,27 @@ async fn sync_team_single(
         let pull_resp = sync_client.pull(&pull_req).await?;
 
         for file in &pull_resp.files {
-            // 反向路径映射: target_path → source_path
-            let local_path =
-                resolve_team_pull_path(root, &file.manifest.relative_path, &reverse_mappings);
+            let (local_path, local_rel) = resolve_team_pull_local_path(
+                root,
+                team_vault_id,
+                &file.manifest,
+                &reverse_mappings,
+                &scope,
+                &mut file_mappings_file,
+                &mut file_mappings,
+                &mut file_mappings_changed,
+                &mut moved_team_file_paths,
+            );
 
             // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-            if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&local_path, &root) {
-                log::error!("[TeamSync] 🚫 Path traversal blocked on write: path={}, err={}", file.manifest.relative_path, e);
+            if let Err(e) =
+                crate::commands::sync::helpers::validate_path_in_vault(&local_path, &root)
+            {
+                log::error!(
+                    "[TeamSync] 🚫 Path traversal blocked on write: path={}, err={}",
+                    file.manifest.relative_path,
+                    e
+                );
                 continue;
             }
 
@@ -961,10 +1199,6 @@ async fn sync_team_single(
             }
 
             // 🛡️ 安全兜底：跳过正在编辑中的文件
-            let local_rel = local_path
-                .strip_prefix(root)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
             if editing_set.contains(&local_rel) {
                 log::info!(
                     "[TeamSync] ⚠️ Skip pull (editing): {} → {}",
@@ -1027,6 +1261,7 @@ async fn sync_team_single(
                 pulled_hashes.push((
                     file.manifest.relative_path.clone(),
                     file.manifest.content_hash.clone(),
+                    local_rel.clone(),
                 ));
                 continue;
             }
@@ -1038,6 +1273,7 @@ async fn sync_team_single(
                     pulled_hashes.push((
                         file.manifest.relative_path.clone(),
                         file.manifest.content_hash.clone(),
+                        local_rel.clone(),
                     ));
                     log::info!(
                         "[TeamSync] ✅ Pulled: {} → {}",
@@ -1076,6 +1312,20 @@ async fn sync_team_single(
 
     // Step 10: 更新统一同步状态
     let mut new_state = unified_state;
+
+    for (old_local, new_local) in &moved_team_file_paths {
+        if old_local == new_local {
+            continue;
+        }
+        if let Some(mut old_entry) = new_state.remove(old_local) {
+            old_entry.team_hash.clear();
+            old_entry.local_snapshot.clear();
+            old_entry.file_id = None;
+            if !old_entry.personal_hash.is_empty() {
+                new_state.insert(old_local.clone(), old_entry);
+            }
+        }
+    }
 
     // 已删除文件 → 清空 team_hash + local_snapshot，防止下轮重复发送 delete
     for deleted_target in &deleted_paths {
@@ -1118,6 +1368,12 @@ async fn sync_team_single(
                     break;
                 }
             }
+        }
+        // 历史状态兼容：如果 unified_state 的 key 本身就是团队路径，
+        // 上面的本地 PARA 回退清不到对应条目，这里按 target 直接清理。
+        if let Some(entry) = new_state.get_mut(deleted_target.as_str()) {
+            entry.team_hash.clear();
+            entry.local_snapshot.clear();
         }
     }
 
@@ -1162,38 +1418,16 @@ async fn sync_team_single(
     }
 
     // Pull 的文件 → 更新 team_hash + local_snapshot（用 pull 后的磁盘 hash）
-    for (team_path, server_hash) in &pulled_hashes {
-        // 反向查找本地路径
-        if let Some(local_rel) = pulled_local_paths.iter().find(|lp| {
-            // [OPT-04] 资产直通：assets 路径本身就是相对路径，没有 PARA 转换
-            if team_path.starts_with("assets/") || team_path.starts_with(".slash/assets/") {
-                return team_path == *lp;
-            }
-
-            // 通过 reverse_mappings 验证对应关系
-            for (tgt_dir, src_dir) in &reverse_mappings {
-                let tgt_prefix = normalize_prefix(tgt_dir);
-                let src_prefix = normalize_prefix(src_dir);
-                if team_path.starts_with(&tgt_prefix) {
-                    let relative = team_path.strip_prefix(&tgt_prefix).unwrap_or(team_path);
-                    let expected_local = format!("{src_prefix}{relative}");
-                    if **lp == expected_local {
-                        return true;
-                    }
-                }
-            }
-            false
-        }) {
-            let entry = new_state.entry(local_rel.clone()).or_default();
-            entry.team_hash = server_hash.clone();
-            // 重新读取磁盘 hash 作为快照
-            let local_path = root.join(local_rel);
-            if let Ok(content) = std::fs::read(&local_path) {
-                let disk_hash = slash_core::calculate_content_hash_bytes(&content);
-                entry.local_snapshot = disk_hash;
-            } else {
-                entry.local_snapshot = server_hash.clone();
-            }
+    for (_, server_hash, local_rel) in &pulled_hashes {
+        let entry = new_state.entry(local_rel.clone()).or_default();
+        entry.team_hash = server_hash.clone();
+        // 重新读取磁盘 hash 作为快照
+        let local_path = root.join(local_rel);
+        if let Ok(content) = std::fs::read(&local_path) {
+            let disk_hash = slash_core::calculate_content_hash_bytes(&content);
+            entry.local_snapshot = disk_hash;
+        } else {
+            entry.local_snapshot = server_hash.clone();
         }
     }
 
@@ -1262,6 +1496,9 @@ async fn sync_team_single(
         }
     }
 
+    if file_mappings_changed {
+        file_mappings_file.save(&file_mappings_path);
+    }
     save_unified_state(root, &new_state);
 
     // 记录真正写盘的文件路径（task scan 扩充之前的快照）
@@ -1276,7 +1513,7 @@ async fn sync_team_single(
         }
     }
 
-    log::debug!(
+    log::trace!(
         "[TeamSync] Returning {} team .md paths for task scanning ({} actually pulled), is_maintenance={}",
         pulled_local_paths.len(),
         actually_pulled_local_paths.len(),
@@ -1288,6 +1525,7 @@ async fn sync_team_single(
         files_pulled,
         pulled_local_paths,
         actually_pulled_local_paths,
+        frontend_server_deleted,
         negotiate_resp.is_maintenance,
         negotiate_resp.maintenance_started_at,
         negotiate_resp.server_capabilities,
@@ -1338,8 +1576,7 @@ fn resolve_path_mappings(
         .cloned()
         .unwrap_or_default();
     let mut path_mappings = directory_mappings_file.to_path_mappings(team_vault_id);
-    let mut directory_id_mappings =
-        directory_mappings_file.to_directory_id_mappings(team_vault_id);
+    let mut directory_id_mappings = directory_mappings_file.to_directory_id_mappings(team_vault_id);
 
     let scope_by_path: std::collections::HashMap<String, &slash_sync_proto::TeamScopeDir> = scope
         .scope_dirs
@@ -1347,13 +1584,83 @@ fn resolve_path_mappings(
         .chain(scope.managed_scope_dirs.iter())
         .map(|sd| (sd.directory_path.trim_end_matches('/').to_string(), sd))
         .collect();
+    let scope_by_id: std::collections::HashMap<String, &slash_sync_proto::TeamScopeDir> = scope
+        .scope_dirs
+        .iter()
+        .chain(scope.managed_scope_dirs.iter())
+        .filter_map(|sd| sd.directory_id.as_deref().map(|id| (id.to_string(), sd)))
+        .collect();
 
     let mut directory_mappings_changed = false;
+
+    // UUID-First: directory_id is the identity; remote_path is only the current
+    // location. After a team directory rename, refresh persisted mappings before
+    // any scan/push so stale paths cannot resurrect the old directory.
+    if let Some(team) = directory_mappings_file.teams.get_mut(team_vault_id) {
+        for mapping in team.directories.values_mut() {
+            if mapping.status != "active" {
+                continue;
+            }
+            let Some(scope_dir) = scope_by_id.get(&mapping.directory_id) else {
+                continue;
+            };
+            let current_remote = scope_dir.directory_path.trim_end_matches('/').to_string();
+            if mapping.remote_path.trim_end_matches('/') != current_remote {
+                let previous_local = mapping.local_path.clone();
+                let next_local = team_path_to_personal_path(&current_remote)
+                    .unwrap_or_else(|| previous_local.clone());
+                let next_local = if next_local == previous_local {
+                    next_local
+                } else {
+                    choose_team_local_path(
+                        root,
+                        &next_local,
+                        &path_mappings,
+                        scope_dir.owner_display_name.as_deref(),
+                    )
+                };
+                if next_local != previous_local {
+                    let previous_local_dir = root.join(&previous_local);
+                    let next_local_dir = root.join(&next_local);
+                    if previous_local_dir.exists() && !next_local_dir.exists() {
+                        if let Some(parent) = next_local_dir.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        if let Err(e) = std::fs::rename(&previous_local_dir, &next_local_dir) {
+                            log::warn!(
+                                "[TeamSync] Failed to move local mapping dir '{}' → '{}': {}",
+                                previous_local,
+                                next_local,
+                                e
+                            );
+                        }
+                    }
+                    mapping.local_path = next_local;
+                }
+                log::debug!(
+                    "[TeamSync] Refreshed directory mapping path by id: {} {} → {}",
+                    mapping.directory_id,
+                    mapping.remote_path,
+                    current_remote
+                );
+                mapping.remote_path = current_remote;
+                mapping.role = scope_dir.role.clone();
+                directory_mappings_changed = true;
+            }
+        }
+    }
+    if directory_mappings_changed {
+        path_mappings = directory_mappings_file.to_path_mappings(team_vault_id);
+        directory_id_mappings = directory_mappings_file.to_directory_id_mappings(team_vault_id);
+    }
 
     // 迁移旧 path mapping：只迁移能从 scope 里唯一拿到 directory_id 的条目。
     for (local_path, remote_path) in &legacy_path_mappings {
         let remote_trimmed = remote_path.trim_end_matches('/');
-        if path_mappings.values().any(|target| target == remote_trimmed) {
+        if path_mappings
+            .values()
+            .any(|target| target == remote_trimmed)
+        {
             continue;
         }
         let Some(scope_dir) = scope_by_path.get(remote_trimmed) else {
@@ -1404,7 +1711,12 @@ fn resolve_path_mappings(
         for (team_prefix, personal_prefix) in PARA_TEAM_TO_PERSONAL {
             if let Some(rest) = team_dir.strip_prefix(team_prefix) {
                 let base_personal_dir = format!("{personal_prefix}{rest}");
-                let personal_dir = choose_team_local_path(root, &base_personal_dir, &path_mappings);
+                let personal_dir = choose_team_local_path(
+                    root,
+                    &base_personal_dir,
+                    &path_mappings,
+                    sd.owner_display_name.as_deref(),
+                );
                 if !path_mappings.contains_key(&personal_dir) {
                     log::debug!(
                         "[TeamSync] T-3 auto-mapping v3: {} → {} (directory_id={}, role={})",
@@ -1486,7 +1798,8 @@ fn resolve_path_mappings(
         directory_mappings_file.save(&directory_mappings_path);
         log::debug!(
             "[TeamSync] Saved {} updated UUID-first mappings for active team {}",
-            path_mappings.len(), team_vault_id
+            path_mappings.len(),
+            team_vault_id
         );
     }
     if legacy_mappings_changed {
@@ -1557,18 +1870,301 @@ fn choose_team_local_path(
     root: &std::path::Path,
     base_personal_dir: &str,
     path_mappings: &std::collections::HashMap<String, String>,
+    owner_display_name: Option<&str>,
 ) -> String {
     if !root.join(base_personal_dir).exists() || path_mappings.contains_key(base_personal_dir) {
         return base_personal_dir.to_string();
     }
 
-    let mut candidate = format!("{base_personal_dir} (Team)");
+    let owner_label = owner_display_name
+        .map(sanitize_owner_label)
+        .filter(|label| !label.is_empty())
+        .unwrap_or_else(|| "Team".to_string());
+    let base_candidate = format!("{base_personal_dir} - {owner_label}");
+    let mut candidate = base_candidate.clone();
     let mut index = 2;
     while root.join(&candidate).exists() || path_mappings.contains_key(&candidate) {
-        candidate = format!("{base_personal_dir} (Team {index})");
+        candidate = format!("{base_candidate} {index}");
         index += 1;
     }
     candidate
+}
+
+fn resolve_team_pull_local_path(
+    root: &std::path::Path,
+    team_vault_id: &str,
+    manifest: &slash_sync_proto::FileManifest,
+    reverse_mappings: &std::collections::HashMap<&str, &str>,
+    scope: &slash_sync_proto::TeamScopeResponse,
+    file_mappings_file: &mut TeamFileMappingsFile,
+    file_mappings: &mut std::collections::HashMap<String, super::path_mapping::TeamFileMapping>,
+    file_mappings_changed: &mut bool,
+    moved_team_file_paths: &mut Vec<(String, String)>,
+) -> (std::path::PathBuf, String) {
+    let default_local_path =
+        resolve_team_pull_path(root, &manifest.relative_path, reverse_mappings);
+    let default_local_rel = default_local_path
+        .strip_prefix(root)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| manifest.relative_path.clone());
+
+    let is_asset = manifest.relative_path.starts_with("assets/")
+        || manifest.relative_path.starts_with(".slash/assets/");
+    let Some(file_id) = manifest.file_id.as_deref() else {
+        return (default_local_path, default_local_rel);
+    };
+    if is_asset {
+        return (default_local_path, default_local_rel);
+    }
+
+    let owner_display_name = owner_display_name_for_team_path(scope, &manifest.relative_path);
+    let desired_local_rel =
+        choose_team_file_local_path(root, &default_local_rel, file_id, owner_display_name);
+
+    let local_rel = if let Some(existing) = file_mappings.get(file_id) {
+        if existing.remote_path == manifest.relative_path {
+            existing.local_path.clone()
+        } else {
+            let previous_local = existing.local_path.clone();
+            if previous_local != desired_local_rel {
+                move_team_file_local_path(root, &previous_local, &desired_local_rel, file_id);
+                moved_team_file_paths.push((previous_local, desired_local_rel.clone()));
+            }
+            desired_local_rel
+        }
+    } else {
+        desired_local_rel
+    };
+
+    let directory_id = manifest.directory_id.clone();
+    let should_upsert = file_mappings
+        .get(file_id)
+        .map(|existing| {
+            existing.local_path != local_rel
+                || existing.remote_path != manifest.relative_path
+                || existing.directory_id != directory_id
+        })
+        .unwrap_or(true);
+
+    if should_upsert {
+        file_mappings_file.upsert(
+            team_vault_id,
+            file_id.to_string(),
+            local_rel.clone(),
+            manifest.relative_path.clone(),
+            directory_id,
+        );
+        file_mappings.insert(
+            file_id.to_string(),
+            super::path_mapping::TeamFileMapping {
+                file_id: file_id.to_string(),
+                local_path: local_rel.clone(),
+                remote_path: manifest.relative_path.clone(),
+                directory_id: manifest.directory_id.clone(),
+                status: "active".to_string(),
+            },
+        );
+        *file_mappings_changed = true;
+    }
+
+    (root.join(&local_rel), local_rel)
+}
+
+fn move_team_file_local_path(
+    root: &std::path::Path,
+    previous_local: &str,
+    next_local: &str,
+    file_id: &str,
+) {
+    let previous_path = root.join(previous_local);
+    let next_path = root.join(next_local);
+    if !previous_path.exists() || previous_local == next_local {
+        return;
+    }
+    if next_path.exists() {
+        if file_has_id(&next_path, file_id) {
+            let _ = std::fs::remove_file(&previous_path);
+        }
+        return;
+    }
+    if let Some(parent) = next_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(e) = std::fs::rename(&previous_path, &next_path) {
+        log::warn!(
+            "[TeamSync] Failed to move team file local landing '{}' → '{}': {}",
+            previous_local,
+            next_local,
+            e
+        );
+    }
+}
+
+fn choose_team_file_local_path(
+    root: &std::path::Path,
+    base_local_rel: &str,
+    file_id: &str,
+    owner_display_name: Option<&str>,
+) -> String {
+    if !basename_conflicts(root, base_local_rel, file_id) {
+        return base_local_rel.to_string();
+    }
+
+    let owner_label = owner_display_name
+        .map(sanitize_owner_label)
+        .filter(|label| !label.is_empty())
+        .unwrap_or_else(|| "Team".to_string());
+    let base_candidate = add_file_owner_suffix(base_local_rel, &owner_label, None);
+    if !basename_conflicts(root, &base_candidate, file_id)
+        && path_available_for_file_id(root, &base_candidate, file_id)
+    {
+        return base_candidate;
+    }
+
+    let mut index = 2;
+    loop {
+        let candidate = add_file_owner_suffix(base_local_rel, &owner_label, Some(index));
+        if !basename_conflicts(root, &candidate, file_id)
+            && path_available_for_file_id(root, &candidate, file_id)
+        {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn path_available_for_file_id(root: &std::path::Path, relative_path: &str, file_id: &str) -> bool {
+    let path = root.join(relative_path);
+    !path.exists() || file_has_id(&path, file_id)
+}
+
+fn add_file_owner_suffix(path: &str, owner_label: &str, index: Option<usize>) -> String {
+    let path_obj = std::path::Path::new(path);
+    let parent = path_obj
+        .parent()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .filter(|p| !p.is_empty());
+    let stem = path_obj
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string());
+    let ext = path_obj
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let suffix = match index {
+        Some(index) => format!(" - {owner_label} {index}"),
+        None => format!(" - {owner_label}"),
+    };
+    let file_name = format!("{stem}{suffix}{ext}");
+    match parent {
+        Some(parent) => format!("{parent}/{file_name}"),
+        None => file_name,
+    }
+}
+
+fn basename_conflicts(root: &std::path::Path, candidate_rel: &str, file_id: &str) -> bool {
+    let candidate_name = std::path::Path::new(candidate_rel)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if candidate_name.is_empty() {
+        return false;
+    }
+    for entry in walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let rel = relative.to_string_lossy().replace('\\', "/");
+        if rel.starts_with(".slash/") || rel.split('/').any(|seg| seg.starts_with('.')) {
+            continue;
+        }
+        let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_lowercase()) else {
+            continue;
+        };
+        if name != candidate_name {
+            continue;
+        }
+        if rel == candidate_rel || file_has_id(path, file_id) {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
+fn file_has_id(path: &std::path::Path, file_id: &str) -> bool {
+    std::fs::read(path)
+        .ok()
+        .and_then(|content| crate::commands::sync::helpers::extract_slash_id_str(&content))
+        .map(|local_file_id| local_file_id == file_id)
+        .unwrap_or(false)
+}
+
+fn owner_display_name_for_team_path<'a>(
+    scope: &'a slash_sync_proto::TeamScopeResponse,
+    team_path: &str,
+) -> Option<&'a str> {
+    scope
+        .scope_dirs
+        .iter()
+        .chain(scope.managed_scope_dirs.iter())
+        .filter(|dir| {
+            let prefix = normalize_prefix(dir.directory_path.trim_end_matches('/'));
+            team_path.starts_with(&prefix)
+        })
+        .max_by_key(|dir| dir.directory_path.len())
+        .and_then(|dir| dir.owner_display_name.as_deref())
+}
+
+fn sanitize_owner_label(label: &str) -> String {
+    label
+        .chars()
+        .filter(|ch| !matches!(ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn team_path_to_personal_path(team_path: &str) -> Option<String> {
+    for (team_prefix, personal_prefix) in PARA_TEAM_TO_PERSONAL {
+        if team_path == *team_prefix {
+            return Some(personal_prefix.to_string());
+        }
+        if let Some(rest) = team_path.strip_prefix(&format!("{team_prefix}/")) {
+            return Some(format!("{personal_prefix}/{rest}"));
+        }
+    }
+    None
+}
+
+fn resolve_directory_id_for_team_path(
+    team_path: &str,
+    path_mappings: &std::collections::HashMap<String, String>,
+    directory_id_mappings: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let mut best: Option<(&str, &str)> = None;
+    for (local_path, remote_path) in path_mappings {
+        let remote_trimmed = remote_path.trim_end_matches('/');
+        let is_match =
+            team_path == remote_trimmed || team_path.starts_with(&format!("{remote_trimmed}/"));
+        if !is_match {
+            continue;
+        }
+        if best
+            .map(|(best_remote, _)| remote_trimmed.len() > best_remote.len())
+            .unwrap_or(true)
+        {
+            best = Some((remote_trimmed, local_path.as_str()));
+        }
+    }
+
+    best.and_then(|(_, local_path)| directory_id_mappings.get(local_path).cloned())
 }
 
 fn remove_directory_mapping_by_local_path(
@@ -1615,6 +2211,7 @@ fn resolve_source_dirs<'a>(
 fn build_team_mapped_files<'a>(
     manifests: &'a [slash_core::FileManifestBasic],
     path_mappings: &std::collections::HashMap<String, String>,
+    file_mappings: &std::collections::HashMap<String, super::path_mapping::TeamFileMapping>,
     directory_id_mappings: &std::collections::HashMap<String, String>,
     source_dirs: &[&str],
     scope: &slash_sync_proto::TeamScopeResponse,
@@ -1622,6 +2219,14 @@ fn build_team_mapped_files<'a>(
 ) -> Vec<(String, &'a slash_core::FileManifestBasic)> {
     let mut mapped_files: Vec<(String, &slash_core::FileManifestBasic)> = Vec::new();
     for m in manifests {
+        if let Some(file_id) = m.file_id.as_deref() {
+            if let Some(mapping) = file_mappings.get(file_id) {
+                if mapping.local_path == m.relative_path {
+                    mapped_files.push((mapping.remote_path.clone(), m));
+                    continue;
+                }
+            }
+        }
         for (src_dir, tgt_dir) in path_mappings {
             let src_prefix = normalize_prefix(src_dir);
             let tgt_prefix = normalize_prefix(tgt_dir);
@@ -1723,7 +2328,15 @@ fn detect_team_deleted(
     // 收集候选删除列表（先不 mutate unified_state）
     let candidates: Vec<(String, String, bool)> = unified_state
         .iter()
-        .filter(|(_, state)| !state.team_hash.is_empty())
+        .filter(|(local_path, state)| {
+            if !state.team_hash.is_empty() {
+                return true;
+            }
+            if state.file_id.is_none() {
+                return false;
+            }
+            maps_to_team_path(local_path, reverse_mappings).is_some()
+        })
         .filter(|(local_path, _)| !root.join(local_path).exists())
         .filter(|(_, state)| {
             // UUID 碰缘检测
@@ -1821,8 +2434,107 @@ fn detect_team_deleted(
                 }
             }
         }
+
+        // 历史状态兼容：旧版 unified_sync_state 里可能直接保存团队路径
+        // （如 01_PROJECTS/...）而不是本地 PARA 路径。此时本地文件消失后
+        // 无法通过 reverse_mappings/PARA personal fallback 反推出 target，
+        // 必须把它当作服务端目标路径直接上报，否则删除会被漏掉。
+        if !found {
+            for (team_root, _) in PARA_TEAM_TO_PERSONAL {
+                let team_prefix = normalize_prefix(team_root);
+                if local_path.starts_with(&team_prefix) {
+                    if !current_target_paths.contains(local_path.as_str()) {
+                        log::debug!(
+                            "[TeamSync] team-path state delete: '{}' reported directly",
+                            local_path
+                        );
+                        deleted.push(local_path.to_string());
+                    }
+                    break;
+                }
+            }
+        }
     }
     deleted
+}
+
+fn resolve_deleted_file_id(
+    target_path: &str,
+    unified_state: &UnifiedSyncState,
+    reverse_mappings: &std::collections::HashMap<&str, &str>,
+) -> Option<String> {
+    if let Some(file_id) = unified_state
+        .get(target_path)
+        .and_then(|state| state.file_id.clone())
+    {
+        return Some(file_id);
+    }
+
+    for (tgt_dir, src_dir) in reverse_mappings {
+        let tgt_prefix = normalize_prefix(tgt_dir);
+        if target_path.starts_with(&tgt_prefix) {
+            let relative = target_path.strip_prefix(&tgt_prefix).unwrap_or(target_path);
+            let src_prefix = normalize_prefix(src_dir);
+            let local_path = format!("{src_prefix}{relative}");
+            if let Some(file_id) = unified_state
+                .get(&local_path)
+                .and_then(|state| state.file_id.clone())
+            {
+                return Some(file_id);
+            }
+        }
+    }
+
+    for (team_root, personal_root) in PARA_TEAM_TO_PERSONAL {
+        let team_prefix = normalize_prefix(team_root);
+        if target_path.starts_with(&team_prefix) {
+            let relative = target_path
+                .strip_prefix(&team_prefix)
+                .unwrap_or(target_path);
+            let personal_prefix = normalize_prefix(personal_root);
+            let local_path = format!("{personal_prefix}{relative}");
+            if let Some(file_id) = unified_state
+                .get(&local_path)
+                .and_then(|state| state.file_id.clone())
+            {
+                return Some(file_id);
+            }
+        }
+    }
+
+    None
+}
+
+fn maps_to_team_path(
+    local_path: &str,
+    reverse_mappings: &std::collections::HashMap<&str, &str>,
+) -> Option<String> {
+    for (tgt_dir, src_dir) in reverse_mappings {
+        let src_prefix = normalize_prefix(src_dir);
+        if local_path.starts_with(&src_prefix) {
+            let relative = local_path.strip_prefix(&src_prefix).unwrap_or(local_path);
+            let tgt_prefix = normalize_prefix(tgt_dir);
+            return Some(format!("{tgt_prefix}{relative}"));
+        }
+    }
+
+    for (team_root, personal_root) in PARA_TEAM_TO_PERSONAL {
+        let personal_prefix = normalize_prefix(personal_root);
+        if local_path.starts_with(&personal_prefix) {
+            let relative = local_path
+                .strip_prefix(&personal_prefix)
+                .unwrap_or(local_path);
+            let team_prefix = normalize_prefix(team_root);
+            return Some(format!("{team_prefix}{relative}"));
+        }
+
+        let team_prefix = normalize_prefix(team_root);
+        if local_path.starts_with(&team_prefix) {
+            return Some(local_path.to_string());
+        }
+    }
+
+    None
 }
 
 /// Pull 安全过滤：只 Pull 有 reverse_mappings 映射的文件

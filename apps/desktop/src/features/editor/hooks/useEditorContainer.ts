@@ -390,6 +390,9 @@ export const useEditorContainer = ({
         hasUserEdited.current = true;
         (window as any).__slashEditorDirty = true;
         if (editor) scheduleSave(() => (editor.storage as any)?.markdown?.getMarkdown() || '');
+        if ('doc_status' in changes) {
+            autoSyncManager.forceSync('doc_status_changed');
+        }
     };
 
     const handleRunSmartRename = async () => {

@@ -24,6 +24,7 @@ export interface TeamTreeItemProps {
     activeNoteFileId?: string | null;
     isAdmin?: boolean;
     isMaintenanceMode?: boolean;
+    canMoveNode?: (node: TeamTreeNode) => boolean;
     onDeleteDir?: (path: string, name: string) => void;
     onDeleteFile?: (path: string, name: string) => void;
     onRenameDir?: (path: string, name: string, newName?: string) => void;
@@ -42,6 +43,7 @@ export function TeamTreeItem({
     activeNoteFileId,
     isAdmin, 
     isMaintenanceMode,
+    canMoveNode,
     onDeleteDir, 
     onDeleteFile, 
     onRenameDir,
@@ -53,8 +55,9 @@ export function TeamTreeItem({
 
     // PARA 根目录（01_PROJECTS, 02_AREAS 等）不可拖拽
     const isParaRoot = depth === 0 && /^(01_PROJECTS|02_AREAS|03_RESOURCE|04_ARCHIVE)$/i.test(node.name);
+    const canDragNode = !isParaRoot && (canMoveNode?.(node) ?? Boolean(isAdmin));
 
-    // Admin DnD hooks
+    // Team maintenance DnD hooks
     const {
         attributes: dragAttributes,
         listeners: dragListeners,
@@ -63,7 +66,7 @@ export function TeamTreeItem({
     } = useDraggable({
         id: `team-${node.path}`,
         data: { teamNode: node },
-        disabled: !isAdmin || isParaRoot,
+        disabled: !canDragNode,
     });
     const {
         setNodeRef: setDropRef,
@@ -87,8 +90,8 @@ export function TeamTreeItem({
         const dirContent = (
             <div
                 ref={combinedRef}
-                {...((isAdmin && !isParaRoot) ? dragListeners : {})}
-                {...((isAdmin && !isParaRoot) ? dragAttributes : {})}
+                {...(canDragNode ? dragListeners : {})}
+                {...(canDragNode ? dragAttributes : {})}
                 data-droppable-id={`team-drop-${node.path}`}
                 className={cn(
                     'w-full flex items-center gap-1 py-[5px] px-2 text-sm rounded-sm transition-colors duration-150 select-none',
@@ -96,7 +99,7 @@ export function TeamTreeItem({
                     isDirActive
                         ? 'bg-black/10 dark:bg-white/10 text-zinc-900 dark:text-zinc-100'
                         : 'hover:bg-black/5 dark:hover:bg-white/5',
-                    isOver && 'ring-2 ring-inset ring-indigo-500',
+                    isOver && 'ring-2 ring-inset ring-indigo-500 dark:ring-blue-400',
                     isDragging && 'opacity-40',
                 )}
                 style={{ paddingLeft }}
@@ -184,6 +187,7 @@ export function TeamTreeItem({
                                 activeNoteFileId={activeNoteFileId}
                                 isAdmin={isAdmin}
                                 isMaintenanceMode={isMaintenanceMode}
+                                canMoveNode={canMoveNode}
                                 onDeleteDir={onDeleteDir}
                                 onDeleteFile={onDeleteFile}
                                 onRenameDir={onRenameDir}
@@ -207,9 +211,9 @@ export function TeamTreeItem({
 
     const fileContent = (
         <button
-            ref={isAdmin ? setDragRef : undefined}
-            {...(isAdmin ? dragListeners : {})}
-            {...(isAdmin ? dragAttributes : {})}
+            ref={canDragNode ? setDragRef : undefined}
+            {...(canDragNode ? dragListeners : {})}
+            {...(canDragNode ? dragAttributes : {})}
             onClick={() => onFileClick(node.path, node.editor_display_name || node.editor_username || undefined, node.file_id)}
             className={cn(
                 'w-full flex items-center gap-1 py-[5px] px-2 text-sm rounded-sm transition-colors duration-150 select-none',
@@ -221,7 +225,7 @@ export function TeamTreeItem({
             )}
             style={{ paddingLeft: paddingLeft + 20 }}
         >
-            <FileText size={16} strokeWidth={1} className={cn("shrink-0", isFileActive ? "text-[#002FA7]/70" : "text-zinc-500 dark:text-zinc-400")} />
+            <FileText size={16} strokeWidth={1} className={cn("shrink-0", isFileActive ? "text-[#002FA7]/70 dark:text-blue-400/80" : "text-zinc-500 dark:text-zinc-400")} />
             <span className="truncate flex-1 text-left">{node.name}</span>
         </button>
     );

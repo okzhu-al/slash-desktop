@@ -117,6 +117,7 @@ pub async fn push_directory_to_vault(
         client_clock: 0,
         client_files,
         deleted_paths: vec![],
+        deleted_files: vec![],
     };
 
     let (negotiate_resp, raw_body) = sync_client.negotiate_with_raw(&negotiate_req).await?;
@@ -140,6 +141,16 @@ pub async fn push_directory_to_vault(
         negotiate_resp.server_needs,
         negotiate_resp.client_needs.len()
     );
+
+    if !negotiate_resp.identity_conflicts.is_empty() {
+        let conflicts = negotiate_resp
+            .identity_conflicts
+            .iter()
+            .map(|conflict| format!("{}: {}", conflict.path, conflict.reason))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(format!("IDENTITY_CONFLICT:{conflicts}"));
+    }
 
     if negotiate_resp.server_needs.is_empty() {
         log::debug!("[Promote v2] Server already has all files, nothing to push");

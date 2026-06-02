@@ -91,8 +91,14 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
     })();
 
     const teamRelPath = isProtectedParaFolder ? '' : (teamMapping?.remotePath || '');
+    const teamDirectoryId = (teamMapping as any)?.directoryId as string | undefined;
+    const teamFileId = (teamMapping as any)?.fileId as string | undefined;
 
-    const hasFolderJoinedBadge = isFolder && Boolean(teamRelPath) && unreadFolders.has(teamRelPath);
+    const hasFolderJoinedBadge = isFolder && Boolean(teamRelPath) && [...unreadFolders.values()].some(entry => {
+        if (entry.filePath === teamRelPath) return true;
+        if (teamDirectoryId && entry.directoryId === teamDirectoryId) return true;
+        return false;
+    });
 
     const hasCollabUnread = !isProtectedParaFolder && unreadFiles.size > 0 && (() => {
         const itemLower = item.name.toLowerCase();
@@ -110,6 +116,7 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
             return false;
         }
 
+        const unreadEntries = [...unreadFiles.values()];
         const teamRelLower = teamRelPath.toLowerCase();
 
         if (!isFolder) {
@@ -117,18 +124,19 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
             if (item.name.includes('b2') || item.name.includes("A'note")) {
                 console.log(`[DEBUG-REDDOT] 正在渲染: ${item.name}`);
                 console.log(`[DEBUG-REDDOT]   -> 计算出的 teamRelPath: "${teamRelPath}"`);
-                console.log(`[DEBUG-REDDOT]   -> 当前内存中的 unreadFiles:`, [...unreadFiles.keys()]);
+                console.log(`[DEBUG-REDDOT]   -> 当前内存中的 unreadFiles:`, unreadEntries.map(entry => entry.filePath));
             }
 
             // 文件级节点：强化匹配
             if (unreadFiles.has(teamRelPath)) return true;
+            if (teamFileId && unreadEntries.some(entry => entry.fileId === teamFileId)) return true;
             
             // 暴力兜底：忽略大小写、剥除全半角瑕疵、以及潜在丢失 .md 的兼容匹配
             const baseTarget = teamRelLower.endsWith('.md') ? teamRelLower.slice(0, -3) : teamRelLower;
             const fallbackTarget = getBasename(baseTarget)?.trim(); // 叶子纯名
             
-            return [...unreadFiles.keys()].some(k => {
-                const kLower = k.toLowerCase();
+            return unreadEntries.some(entry => {
+                const kLower = entry.filePath.toLowerCase();
                 if (kLower === teamRelLower) return true;
                 const kBase = kLower.endsWith('.md') ? kLower.slice(0, -3) : kLower;
                 if (kBase === baseTarget) return true;
@@ -137,8 +145,10 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
             });
         } else {
             // 目录级节点
-            const keys = [...unreadFiles.keys()];
-            return keys.some(p => p.toLowerCase().startsWith(teamRelLower + '/'));
+            return unreadEntries.some(entry => {
+                if (teamDirectoryId && entry.directoryId === teamDirectoryId) return true;
+                return entry.filePath.toLowerCase().startsWith(teamRelLower + '/');
+            });
         }
     })();
 

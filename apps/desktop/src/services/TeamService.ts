@@ -49,6 +49,21 @@ export interface TeamMembersResponse {
     members: TeamMemberInfo[];
 }
 
+export interface TeamScopeDir {
+    directory_id?: string | null;
+    directory_path: string;
+    role: 'owner' | 'team_member' | 'managed' | string;
+    owner_display_name?: string | null;
+}
+
+export interface TeamScopeResponse {
+    vault_id: string;
+    scope_dirs: TeamScopeDir[];
+    is_full_scope: boolean;
+    managed_dirs: string[];
+    managed_scope_dirs: TeamScopeDir[];
+}
+
 export interface DirectoryPermissionInfo {
     directory_id?: string | null;
     directory_path: string;
@@ -70,6 +85,7 @@ class TeamServiceImpl {
         method: string,
         path: string,
         body?: unknown,
+        options?: { clearAuthOnForbidden?: boolean },
     ): Promise<T> {
         const resp = await fetch(`${serverUrl}${path}`, {
             method,
@@ -82,7 +98,9 @@ class TeamServiceImpl {
 
         if (!resp.ok) {
             // 🚨 熔断拦截：处理强制下线或被删除导致的 401/403 权限失效
-            if (resp.status === 401 || resp.status === 403) {
+            const shouldClearAuth =
+                resp.status === 401 || (resp.status === 403 && options?.clearAuthOnForbidden !== false);
+            if (shouldClearAuth) {
                 const { syncService } = await import('@/services/SyncService');
                 const { useSessionStore } = await import('@/stores/useSessionStore');
                 syncService.clearConfig();
@@ -191,6 +209,20 @@ class TeamServiceImpl {
         );
     }
 
+    /** 获取当前用户团队目录权限边界 */
+    async getMyScope(
+        serverUrl: string,
+        token: string,
+        vaultId: string,
+    ): Promise<TeamScopeResponse> {
+        return this.request(
+            serverUrl,
+            token,
+            'GET',
+            `/api/team/my-scope?vault_id=${encodeURIComponent(vaultId)}`,
+        );
+    }
+
     /** 变更成员全局角色 */
     async updateMemberRole(
         serverUrl: string,
@@ -290,6 +322,7 @@ class TeamServiceImpl {
                 old_prefix: oldPrefix,
                 new_prefix: newPrefix,
             },
+            { clearAuthOnForbidden: false },
         );
     }
 
@@ -352,8 +385,12 @@ class TeamServiceImpl {
         token: string,
         vaultId: string,
         directoryPath: string,
+        directoryId?: string | null,
     ): Promise<TrashedFileInfo[]> {
         const params = new URLSearchParams({ vault_id: vaultId, directory_path: directoryPath });
+        if (directoryId) {
+            params.set('directory_id', directoryId);
+        }
         return this.request(
             serverUrl,
             token,
@@ -368,13 +405,18 @@ class TeamServiceImpl {
         token: string,
         vaultId: string,
         trashId: string,
+        options?: { forceRecoverDirectory?: boolean },
     ): Promise<void> {
         await this.request(
             serverUrl,
             token,
             'POST',
             '/api/team/directories/files/restore',
-            { vault_id: vaultId, trash_id: trashId },
+            {
+                vault_id: vaultId,
+                trash_id: trashId,
+                force_recover_directory: options?.forceRecoverDirectory || undefined,
+            },
         );
     }
 
@@ -504,6 +546,7 @@ class TeamServiceImpl {
                 source_path: sourcePath,
                 destination_dir: destinationDir,
             },
+            { clearAuthOnForbidden: false },
         );
     }
 
@@ -606,6 +649,7 @@ export interface DirectoryFileInfo {
 export interface TrashedFileInfo {
     id: string;
     original_path: string;
+    original_directory_id?: string | null;
     size: number;
     deleted_by_username: string | null;
     deleted_by_display_name: string | null;

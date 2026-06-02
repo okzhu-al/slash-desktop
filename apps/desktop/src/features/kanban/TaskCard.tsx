@@ -76,7 +76,7 @@ export function TaskCard({ task, onNavigateToNote, isOverlay = false }: TaskCard
                     "p-3 bg-white dark:bg-zinc-800 rounded-lg shadow-xl border-2",
                     overdue
                         ? "border-red-400 dark:border-red-500"
-                        : "border-indigo-400 dark:border-indigo-500",
+                        : "border-indigo-400 dark:border-blue-400/60",
                     "rotate-3 scale-105"
                 )}
             >
@@ -166,7 +166,7 @@ export function TaskCard({ task, onNavigateToNote, isOverlay = false }: TaskCard
                     e.stopPropagation();
                     onNavigateToNote?.(task.note_path);
                 }}
-                className="mt-2 flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-600 hover:underline"
+                className="mt-2 flex items-center gap-1 text-xs text-indigo-500 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-blue-300 hover:underline"
             >
                 <FileText size={12} />
                 <span>{getFilename(task.note_path)}</span>

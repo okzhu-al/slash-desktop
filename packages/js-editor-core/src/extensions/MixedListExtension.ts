@@ -850,20 +850,17 @@ export const MixedTaskItem = TaskItem.extend({
                 document.body.append(menuEl);
             };
 
-            const handleKeyDown = (event: KeyboardEvent) => {
-                if (event.key !== ' ' && event.code !== 'Space') return;
-                if (!props.editor.isEditable || props.view.composing) return;
+            const maybeOpenMetadataMenuFromSpace = (event: KeyboardEvent | InputEvent) => {
+                if (!props.editor.isEditable || props.view.composing || event.isComposing) return;
                 if (menuEl) return;
 
                 const pos = typeof props.getPos === 'function' ? props.getPos() : null;
                 if (typeof pos !== 'number') return;
+                const liveNode = props.view.state.doc.nodeAt(pos);
+                if (!liveNode || liveNode.type.name !== currentNode.type.name) return;
 
                 const { from, empty } = props.view.state.selection;
-                if (!empty || from <= pos || from >= pos + currentNode.nodeSize) return;
-
-                const textContent = currentNode.textContent || '';
-                const cursorInNode = from - pos - 1;
-                if (cursorInNode < textContent.length - 1) return;
+                if (!empty || from <= pos || from >= pos + liveNode.nodeSize) return;
 
                 const now = Date.now();
                 const timeSinceLastSpace = now - lastSpaceTime;
@@ -872,22 +869,25 @@ export const MixedTaskItem = TaskItem.extend({
                     return;
                 }
 
-                event.preventDefault();
-                lastSpaceTime = 0;
-
                 // 安全校验：确认 from-1 确实是空格字符，而非 chip 等 atom 节点
                 // 当快速连按双空格时，ProseMirror 的 MutationObserver 可能尚未处理
                 // 第一次空格的 DOM mutation，导致 from 仍指向 chip 后方
                 const charBefore = props.view.state.doc.textBetween(from - 1, from, '', '\0');
-                let menuPos = from;
-                if (charBefore === ' ') {
-                    props.editor.chain()
-                        .deleteRange({ from: from - 1, to: from })
-                        .setTextSelection(from - 1)
-                        .focus()
-                        .run();
-                    menuPos = from - 1;
+                if (charBefore !== ' ') {
+                    lastSpaceTime = now;
+                    return;
                 }
+
+                event.preventDefault();
+                lastSpaceTime = 0;
+
+                let menuPos = from;
+                props.editor.chain()
+                    .deleteRange({ from: from - 1, to: from })
+                    .setTextSelection(from - 1)
+                    .focus()
+                    .run();
+                menuPos = from - 1;
 
                 try {
                     const coords = props.view.coordsAtPos(menuPos);
@@ -896,6 +896,16 @@ export const MixedTaskItem = TaskItem.extend({
                     const rect = dom.getBoundingClientRect();
                     openMenu(rect.left + 24, rect.bottom);
                 }
+            };
+
+            const handleBeforeInput = (event: InputEvent) => {
+                if (event.inputType !== 'insertText' || event.data !== ' ') return;
+                maybeOpenMetadataMenuFromSpace(event);
+            };
+
+            const handleKeyDown = (event: KeyboardEvent) => {
+                if (event.key !== ' ' && event.key !== 'Spacebar' && event.code !== 'Space') return;
+                maybeOpenMetadataMenuFromSpace(event);
             };
 
             const handleGlobalMouseDown = (event: MouseEvent) => {
@@ -913,7 +923,8 @@ export const MixedTaskItem = TaskItem.extend({
             };
 
             getCloseMenuRegistry().add(closeMenu);
-            contentDOM.addEventListener('keydown', handleKeyDown, true);
+            document.addEventListener('beforeinput', handleBeforeInput, true);
+            document.addEventListener('keydown', handleKeyDown, true);
             document.addEventListener('mousedown', handleGlobalMouseDown, true);
             document.addEventListener('keydown', handleGlobalKeyDown, true);
 
@@ -926,14 +937,42 @@ export const MixedTaskItem = TaskItem.extend({
                 event.preventDefault();
                 event.stopPropagation();
 
-                if (!props.editor.isEditable) return;
-
                 const pos = typeof props.getPos === 'function' ? props.getPos() : null;
                 if (typeof pos !== 'number') return;
+                const nextChecked = currentNode.attrs.checked !== true;
+
+                try {
+                    const markdown = (props.editor.storage as any)?.markdown?.getMarkdown?.() || '';
+                    const taskOrdinal = (() => {
+                        let count = 0;
+                        props.view.state.doc.descendants((node, nodePos) => {
+                            if (nodePos >= pos) return false;
+                            if (node.type.name === 'taskItem') count++;
+                            return true;
+                        });
+                        return count;
+                    })();
+                    const lines = markdown.split('\n');
+                    let seenTasks = 0;
+                    for (let i = 0; i < lines.length; i++) {
+                        if (!/^\s*[-*+]\s\[[ xX]\]\s/.test(lines[i])) continue;
+                        if (seenTasks === taskOrdinal) {
+                            window.dispatchEvent(new CustomEvent('slash:task-checkbox-intent', {
+                                detail: {
+                                    lineNumber: i,
+                                    originalLine: lines[i],
+                                    checked: nextChecked,
+                                },
+                            }));
+                            break;
+                        }
+                        seenTasks++;
+                    }
+                } catch { /* task bypass is best-effort; local visual toggle still applies */ }
 
                 const tr = props.view.state.tr.setNodeMarkup(pos, undefined, {
                     ...currentNode.attrs,
-                    checked: currentNode.attrs.checked !== true,
+                    checked: nextChecked,
                 });
                 props.view.dispatch(tr);
             });
@@ -954,7 +993,8 @@ export const MixedTaskItem = TaskItem.extend({
                 destroy: () => {
                     closeMenu();
                     getCloseMenuRegistry().delete(closeMenu);
-                    contentDOM.removeEventListener('keydown', handleKeyDown, true);
+                    document.removeEventListener('beforeinput', handleBeforeInput, true);
+                    document.removeEventListener('keydown', handleKeyDown, true);
                     document.removeEventListener('mousedown', handleGlobalMouseDown, true);
                     document.removeEventListener('keydown', handleGlobalKeyDown, true);
                 },
@@ -964,6 +1004,12 @@ export const MixedTaskItem = TaskItem.extend({
 
     addProseMirrorPlugins() {
         let compositionStartPos: number | null = null;
+        let compositionTextblockStart: number | null = null;
+        let compositionSnapshot: {
+            textblockStart: number;
+            prefix: string;
+            suffix: string;
+        } | null = null;
 
         const isInsideTaskItem = ($pos: any) => {
             for (let depth = $pos.depth; depth >= 0; depth--) {
@@ -981,7 +1027,23 @@ export const MixedTaskItem = TaskItem.extend({
                 props: {
                     handleDOMEvents: {
                         compositionstart: (view) => {
-                            compositionStartPos = view.state.selection.from;
+                            const { selection } = view.state;
+                            compositionStartPos = selection.from;
+                            compositionTextblockStart = selection.$from.start(selection.$from.depth);
+                            compositionSnapshot = null;
+                            if (
+                                selection.empty
+                                && isInsideTaskItem(selection.$from) >= 0
+                                && selection.$from.parent.isTextblock
+                            ) {
+                                const text = selection.$from.parent.textContent;
+                                const offset = selection.$from.parentOffset;
+                                compositionSnapshot = {
+                                    textblockStart: selection.$from.start(selection.$from.depth),
+                                    prefix: text.slice(0, offset),
+                                    suffix: text.slice(offset),
+                                };
+                            }
                             return false;
                         },
                         beforeinput: (view, event) => {
@@ -993,17 +1055,21 @@ export const MixedTaskItem = TaskItem.extend({
                             const { selection } = state;
                             const taskItemDepth = isInsideTaskItem(selection.$from);
                             if (taskItemDepth < 0) return false;
+                            if (compositionTextblockStart !== selection.$from.start(selection.$from.depth)) {
+                                event.preventDefault();
+                                return true;
+                            }
 
-                            const from = Math.max(
-                                selection.$from.start(selection.$from.depth),
-                                Math.min(compositionStartPos, selection.from)
-                            );
+                            const from = Math.max(selection.$from.start(selection.$from.depth), compositionStartPos);
                             const to = Math.min(
                                 selection.$from.end(selection.$from.depth),
-                                Math.max(compositionStartPos, selection.to)
+                                Math.max(compositionStartPos, selection.from, selection.to)
                             );
 
-                            if (from >= to) return false;
+                            if (from >= to) {
+                                event.preventDefault();
+                                return true;
+                            }
 
                             event.preventDefault();
                             const tr = state.tr.delete(from, to);
@@ -1012,8 +1078,45 @@ export const MixedTaskItem = TaskItem.extend({
                             view.dispatch(tr);
                             return true;
                         },
-                        compositionend: () => {
+                        compositionend: (view, event) => {
+                            const snapshot = compositionSnapshot;
+                            const composedText = (event as CompositionEvent).data || '';
                             compositionStartPos = null;
+                            compositionTextblockStart = null;
+                            compositionSnapshot = null;
+                            if (!snapshot || (!snapshot.prefix && !snapshot.suffix) || !composedText) {
+                                return false;
+                            }
+
+                            queueMicrotask(() => {
+                                const { state } = view;
+                                const { selection } = state;
+                                if (isInsideTaskItem(selection.$from) < 0) return;
+                                if (!selection.$from.parent.isTextblock) return;
+
+                                const textblockStart = selection.$from.start(selection.$from.depth);
+                                if (textblockStart !== snapshot.textblockStart) return;
+
+                                const currentText = selection.$from.parent.textContent;
+                                const lostPrefix = snapshot.prefix && !currentText.startsWith(snapshot.prefix);
+                                const lostSuffix = snapshot.suffix && !currentText.endsWith(snapshot.suffix);
+                                if (!lostPrefix && !lostSuffix) return;
+
+                                let tr = state.tr;
+                                const textblockEnd = selection.$from.end(selection.$from.depth);
+                                if (lostSuffix) {
+                                    tr = tr.insertText(snapshot.suffix, textblockEnd, textblockEnd);
+                                }
+                                if (lostPrefix) {
+                                    tr = tr.insertText(snapshot.prefix, textblockStart, textblockStart);
+                                }
+                                const cursorPos = textblockStart
+                                    + (lostPrefix ? snapshot.prefix.length : 0)
+                                    + currentText.length;
+                                tr.setSelection(TextSelection.create(tr.doc, Math.min(cursorPos, tr.doc.content.size)));
+                                tr.setMeta('composition', true);
+                                view.dispatch(tr);
+                            });
                             return false;
                         },
                     },

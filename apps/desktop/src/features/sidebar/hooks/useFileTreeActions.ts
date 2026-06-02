@@ -28,6 +28,7 @@ interface UseFileTreeActionsOptions {
     hasTeamVault: boolean;
     teamDirectories: Map<string, any>;
     activeMappings: Map<string, string>;
+    teamDirectoryOptions: string[];
     removeMapping: (matchRef: 'source' | 'target', prefixMatch: string) => Promise<void>;
     refreshTeamData: (vaultId: string) => void;
     setEditingPath: (path: string | null) => void;
@@ -42,6 +43,7 @@ export function useFileTreeActions({
     hasTeamVault,
     teamDirectories,
     activeMappings,
+    teamDirectoryOptions,
     removeMapping,
     refreshTeamData,
     setEditingPath,
@@ -365,40 +367,20 @@ export function useFileTreeActions({
 
                 let updated = false;
                 const newMappings: Record<string, string> = {};
+                const renameRequests: Array<{ oldRemote: string; newRemote: string; directoryId?: string | null }> = [];
                 for (const [src, tgt] of activeMappings) {
                     const srcNorm = src.replace(/\\/g, '/').replace(/\/$/, '');
                     if (srcNorm === oldNorm || srcNorm.startsWith(oldNorm + '/')) {
                         const updatedSrc = newNorm + srcNorm.slice(oldNorm.length);
-                        const tgtParts = tgt.split('/');
-                        const lastIdx = tgtParts.lastIndexOf(item.name);
-                        let updatedTgt = tgt;
-                        if (lastIdx >= 0) {
-                            tgtParts[lastIdx] = newName;
-                            updatedTgt = tgtParts.join('/');
-                        }
+                        const tgtNorm = tgt.replace(/\\/g, '/').replace(/\/$/, '');
+                        const tgtParent = tgtNorm.includes('/') ? tgtNorm.substring(0, tgtNorm.lastIndexOf('/')) : '';
+                        const updatedRootTgt = tgtParent ? `${tgtParent}/${newName}` : newName;
+                        const updatedTgt = updatedRootTgt + srcNorm.slice(oldNorm.length);
                         newMappings[updatedSrc] = updatedTgt;
                         updated = true;
 
-                        if (tgt !== updatedTgt) {
-                            const teamVaultId = useSessionStore.getState().teamVaultId;
-                            const config = syncService.getConfig();
-                            if (teamVaultId && config) {
-                                try {
-                                    const { teamService } = await import('@/services/TeamService');
-                                    await teamService.renameDirectory(
-                                        config.serverUrl, config.accessToken,
-                                        teamVaultId, tgt, updatedTgt,
-                                    );
-                                } catch (e) {
-                                    console.warn('[useFileTreeActions] Server rename failed, rolling back:', e);
-                                    const { rename } = await import('@tauri-apps/plugin-fs');
-                                    await rename(newPath, oldPath);
-                                    await refreshNode(parentPath);
-                                    const { message } = await import('@tauri-apps/plugin-dialog');
-                                    await message(t('team.permission_denied_rename_dir', '您没有权限重命名该团队目录，请联系管理员。'), { title: t('team.permission_denied_title', '越权提示'), kind: 'error' });
-                                    return;
-                                }
-                            }
+                        if (srcNorm === oldNorm && tgt !== updatedTgt) {
+                            renameRequests.push({ oldRemote: tgt, newRemote: updatedTgt });
                         }
                     } else {
                         newMappings[src] = tgt;
@@ -407,30 +389,100 @@ export function useFileTreeActions({
                 if (updated) {
                     try {
                         const { writeTextFile, readTextFile } = await import('@tauri-apps/plugin-fs');
-                        const mappingPath = `${vaultRoot}/.slash/team_path_mappings.json`;
-                        
-                        let dataObj: any = { teams: {} };
-                        try {
-                            const raw = await readTextFile(mappingPath);
-                            dataObj = JSON.parse(raw);
-                            if (!dataObj.teams) dataObj.teams = {};
-                        } catch { }
-
                         const teamVaultId = useSessionStore.getState().teamVaultId;
-                        if (teamVaultId) {
-                            dataObj.teams[teamVaultId] = newMappings;
-                        }
 
-                        await writeTextFile(mappingPath, JSON.stringify(dataObj, null, 2));
+                        if (teamVaultId) {
+                            try {
+                                const v3Path = `${vaultRoot}/.slash/team_directory_mappings.json`;
+                                const raw = await readTextFile(v3Path);
+                                const data = JSON.parse(raw);
+                                const directories = data?.teams?.[teamVaultId]?.directories;
+                                if (directories && typeof directories === 'object') {
+                                    for (const [directoryId, mapping] of Object.entries(directories) as Array<[string, any]>) {
+                                        if (mapping?.status !== 'active') continue;
+                                        const srcNorm = String(mapping.local_path || '').replace(/\\/g, '/').replace(/\/$/, '');
+                                        if (srcNorm === oldNorm || srcNorm.startsWith(oldNorm + '/')) {
+                                            const updatedSrc = newNorm + srcNorm.slice(oldNorm.length);
+                                            const remoteNorm = String(mapping.remote_path || '').replace(/\\/g, '/').replace(/\/$/, '');
+                                            const remoteParent = remoteNorm.includes('/') ? remoteNorm.substring(0, remoteNorm.lastIndexOf('/')) : '';
+                                            const updatedRootRemote = remoteParent ? `${remoteParent}/${newName}` : newName;
+                                            const updatedRemote = updatedRootRemote + srcNorm.slice(oldNorm.length);
+
+                                            if (srcNorm === oldNorm) {
+                                                const existing = renameRequests.find(req => req.oldRemote === mapping.remote_path);
+                                                if (existing) {
+                                                    existing.directoryId = directoryId;
+                                                } else if (mapping.remote_path !== updatedRemote) {
+                                                    renameRequests.push({
+                                                        oldRemote: mapping.remote_path,
+                                                        newRemote: updatedRemote,
+                                                        directoryId,
+                                                    });
+                                                }
+                                            }
+
+                                            mapping.local_path = updatedSrc;
+                                            mapping.remote_path = updatedRemote;
+                                        }
+                                    }
+                                    await writeTextFile(v3Path, JSON.stringify(data, null, 2));
+                                }
+                            } catch {
+                                // v3 mapping may not exist for older vaults; legacy mapping below remains as fallback.
+                            }
+
+                            for (const req of renameRequests) {
+                                const config = syncService.getConfig();
+                                if (config) {
+                                    try {
+                                        const { teamService } = await import('@/services/TeamService');
+                                        await teamService.renameDirectory(
+                                            config.serverUrl, config.accessToken,
+                                            teamVaultId, req.oldRemote, req.newRemote, req.directoryId,
+                                        );
+                                    } catch (e) {
+                                        console.warn('[useFileTreeActions] Server rename failed, rolling back:', e);
+                                        const { rename } = await import('@tauri-apps/plugin-fs');
+                                        await rename(newPath, oldPath);
+                                        await refreshNode(parentPath);
+                                        const { message } = await import('@tauri-apps/plugin-dialog');
+                                        await message(t('team.permission_denied_rename_dir', '您没有权限重命名该团队目录，请联系管理员。'), { title: t('team.permission_denied_title', '越权提示'), kind: 'error' });
+                                        return;
+                                    }
+                                }
+                            }
+
+                            const mappingPath = `${vaultRoot}/.slash/team_path_mappings.json`;
+                            
+                            let dataObj: any = { teams: {} };
+                            try {
+                                const raw = await readTextFile(mappingPath);
+                                dataObj = JSON.parse(raw);
+                                if (!dataObj.teams) dataObj.teams = {};
+                            } catch { }
+
+                            dataObj.teams[teamVaultId] = newMappings;
+
+                            await writeTextFile(mappingPath, JSON.stringify(dataObj, null, 2));
+                        }
                         // The file watcher in useTeamDirectoryMapping will automatically reload activeMappings
                     } catch (e) {
-                        console.warn('[useFileTreeActions] Failed to update team_path_mappings after rename:', e);
+                        console.warn('[useFileTreeActions] Failed to update team mappings after rename:', e);
                     }
                 }
             }
 
             if (onNoteRenamed && item.type === 'file') {
                 onNoteRenamed(oldPath, newPath);
+            }
+
+            if (item.type === 'file') {
+                try {
+                    const { autoSyncManager } = await import('@/services/AutoSyncManager');
+                    autoSyncManager.forceSync('file_renamed');
+                } catch (e) {
+                    console.warn('[useFileTreeActions] Failed to trigger immediate rename sync:', e);
+                }
             }
         } catch (e) {
             console.error("[useFileTreeActions] Failed to rename", e);
@@ -622,7 +674,7 @@ export function useFileTreeActions({
             }
         }
 
-        const targetDir = `${targetParaDir}/${item.name}`;
+        let targetDir = `${targetParaDir}/${item.name}`;
 
         // 🛡️ OPT-04: Promote 必须保持原有 PARA 根一致
         // 01_Projects/X → 只能 Promote 到 01_PROJECTS/，不能跨到 02_AREAS/
@@ -641,6 +693,33 @@ export function useFileTreeActions({
             );
             setIsPromoting(false);
             return;
+        }
+
+        const normalizeTeamPath = (value: string) => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+        const existingTeamDirs = new Set([
+            ...teamDirectoryOptions,
+            ...Array.from(activeMappings.values()),
+        ].map(normalizeTeamPath));
+
+        const isMappedToTarget = Array.from(activeMappings.entries()).some(([existingSource, existingTarget]) => (
+            normalizeTeamPath(existingSource) === normalizeTeamPath(sourceDir)
+            && normalizeTeamPath(existingTarget) === normalizeTeamPath(targetDir)
+        ));
+
+        if (!isMappedToTarget && existingTeamDirs.has(normalizeTeamPath(targetDir))) {
+            const currentUserLabel = (
+                useSessionStore.getState().displayName
+                || useSessionStore.getState().teamUsername
+                || 'member'
+            ).replace(/[\\/:*?"<>|]/g, '').trim() || 'member';
+
+            const baseTargetDir = `${targetParaDir}/${item.name} - ${currentUserLabel}`;
+            targetDir = baseTargetDir;
+            let suffix = 2;
+            while (existingTeamDirs.has(normalizeTeamPath(targetDir))) {
+                targetDir = `${baseTargetDir} ${suffix}`;
+                suffix += 1;
+            }
         }
 
         toast.loading(t('team.promote_pushing', { name: item.name, target: `${teamVaultName}/${targetDir}` }), { id: 'promote-team' });

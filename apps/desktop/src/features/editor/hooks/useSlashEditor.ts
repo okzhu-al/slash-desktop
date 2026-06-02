@@ -18,6 +18,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { CodeBlockComponent } from '@/components/CodeBlockComponent';
 import { createEditorDropHandler, createEditorPasteHandler } from '../utils/clipboardHandlers';
 import { historyCache } from '../utils/historyCache';
+import { executeTaskBypass } from '@/services/TaskBypassDetector';
 
 export function getScrollContainer(viewDOM: HTMLElement | null): HTMLElement | null {
     if (!viewDOM) return null;
@@ -574,9 +575,39 @@ export function useSlashEditor({
             emitTaskSnapshot(editor);
         };
 
+        const handleTaskCheckboxIntent = (event: Event) => {
+            const detail = (event as CustomEvent<{
+                lineNumber?: number;
+                originalLine?: string;
+                checked?: boolean;
+            }>).detail;
+            if (!noteIdRef.current || !detail) {
+                return;
+            }
+            if (typeof detail.lineNumber !== 'number') {
+                return;
+            }
+            if (typeof detail.originalLine !== 'string') {
+                return;
+            }
+            if (typeof detail.checked !== 'boolean') {
+                return;
+            }
+
+            executeTaskBypass(noteIdRef.current, [{
+                lineNumber: detail.lineNumber,
+                originalLine: detail.originalLine,
+                checked: detail.checked,
+            }]).catch(err => {
+                console.warn('[useSlashEditor] Task checkbox bypass failed:', err);
+            });
+        };
+
         window.addEventListener('slash:request-editor-tasks', handleTaskSnapshotRequest);
+        window.addEventListener('slash:task-checkbox-intent', handleTaskCheckboxIntent);
         return () => {
             window.removeEventListener('slash:request-editor-tasks', handleTaskSnapshotRequest);
+            window.removeEventListener('slash:task-checkbox-intent', handleTaskCheckboxIntent);
         };
     }, [editor]);
 

@@ -124,7 +124,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                 {/* Checking State */}
                 {state === 'checking' && (
                     <div className="py-6 flex flex-col items-center gap-3.5">
-                        <Loader2 size={36} className="animate-spin text-[#002FA7]" />
+                        <Loader2 size={36} className="animate-spin text-[#002FA7] dark:text-blue-400" />
                         <div>
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.checking_updates', '正在检查更新')}</h3>
                             <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">{t('settings.checking_updates_desc', '正在连接服务器检索最新版本...')}</p>
@@ -174,11 +174,11 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                 {state === 'available' && (
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-col items-center gap-2">
-                            <div className="w-11 h-11 rounded-full bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/30">
-                                <ArrowUpCircle size={22} className="text-[#002FA7]" />
+                            <div className="w-11 h-11 rounded-full bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center border border-indigo-100 dark:border-blue-500/25">
+                                <ArrowUpCircle size={22} className="text-[#002FA7] dark:text-blue-400" />
                             </div>
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.update_available', '发现新版本可用')}</h3>
-                            <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-[#002FA7] border border-indigo-100/30 dark:border-indigo-900/20 text-[11px] font-bold font-mono">
+                            <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-[#002FA7] dark:text-blue-400 border border-indigo-100/30 dark:border-blue-500/20 text-[11px] font-bold font-mono">
                                 v{version}
                             </span>
                         </div>
@@ -211,7 +211,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                 {state === 'downloading' && (
                     <div className="py-4 flex flex-col gap-4">
                         <div className="flex flex-col items-center gap-2">
-                            <Loader2 size={32} className="animate-spin text-[#002FA7]" />
+                            <Loader2 size={32} className="animate-spin text-[#002FA7] dark:text-blue-400" />
                             <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">{t('settings.downloading_update', '正在下载更新包')}</h3>
                             <div className="grid grid-cols-[5.5rem_1rem_auto] items-center justify-center text-xs text-zinc-400 dark:text-zinc-500 font-medium font-mono tabular-nums">
                                 <span className="text-right">{downloadedSize}</span>
@@ -229,7 +229,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
                                 />
                             </div>
                             <div className="flex justify-end">
-                                <span className="w-9 text-right text-[11px] font-bold text-[#002FA7] font-mono tabular-nums">{progress}%</span>
+                                <span className="w-9 text-right text-[11px] font-bold text-[#002FA7] dark:text-blue-400 font-mono tabular-nums">{progress}%</span>
                             </div>
                         </div>
                     </div>

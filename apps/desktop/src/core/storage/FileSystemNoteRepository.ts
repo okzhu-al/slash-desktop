@@ -111,7 +111,11 @@ export class FileSystemNoteRepository implements NoteRepository {
             // 文件不存在是正常情况（如已改名或删除的笔记仍在缓存中）
             // 只有非 "No such file" 的错误才值得 warn
             const msg = String(e);
-            if (!msg.includes('No such file') && !msg.includes('os error 2') && !msg.includes('not found')) {
+            if (!msg.includes('No such file')
+                && !msg.includes('os error 2')
+                && !msg.includes('os error 3')
+                && !msg.includes('not found')
+                && !msg.includes('找不到指定的路径')) {
                 console.warn('Note not accessible:', e);
             }
             return null;
@@ -541,4 +545,3 @@ export class FileSystemNoteRepository implements NoteRepository {
         return true;
     }
 }
-

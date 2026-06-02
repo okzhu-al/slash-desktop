@@ -12,6 +12,13 @@ import { taskService } from '@/features/kanban/taskService';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { PARA_TEAM_TO_PERSONAL } from '@/features/sidebar/hooks/useTeamDirectoryMapping';
 
+interface TeamDirectoryMappingEntry {
+    directory_id?: string;
+    local_path?: string;
+    remote_path?: string;
+    status?: string;
+}
+
 // 反向映射：个人 PARA 路径 → 团队 PARA 路径
 const PARA_PERSONAL_TO_TEAM: Record<string, string> = Object.fromEntries(
     Object.entries(PARA_TEAM_TO_PERSONAL).map(([team, personal]) => [personal, team])
@@ -66,6 +73,7 @@ export function FolderPage({
 
     const [localRelPath, setLocalRelPath] = useState<string | null>(null);
     const [teamRelPath, setTeamRelPath] = useState<string | null>(null);
+    const [teamDirectoryId, setTeamDirectoryId] = useState<string | null>(null);
     const [providerChoice, setProviderChoice] = useState<ProviderChoice>('local');
     const [resolving, setResolving] = useState(true);
     
@@ -93,8 +101,55 @@ export function FolderPage({
                 const { readTextFile, exists } = await import('@tauri-apps/plugin-fs');
                 let foundLocal = mode === 'personal' ? initialRelativePath : null;
                 let foundTeam = mode === 'team' ? initialRelativePath : null;
+                let foundTeamDirectoryId: string | null = null;
 
                 try {
+                    let v3Mappings: TeamDirectoryMappingEntry[] = [];
+                    try {
+                        const rawV3 = await readTextFile(`${vaultPath}/.slash/team_directory_mappings.json`);
+                        const dataV3 = JSON.parse(rawV3);
+                        for (const team of Object.values(dataV3?.teams || {}) as Array<any>) {
+                            for (const entry of Object.values(team?.directories || {}) as TeamDirectoryMappingEntry[]) {
+                                if (entry?.status === 'active' && entry.local_path && entry.remote_path) {
+                                    v3Mappings.push(entry);
+                                }
+                            }
+                        }
+                    } catch {
+                        // v3 mapping is optional for legacy vaults.
+                    }
+
+                    for (const entry of v3Mappings) {
+                        const localPath = entry.local_path;
+                        const remotePath = entry.remote_path;
+                        if (!localPath || !remotePath) continue;
+                        if (mode === 'personal') {
+                            if (localPath === initialRelativePath) {
+                                foundTeam = remotePath;
+                                foundTeamDirectoryId = entry.directory_id || null;
+                                break;
+                            }
+                            if (initialRelativePath.startsWith(`${localPath}/`)) {
+                                const suffix = initialRelativePath.slice(localPath.length);
+                                foundTeam = `${remotePath}${suffix}`;
+                                foundTeamDirectoryId = entry.directory_id || null;
+                                break;
+                            }
+                        } else {
+                            if (remotePath === initialRelativePath) {
+                                foundLocal = localPath;
+                                foundTeamDirectoryId = entry.directory_id || null;
+                                break;
+                            }
+                            if (initialRelativePath.startsWith(`${remotePath}/`)) {
+                                const suffix = initialRelativePath.slice(remotePath.length);
+                                foundLocal = `${localPath}${suffix}`;
+                                foundTeamDirectoryId = entry.directory_id || null;
+                                break;
+                            }
+                        }
+                    }
+
                     const raw = await readTextFile(`${vaultPath}/.slash/team_path_mappings.json`);
                     const data = JSON.parse(raw);
 
@@ -170,6 +225,7 @@ export function FolderPage({
                 if (isMounted) {
                     setLocalRelPath(foundLocal);
                     setTeamRelPath(foundTeam);
+                    setTeamDirectoryId(foundTeam ? foundTeamDirectoryId : null);
                 }
             } catch (e) {
                 console.error('[FolderPage] Failed to resolve path mappings:', e);
@@ -249,7 +305,7 @@ export function FolderPage({
                     {/* AI Config switch (个人空间) */}
                     {isPersonal && localRelPath && !resolving && (
                         <div className="flex items-center gap-2 hover:bg-zinc-100/50 dark:hover:bg-white/5 pl-3 pr-2 py-1.5 rounded-full transition-colors" title={t('folder.inherit_hint', '子文件夹无配置时将继承父文件夹的配置')}>
-                            <Bot size={14} className={cn(providerChoice === 'online' ? 'text-indigo-500' : 'text-zinc-400')} />
+                            <Bot size={14} className={cn(providerChoice === 'online' ? 'text-indigo-500 dark:text-blue-400' : 'text-zinc-400')} />
                             <span className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400">
                                 {providerChoice === 'online' ? 'Online' : 'Local'}
                             </span>
@@ -343,6 +399,7 @@ export function FolderPage({
                             <div className="p-6">
                                 <TeamDirPanel
                                     directoryPath={teamRelPath}
+                                    directoryId={teamDirectoryId}
                                 />
                             </div>
                         )}

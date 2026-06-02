@@ -69,7 +69,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 );
 
 (window as any).__slashBootstrapped = true;
+window.clearTimeout((window as any).__slashBootSlowTimer);
 window.clearTimeout((window as any).__slashBootFallback);
+delete (document.getElementById("root") as HTMLElement | null)?.dataset.slashBootFallback;
 
 if (!import.meta.env.DEV) {
     requestAnimationFrame(() => {

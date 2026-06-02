@@ -89,13 +89,13 @@ export function SidebarFooter({
                                             className={cn(
                                                 "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
                                                 isCurrentVault
-                                                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20"
+                                                    ? "text-indigo-600 dark:text-blue-400 bg-indigo-50 dark:bg-indigo-900/20"
                                                     : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                                             )}
                                         >
-                                            <Folder size={16} className={isCurrentVault ? "text-indigo-500" : ""} />
+                                            <Folder size={16} className={isCurrentVault ? "text-indigo-500 dark:text-blue-400" : ""} />
                                             <span className="truncate flex-1 text-left">{vault.name}</span>
-                                            {isCurrentVault && <span className="text-xs text-indigo-500">✓</span>}
+                                            {isCurrentVault && <span className="text-xs text-indigo-500 dark:text-blue-400">✓</span>}
                                         </button>
                                     );
                                 })}

@@ -118,7 +118,7 @@ export const LinkPreviewCard = ({
 
         return (
             <div
-                className="w-72 p-3 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
+                className="w-72 p-3 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg cursor-pointer hover:border-indigo-300 dark:hover:border-blue-400/60 transition-colors"
                 onClick={handleCreateClick}
             >
                 <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
@@ -138,14 +138,14 @@ export const LinkPreviewCard = ({
 
     return (
         <div
-            className="w-72 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors"
+            className="w-72 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg cursor-pointer hover:border-indigo-300 dark:hover:border-blue-400/60 transition-colors"
             onClick={handleClick}
         >
             {/* Title */}
             <h4 className="font-medium text-zinc-900 dark:text-zinc-100 mb-1 line-clamp-1">
                 {preview.title}
                 {section && (
-                    <span className="text-indigo-500 dark:text-indigo-400 ml-1">
+                    <span className="text-indigo-500 dark:text-blue-400 ml-1">
                         #{section}
                     </span>
                 )}
@@ -165,7 +165,7 @@ export const LinkPreviewCard = ({
                             e.stopPropagation();
                             if (onRelationChange) setShowRelationPicker(!showRelationPicker);
                         }}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
+                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-blue-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
                         title={t('relation.clickToChange', '点击修改关系')}
                     >
                         📎 {t(`relation.${relation}`, relation)}

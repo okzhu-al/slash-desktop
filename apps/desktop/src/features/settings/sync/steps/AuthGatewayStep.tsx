@@ -180,7 +180,7 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                                         value={ctx.password} onChange={(e) => ctx.setPassword(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && !isInputDisabled && handleUnifiedLogin()}
                                         placeholder={t('sync.password_placeholder')}
-                                        className="glass-input w-full px-3.5 py-2.5 text-[14px] font-medium rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
+                                        className="glass-input w-full px-3.5 py-2.5 text-[14px] font-medium rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-blue-400/15 transition-all shadow-inner"
                                     />
                                     <label className="flex items-center gap-2.5 px-1 cursor-pointer w-max group">
                                         <div className="relative flex items-center justify-center">
@@ -208,7 +208,7 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                                     value={ctx.accessCode} onChange={(e) => ctx.setAccessCode(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && !isInputDisabled && handleUnifiedLogin()}
                                     placeholder={ctx.serverInfo?.has_pin ? t('sync.pin_input_placeholder') : t('sync.pair_code_placeholder', '服务器已重置，请输入配对码重新连接')}
-                                    className="glass-input w-full px-3.5 py-2.5 text-[14px] font-mono tracking-widest rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-[#002FA7]/10 transition-all shadow-inner"
+                                    className="glass-input w-full px-3.5 py-2.5 text-[14px] font-mono tracking-widest rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-[#002FA7]/50 dark:focus:border-blue-400/50 focus:ring-4 focus:ring-[#002FA7]/10 dark:focus:ring-blue-400/15 transition-all shadow-inner"
                                 />
                             )}
                         </div>
@@ -243,7 +243,7 @@ export const AuthGatewayStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 <div className="glass-panel flex flex-col items-center justify-center py-10 px-6 text-center rounded-2xl mb-6 shadow-sm">
                     <div className="relative mb-6 flex items-center justify-center group cursor-default">
                         <div className="absolute w-44 h-44 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 pointer-events-none mix-blend-multiply dark:mix-blend-lighten" style={{ background: 'radial-gradient(circle, rgba(0,47,167,0.18) 0%, rgba(0,47,167,0) 65%)' }} />
-                        <div className="relative w-20 h-20 rounded-3xl bg-linear-to-br from-white to-[#002FA7]/5 dark:from-zinc-800 dark:to-[#002FA7]/20 shadow-xl dark:shadow-md border border-white dark:border-blue-500/30 flex items-center justify-center transform transition-all duration-500 group-hover:-translate-y-1.5 ring-4 ring-[#002FA7]/10 dark:ring-[#002FA7]/20 backdrop-blur-md">
+                        <div className="relative w-20 h-20 rounded-3xl bg-linear-to-br from-white to-[#002FA7]/5 dark:from-zinc-800 dark:to-[#002FA7]/20 shadow-xl dark:shadow-md border border-white dark:border-blue-500/30 flex items-center justify-center transform transition-all duration-500 group-hover:-translate-y-1.5 ring-4 ring-[#002FA7]/10 dark:ring-blue-400/20 backdrop-blur-md">
                             <Cloud className="text-[#002FA7] dark:text-blue-400 transition-transform duration-500 group-hover:scale-110" size={34} strokeWidth={1.5} />
                         </div>
                     </div>

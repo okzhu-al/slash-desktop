@@ -33,7 +33,7 @@ export const GraphTooltip = ({ node, position }: GraphTooltipProps) => {
                 {node.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                         {node.tags.map(tag => (
-                            <span key={tag} className="text-[9px] px-1.5 py-px rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
+                            <span key={tag} className="text-[9px] px-1.5 py-px rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-blue-400">
                                 {tag}
                             </span>
                         ))}

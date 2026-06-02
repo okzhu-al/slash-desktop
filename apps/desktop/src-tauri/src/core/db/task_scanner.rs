@@ -52,10 +52,18 @@ pub fn parse_task_line(line: &str, note_path: &str, line_number: i32) -> Option<
     let line_trimmed = line.trim();
 
     // 基于第一性原理，使用 starts_with 绝对安全地处理 UTF-8 字符串前缀，彻底防御 Char Boundary 切片 Panic
-    let (is_completed, rest) = if line_trimmed.starts_with("- [ ]") || line_trimmed.starts_with("* [ ]") {
+    let (is_completed, rest) = if line_trimmed.starts_with("- [ ]")
+        || line_trimmed.starts_with("* [ ]")
+        || line_trimmed.starts_with("+ [ ]")
+    {
         (false, &line_trimmed[5..])
-    } else if line_trimmed.starts_with("- [x]") || line_trimmed.starts_with("- [X]") ||
-              line_trimmed.starts_with("* [x]") || line_trimmed.starts_with("* [X]") {
+    } else if line_trimmed.starts_with("- [x]")
+        || line_trimmed.starts_with("- [X]")
+        || line_trimmed.starts_with("* [x]")
+        || line_trimmed.starts_with("* [X]")
+        || line_trimmed.starts_with("+ [x]")
+        || line_trimmed.starts_with("+ [X]")
+    {
         (true, &line_trimmed[5..])
     } else {
         return None;

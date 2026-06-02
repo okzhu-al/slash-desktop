@@ -10,7 +10,8 @@
  * ⑥ Task Kanban (仅 PROJECT 子目录)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -23,6 +24,8 @@ import { cn } from '@/shared/utils/cn';
 import { syncService } from '@/services/SyncService';
 import { autoSyncManager } from '@/services/AutoSyncManager';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useFileSystemStore } from '@/core/fs/store';
+import { PARA_TEAM_TO_PERSONAL } from '@/features/sidebar/hooks/useTeamDirectoryMapping';
 import {
     teamService,
     type TeamMemberInfo,
@@ -34,12 +37,15 @@ import {
 interface TeamDirPanelProps {
     /** 团队目录的相对路径 (如 '01_PROJECTS/Alpha') */
     directoryPath: string;
+    /** UUID-first directory identity */
+    directoryId?: string | null;
     /** 目录名称 */
     directoryName?: string;
 }
 
 export function TeamDirPanel({
     directoryPath,
+    directoryId,
 }: TeamDirPanelProps) {
     const { t } = useTranslation();
 
@@ -66,12 +72,98 @@ export function TeamDirPanel({
     const FILE_PAGE_SIZE = 10;
     const [trashVisibleCount, setTrashVisibleCount] = useState(FILE_PAGE_SIZE);
     const [fileVisibleCount, setFileVisibleCount] = useState(FILE_PAGE_SIZE);
+    const loadSeqRef = useRef(0);
+    const refreshTimerRef = useRef<number | null>(null);
+    const allMembersSigRef = useRef('');
+    const filesSigRef = useRef('');
+    const dirMembersSigRef = useRef('');
+    const trashedFilesSigRef = useRef('');
 
     const isAdmin = currentUserRole === 'admin';
 
     // 目录 Owner 也可管理成员（不只是 Admin）
     const [isDirOwner, setIsDirOwner] = useState(false);
     const canManageDir = isAdmin || isDirOwner;
+
+    const setArrayIfChanged = <T,>(
+        sigRef: MutableRefObject<string>,
+        setter: Dispatch<SetStateAction<T[]>>,
+        next: T[],
+    ) => {
+        const signature = JSON.stringify(next);
+        if (sigRef.current === signature) return;
+        sigRef.current = signature;
+        setter(next);
+    };
+
+    const teamPathToLocalPath = (teamPath: string): string | null => {
+        const normalized = teamPath.replace(/\\/g, '/').replace(/\/$/, '');
+        for (const [teamPrefix, personalPrefix] of Object.entries(PARA_TEAM_TO_PERSONAL)) {
+            if (normalized === teamPrefix) return personalPrefix;
+            if (normalized.startsWith(`${teamPrefix}/`)) {
+                return `${personalPrefix}${normalized.slice(teamPrefix.length)}`;
+            }
+        }
+        return null;
+    };
+
+    const isActiveMappingForPath = async (
+        vaultRoot: string,
+        localPath: string,
+        remotePath: string,
+    ): Promise<boolean> => {
+        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+        const localNorm = localPath.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+        const remoteNorm = remotePath.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+
+        try {
+            const raw = await readTextFile(`${vaultRoot}/.slash/team_directory_mappings.json`);
+            const data = JSON.parse(raw);
+            const directories = teamVaultId ? data?.teams?.[teamVaultId]?.directories : null;
+            if (directories && typeof directories === 'object') {
+                for (const mapping of Object.values(directories) as Array<any>) {
+                    if (mapping?.status !== 'active') continue;
+                    const mappedLocal = String(mapping.local_path || '').replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                    const mappedRemote = String(mapping.remote_path || '').replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                    if (mappedLocal === localNorm && mappedRemote === remoteNorm) return true;
+                }
+            }
+        } catch {
+            // Mapping files are optional.
+        }
+
+        try {
+            const raw = await readTextFile(`${vaultRoot}/.slash/team_path_mappings.json`);
+            const data = JSON.parse(raw);
+            const mappings = teamVaultId ? data?.teams?.[teamVaultId] : null;
+            if (mappings && typeof mappings === 'object') {
+                for (const [source, target] of Object.entries(mappings)) {
+                    const mappedLocal = String(source).replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                    const mappedRemote = String(target).replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+                    if (mappedLocal === localNorm && mappedRemote === remoteNorm) return true;
+                }
+            }
+        } catch {
+            // Legacy mapping is optional.
+        }
+
+        return false;
+    };
+
+    const shouldForceRecoverDirectory = async (trash: TrashedFileInfo): Promise<boolean> => {
+        if (!trash.original_directory_id) return false;
+        const vaultRoot = useFileSystemStore.getState().root?.path;
+        if (!vaultRoot) return false;
+        const parentRemote = trash.original_path.replace(/\\/g, '/').replace(/\/[^/]+$/, '');
+        const localParent = teamPathToLocalPath(parentRemote);
+        if (!localParent) return false;
+
+        const { exists } = await import('@tauri-apps/plugin-fs');
+        const occupied = await exists(`${vaultRoot.replace(/\/$/, '')}/${localParent}`).catch(() => false);
+        if (!occupied) return false;
+
+        return !(await isActiveMappingForPath(vaultRoot, localParent, parentRemote));
+    };
 
     // 🛡️ BUG-E06: PARA 根目录（01_PROJECTS 等不含 /）回收站仅 Admin 可操作
     const isParaRoot = !directoryPath.includes('/');
@@ -81,6 +173,7 @@ export function TeamDirPanel({
     const loadData = useCallback(async (showLoader = true) => {
         const config = syncService.getConfig();
         if (!config || !teamVaultId) return;
+        const seq = ++loadSeqRef.current;
         if (showLoader) setLoading(true);
         try {
             // 先从 JWT 判断角色
@@ -96,11 +189,12 @@ export function TeamDirPanel({
             // 加载成员列表（observer 也可以查看成员列表）
             const [membersResult, filesResult] = await Promise.all([
                 teamService.listMembers(config.serverUrl, config.accessToken, teamVaultId),
-                teamService.getDirectoryFiles(config.serverUrl, config.accessToken, teamVaultId, directoryPath),
+                teamService.getDirectoryFiles(config.serverUrl, config.accessToken, teamVaultId, directoryPath, directoryId),
             ]);
 
-            setAllTeamMembers(membersResult.members);
-            setFiles(filesResult);
+            if (seq !== loadSeqRef.current) return;
+            setArrayIfChanged(allMembersSigRef, setAllTeamMembers, membersResult.members);
+            setArrayIfChanged(filesSigRef, setFiles, filesResult);
 
             // 判断当前用户是否为 Admin
             const me = membersResult.members.find(m => m.user_id === currentUserId);
@@ -113,9 +207,10 @@ export function TeamDirPanel({
             // 所有用户都加载目录权限（成员列表只读），管理操作在 UI 层由 isAdmin 控制
             try {
                 const permResult = await teamService.getDirectoryPermissions(
-                    config.serverUrl, config.accessToken, teamVaultId, directoryPath
+                    config.serverUrl, config.accessToken, teamVaultId, directoryPath, directoryId
                 );
-                setDirMembers(permResult);
+                if (seq !== loadSeqRef.current) return;
+                setArrayIfChanged(dirMembersSigRef, setDirMembers, permResult);
                 if (permResult.length > 0) {
                     setObserverVisible(permResult[0].observer_visible);
                 } else {
@@ -131,34 +226,53 @@ export function TeamDirPanel({
                 if (trashAllowed) {
                     try {
                         const trasheds = await teamService.getTrashedFiles(
-                            config.serverUrl, config.accessToken, teamVaultId, directoryPath
+                            config.serverUrl, config.accessToken, teamVaultId, directoryPath, directoryId
                         );
-                        setTrashedFiles(trasheds);
+                        if (seq !== loadSeqRef.current) return;
+                        setArrayIfChanged(trashedFilesSigRef, setTrashedFiles, trasheds);
                     } catch (e) {
                         console.warn('[TeamDirPanel] Failed to load trash:', e);
-                        setTrashedFiles([]);
+                        setArrayIfChanged(trashedFilesSigRef, setTrashedFiles, []);
                     }
                 } else {
-                    setTrashedFiles([]);
+                    setArrayIfChanged(trashedFilesSigRef, setTrashedFiles, []);
                 }
             } catch (permErr) {
                 console.warn('[TeamDirPanel] Failed to load directory permissions (read-only fallback):', permErr);
-                setDirMembers([]);
+                setArrayIfChanged(dirMembersSigRef, setDirMembers, []);
                 setObserverVisible(false);
             }
         } catch (e) {
             console.error('[TeamDirPanel] Failed to load:', e);
         } finally {
-            if (showLoader) setLoading(false);
+            if (showLoader && seq === loadSeqRef.current) setLoading(false);
         }
-    }, [teamVaultId, directoryPath]);
+    }, [teamVaultId, directoryPath, directoryId]);
 
     useEffect(() => { loadData(true); }, [loadData]);
 
     // ── 监听后台全局同步及变化事件，实现实时无损刷新视图 ──
     useEffect(() => {
-        const handleAutoRefresh = () => {
-            loadData(false);
+        const hasMeaningfulSyncChange = (event: Event): boolean => {
+            if (event.type !== 'sync:completed') return true;
+            const detail = (event as CustomEvent)?.detail;
+            if (!detail) return false;
+            const hasServerDeleted = Array.isArray(detail.server_deleted) && detail.server_deleted.length > 0;
+            const actuallyPulled = Array.isArray(detail.actually_pulled_paths) ? detail.actually_pulled_paths.length : 0;
+            const filesPulled = Number(detail.files_pulled || 0);
+            const filesPushed = Number(detail.files_pushed || 0);
+            return hasServerDeleted || actuallyPulled > 0 || filesPulled > 0 || filesPushed > 0;
+        };
+
+        const handleAutoRefresh = (event: Event) => {
+            if (!hasMeaningfulSyncChange(event)) return;
+            if (refreshTimerRef.current) {
+                window.clearTimeout(refreshTimerRef.current);
+            }
+            refreshTimerRef.current = window.setTimeout(() => {
+                refreshTimerRef.current = null;
+                loadData(false);
+            }, 300);
         };
         window.addEventListener('slash:team-file-deleted', handleAutoRefresh);
         window.addEventListener('slash:team-dir-changed', handleAutoRefresh);
@@ -169,6 +283,10 @@ export function TeamDirPanel({
             window.removeEventListener('slash:team-dir-changed', handleAutoRefresh);
             window.removeEventListener('team:directories-changed', handleAutoRefresh);
             window.removeEventListener('sync:completed', handleAutoRefresh);
+            if (refreshTimerRef.current) {
+                window.clearTimeout(refreshTimerRef.current);
+                refreshTimerRef.current = null;
+            }
         };
     }, [loadData]);
 
@@ -181,7 +299,7 @@ export function TeamDirPanel({
         try {
             await teamService.setDirectoryPermissions(
                 config.serverUrl, config.accessToken, teamVaultId,
-                directoryPath, inviteUserId, 'TeamMember', observerVisible,
+                directoryPath, inviteUserId, 'TeamMember', observerVisible, directoryId,
             );
             setInviteUserId('');
             await loadData(false);
@@ -202,7 +320,7 @@ export function TeamDirPanel({
         try {
             await teamService.removeDirectoryMember(
                 config.serverUrl, config.accessToken, teamVaultId,
-                directoryPath, userId,
+                directoryPath, userId, directoryId,
             );
             await loadData(false);
         } catch (e) {
@@ -221,7 +339,7 @@ export function TeamDirPanel({
         try {
             await teamService.setDirectoryPermissions(
                 config.serverUrl, config.accessToken, teamVaultId,
-                directoryPath, userId, newRole as 'Owner' | 'TeamMember', observerVisible,
+                directoryPath, userId, newRole as 'Owner' | 'TeamMember', observerVisible, directoryId,
             );
             await loadData(false);
         } catch (e) {
@@ -243,7 +361,7 @@ export function TeamDirPanel({
                 for (const m of dirMembers) {
                     await teamService.setDirectoryPermissions(
                         config.serverUrl, config.accessToken, teamVaultId,
-                        directoryPath, m.user_id, m.dir_role, newVal,
+                        directoryPath, m.user_id, m.dir_role, newVal, directoryId,
                     );
                 }
             } else {
@@ -257,7 +375,7 @@ export function TeamDirPanel({
                 if (currentUserId) {
                     await teamService.setDirectoryPermissions(
                         config.serverUrl, config.accessToken, teamVaultId,
-                        directoryPath, currentUserId, 'Owner' as any, newVal,
+                        directoryPath, currentUserId, 'Owner' as any, newVal, directoryId,
                     );
                 }
             }
@@ -271,7 +389,7 @@ export function TeamDirPanel({
 
 
     // ── 回收站操作 ──
-    const handleRestoreTrash = async (trashId: string) => {
+    const handleRestoreTrash = async (trash: TrashedFileInfo) => {
         const isConfirmed = await confirm(
             t('team.trash_restore_confirm', '确定要恢复该文件吗？\n文件将回到原有的路径。如果原路径已有同名文件可能会被覆盖。'),
             { title: t('common.confirm', '确认'), kind: 'warning' }
@@ -280,9 +398,16 @@ export function TeamDirPanel({
         
         const config = syncService.getConfig();
         if (!config || !teamVaultId) return;
-        setActionLoading(`restore-${trashId}`);
+        const forceRecoverDirectory = await shouldForceRecoverDirectory(trash);
+        setActionLoading(`restore-${trash.id}`);
         try {
-            await teamService.restoreTrashedFile(config.serverUrl, config.accessToken, teamVaultId, trashId);
+            await teamService.restoreTrashedFile(
+                config.serverUrl,
+                config.accessToken,
+                teamVaultId,
+                trash.id,
+                { forceRecoverDirectory },
+            );
             await loadData(false);
             // 直接触发本地全域同步脉搏，防止恢复文件落后于 Personal Space 视野
             autoSyncManager.manualSync();
@@ -645,7 +770,7 @@ export function TeamDirPanel({
                                                 <td className="px-3 py-2 text-right">
                                                     <div className="flex items-center justify-end gap-2">
                                                         <button
-                                                            onClick={() => handleRestoreTrash(f.id)}
+                                                            onClick={() => handleRestoreTrash(f)}
                                                             disabled={disabled}
                                                             className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:bg-emerald-900/30 rounded-md transition-colors"
                                                             title={t('team.trash_restore_btn', '恢复文件')}

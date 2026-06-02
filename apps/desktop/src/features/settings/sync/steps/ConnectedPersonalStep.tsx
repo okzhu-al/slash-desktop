@@ -16,7 +16,7 @@ export const ConnectedPersonalStep = ({ ctx }: { ctx: SyncFlowContext }) => {
             {/* 个人空间信息 */}
             <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                    <FolderOpen size={16} className="text-[#002FA7]" />
+                    <FolderOpen size={16} className="text-[#002FA7] dark:text-blue-400" />
                     <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t('sync.personal_vault')}</span>
                 </div>
                 <div className="space-y-1.5 text-xs text-[#545454] dark:text-[#C8C8C8]">
@@ -32,7 +32,7 @@ export const ConnectedPersonalStep = ({ ctx }: { ctx: SyncFlowContext }) => {
 
             {/* 小字入口：开启团队 */}
             <div className="text-center">
-                <button onClick={() => ctx.setStep('create_team')} className="text-xs text-[#545454] hover:text-[#002FA7] transition-colors">
+                <button onClick={() => ctx.setStep('create_team')} className="text-xs text-[#545454] hover:text-[#002FA7]/80 dark:hover:text-blue-300 transition-colors">
                     {t('sync.need_team')}
                 </button>
             </div>

@@ -32,7 +32,7 @@ export const ConnectedTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 {/* 个人空间 */}
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                        <FolderOpen size={16} className="text-[#002FA7]" />
+                        <FolderOpen size={16} className="text-[#002FA7] dark:text-blue-400" />
                         <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t('sync.personal_vault')}</span>
                     </div>
                     <div className="space-y-1.5 text-xs text-[#545454] dark:text-[#C8C8C8]">
@@ -46,7 +46,7 @@ export const ConnectedTeamStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                 {/* 团队空间 */}
                 <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50 p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                        <Users size={16} className="text-[#002FA7]" />
+                        <Users size={16} className="text-[#002FA7] dark:text-blue-400" />
                         <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t('sync.team_vault')}</span>
                     </div>
                     {ctx.teamVault ? (

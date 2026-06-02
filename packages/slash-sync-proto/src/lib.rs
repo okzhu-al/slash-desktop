@@ -101,6 +101,9 @@ pub struct SyncNegotiateRequest {
     /// 客户端已删除的文件路径列表（存在于 sync_state 但本地已不存在）
     #[serde(default)]
     pub deleted_paths: Vec<String>,
+    /// UUID-First 删除声明。兼容 deleted_paths，但服务端应优先使用 file_id 定位权威路径。
+    #[serde(default)]
+    pub deleted_files: Vec<DeletedFile>,
 }
 
 /// 协商用文件条目
@@ -285,6 +288,9 @@ pub struct SyncResult {
     pub files_pushed: u32,
     pub files_pulled: u32,
     pub conflicts: Vec<ConflictInfo>,
+    /// 服务端已删除、客户端已在本地移除的文件路径与 UUID
+    #[serde(default)]
+    pub server_deleted: Vec<DeletedFile>,
     /// Pull 时因编辑中而跳过的文件路径
     #[serde(default)]
     pub skipped_pulls: Vec<String>,
@@ -806,6 +812,7 @@ mod tests {
             client_clock: 100,
             client_files: vec![],
             deleted_paths: vec![],
+            deleted_files: vec![],
         };
         let json = serde_json::to_string(&req).unwrap();
         let parsed: SyncNegotiateRequest = serde_json::from_str(&json).unwrap();
@@ -947,6 +954,8 @@ pub struct TeamScopeDir {
     pub directory_id: Option<String>,
     pub directory_path: String, // 团队 vault 中的路径 e.g. "01_PROJECTS/NAS项目/"
     pub role: String,           // "owner" / "team_member"
+    #[serde(default)]
+    pub owner_display_name: Option<String>,
 }
 
 /// GET /api/team/my-scope 响应

@@ -65,7 +65,7 @@ export function PropertiesSection({
                     <ChevronRight
                         size={16}
                         className={cn(
-                            "transition-all duration-200 text-[#002FA7]",
+                            "transition-all duration-200 text-[#002FA7] dark:text-blue-400",
                             "absolute -left-5",
                             showProperties ? "opacity-0 group-hover:opacity-100 " : "opacity-100",
                             showProperties && "rotate-90"

@@ -324,7 +324,7 @@ function SnapshotPreviewModal({ snap, onClose, t, docStatus, canRevert, vaultPat
                             <button
                                 onClick={handleSaveAs}
                                 disabled={saving || loading || !content}
-                                className="px-3 py-1 text-xs font-medium rounded-md border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                className="px-3 py-1 text-xs font-medium rounded-md border border-indigo-200 dark:border-blue-500/35 text-indigo-600 dark:text-blue-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-50 flex items-center gap-1"
                             >
                                 <Save size={12} />
                                 {saving ? t('versions.saving_btn', '保存中...') : t('versions.save_as_btn', '另存为副本')}
@@ -435,7 +435,7 @@ function FlatReplyNode({
                         
                         {/* 如果回复的不是主楼，而是某个具体人的回复，就 @ 出来 */}
                         {parentReply && (
-                            <span className="text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-px rounded-sm flex items-center h-4">
+                            <span className="text-[10px] text-indigo-500 dark:text-blue-400 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-px rounded-sm flex items-center h-4">
                                 @{parentReply.author_name || '?'}
                             </span>
                         )}
@@ -453,7 +453,7 @@ function FlatReplyNode({
                     <div className="flex items-center gap-2 mt-0.5 opacity-0 group-hover/reply:opacity-100 transition-opacity">
                         {currentUser !== reply.author_name && (
                             <button onClick={e => { e.stopPropagation(); onReply(reply.id); }}
-                                className="text-[10px] text-zinc-400 hover:text-indigo-500 flex items-center gap-0.5">
+                                className="text-[10px] text-zinc-400 hover:text-indigo-500 dark:hover:text-blue-300 flex items-center gap-0.5">
                                 <CornerDownRight size={9} /> {t('activity.reply', '回复')}
                             </button>
                         )}
@@ -481,7 +481,7 @@ function FlatReplyNode({
                             }
                             if (e.key === 'Escape') onCancelReply();
                         }}
-                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                     />
                     <button onClick={onCancelReply} className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5">{t('activity.cancel', '取消')}</button>
                 </div>
@@ -624,7 +624,7 @@ function EventRow({ t, event, currentUser, noteName, onPreviewVersion,
                     {!readOnly && (
                     <div className="flex items-center gap-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={e => { e.stopPropagation(); onReply(eventId as string); }}
-                            className="text-[10px] text-zinc-400 hover:text-indigo-500 flex items-center gap-0.5">
+                            className="text-[10px] text-zinc-400 hover:text-indigo-500 dark:hover:text-blue-300 flex items-center gap-0.5">
                             <CornerDownRight size={9} /> {t('activity.reply', '回复')}
                         </button>
                         {event.kind === 'annotation' && isOwn && (
@@ -669,7 +669,7 @@ function EventRow({ t, event, currentUser, noteName, onPreviewVersion,
                             }
                             if (e.key === 'Escape') onCancelReply();
                         }}
-                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                     />
                     <button onClick={onCancelReply} className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5">{t('activity.cancel', '取消')}</button>
                 </div>
@@ -923,9 +923,18 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         let hasGlobalRedDot = false;
         let matchedPath = relPath;
         const directEntry = st.getUnreadEntry(relPath);
-        if (directEntry || (currentFileId && [...st.unreadFiles.values()].some(entry => entry.fileId === currentFileId))) {
+        let matchedEntry = directEntry;
+        if (!matchedEntry && currentFileId) {
+            for (const entry of st.unreadFiles.values()) {
+                if (entry.fileId === currentFileId) {
+                    matchedEntry = entry;
+                    break;
+                }
+            }
+        }
+        if (matchedEntry) {
             hasGlobalRedDot = true;
-            matchedPath = directEntry?.filePath ?? relPath;
+            matchedPath = matchedEntry.filePath;
         } else {
             for (const entry of st.unreadFiles.values()) {
                 if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
@@ -1049,7 +1058,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
                                 if (vaultId) clearAllUnread(vaultId);
                             }}
                             title={t('activity.clear_all_unread', '全部标为已读')}
-                            className="p-1 rounded-md transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 text-indigo-500 dark:text-indigo-400"
+                            className="p-1 rounded-md transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 text-indigo-500 dark:text-blue-400"
                         >
                             <CheckCheck size={16} />
                         </button>
@@ -1058,7 +1067,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
                         <button
                             onClick={() => setShowCompose(v => !v)}
                             title={t('activity.compose_comment', '发表评论')}
-                            className={`p-1 rounded-md transition-colors ${showCompose ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400'}`}
+                            className={`p-1 rounded-md transition-colors ${showCompose ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 dark:text-blue-400' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400'}`}
                         >
                             <MessageSquare size={16} />
                         </button>
@@ -1077,7 +1086,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
                             placeholder={t('comments.input_placeholder', '写一条评论...')}
                             rows={2}
-                            className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                            className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                         />
                         <button onClick={handleSendComment} disabled={!composing.trim()}
                             className="p-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-40 transition-colors">

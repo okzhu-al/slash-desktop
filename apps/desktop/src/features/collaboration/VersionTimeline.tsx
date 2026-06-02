@@ -430,7 +430,7 @@ export function VersionTimeline({ notePath }: VersionTimelineProps) {
                         </p>
                         <button
                             onClick={() => window.dispatchEvent(new CustomEvent('app:open-settings', { detail: { tab: 'sync' } }))}
-                            className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                            className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-blue-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-xs font-medium rounded-lg transition-colors cursor-pointer"
                         >
                             {t('activity.go_to_configure', '去配置服务端')}
                         </button>

@@ -241,7 +241,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
                                 {!isReply && (
                                     <button
                                         onClick={() => setReplyingTo(replyingTo === ann.id ? null : ann.id)}
-                                        className="text-[10px] text-zinc-400 hover:text-indigo-500 flex items-center gap-0.5"
+                                        className="text-[10px] text-zinc-400 hover:text-indigo-500 dark:hover:text-blue-300 flex items-center gap-0.5"
                                     >
                                         <CornerDownRight size={10} /> {t('annotations.reply', '回复')}
                                     </button>
@@ -331,7 +331,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
                                             onChange={e => setReplyContent(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(thread.root.id); } }}
                                             placeholder={t('annotations.reply_placeholder', '回复...')}
-                                            className="flex-1 text-xs border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                            className="flex-1 text-xs border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                                             autoFocus
                                         />
                                         <button

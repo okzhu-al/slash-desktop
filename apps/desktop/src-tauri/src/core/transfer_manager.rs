@@ -555,7 +555,7 @@ impl TransferManager {
                         log::debug!("[TransferScheduler] ⚡ woken by notify");
                     }
                     _ = tokio::time::sleep(tick_duration) => {
-                        log::debug!("[TransferScheduler] periodic tick");
+                        log::trace!("[TransferScheduler] periodic tick");
                     }
                 }
 
@@ -620,9 +620,9 @@ impl TransferManager {
         };
 
         let capacity = (MAX_CONCURRENT as i32 - active_count).max(0) as usize;
-        // pending=0 && active=0 → DEBUG, 否则 → INFO
+        // 空队列 tick 是健康轮询，不进入日常 debug 日志。
         if pending_count == 0 && active_count == 0 {
-            log::debug!("[TransferScheduler] tick: pending=0 active=0 capacity={}", capacity);
+            log::trace!("[TransferScheduler] tick: pending=0 active=0 capacity={}", capacity);
         } else {
             log::info!("[TransferScheduler] tick: pending={} active={} capacity={}", pending_count, active_count, capacity);
         }

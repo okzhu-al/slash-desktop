@@ -10,7 +10,8 @@ use slash_sync_proto::{
 };
 
 use super::client::SyncClient;
-use super::helpers::{build_local_directory_hashes, collect_files_for_push};
+use super::helpers::{build_local_directory_hashes, collect_files_for_push, extract_asset_refs};
+use super::path_mapping::{normalize_prefix, TeamDirectoryMappingsFile, TeamPathMappingsFile};
 use super::state::{
     expire_edit_session_if_idle, load_unified_state, make_edit_session_id, save_unified_state,
 };
@@ -22,7 +23,9 @@ impl SyncingGuard {
     fn new(app: tauri::AppHandle) -> Self {
         use tauri::Manager;
         if let Some(syncing_state) = app.try_state::<crate::state::SyncingState>() {
-            syncing_state.0.store(true, std::sync::atomic::Ordering::Relaxed);
+            syncing_state
+                .0
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             log::debug!("🔒 [Sync] Set is_syncing = true");
         }
         Self(app)
@@ -33,7 +36,9 @@ impl Drop for SyncingGuard {
     fn drop(&mut self) {
         use tauri::Manager;
         if let Some(syncing_state) = self.0.try_state::<crate::state::SyncingState>() {
-            syncing_state.0.store(false, std::sync::atomic::Ordering::Relaxed);
+            syncing_state
+                .0
+                .store(false, std::sync::atomic::Ordering::Relaxed);
             log::debug!("🔓 [Sync] Set is_syncing = false");
         }
     }
@@ -78,6 +83,7 @@ pub async fn sync_vault(
         team_files_pulled,
         team_pulled_paths,
         team_actually_pulled_paths,
+        team_server_deleted,
         team_is_maintenance,
         team_maintenance_started_at,
         team_caps,
@@ -86,10 +92,14 @@ pub async fn sync_vault(
         Err(e) => {
             log::error!("[TeamSync] Failed: {e}");
             // 🚨 鉴权与权限熔断错误 (401 / 403) 必须向上抛出给前端，阻断整个同步流程以触发强退
-            if e.contains("401") || e.contains("Unauthorized") || e.contains("403") || e.contains("Forbidden") {
+            if e.contains("401")
+                || e.contains("Unauthorized")
+                || e.contains("403")
+                || e.contains("Forbidden")
+            {
                 return Err(e);
             }
-            (0, 0, vec![], vec![], false, None, None)
+            (0, 0, vec![], vec![], vec![], false, None, None)
         }
     };
 
@@ -117,8 +127,12 @@ pub async fn sync_vault(
             "[Sync] Detected team vault sync for vault='{}'. Skipping personal sync (Phase 2) to prevent 400 Bad Request error.",
             vault_id
         );
+        let should_refresh_vault = team_files_pushed > 0
+            || team_files_pulled > 0
+            || !team_server_deleted.is_empty()
+            || !team_actually_pulled_paths.is_empty();
         std::mem::drop(_guard);
-        {
+        if should_refresh_vault {
             use tauri::Emitter;
             let _ = app.emit("vault:refresh", ());
         }
@@ -127,6 +141,7 @@ pub async fn sync_vault(
             files_pushed: team_files_pushed,
             files_pulled: team_files_pulled,
             conflicts: vec![],
+            server_deleted: team_server_deleted,
             skipped_pulls: vec![],
             pulled_paths: team_pulled_paths,
             actually_pulled_paths: team_actually_pulled_paths,
@@ -149,7 +164,12 @@ pub async fn sync_vault(
     // Step 1: Scan local personal path
     // 🛡️ 个人空间不设文件大小限制（传 None），仅团队空间受 max_sync_file_size 约束
     // assets/ 文件用文件名当 hash（零 IO），已在 scan_directory_manifests 中保证跳过内容读取
-    let manifests = scan_directory_manifests(&root, None);
+    let team_local_prefixes = load_active_team_local_prefixes(&root);
+    let manifests = filter_personal_manifests(
+        &root,
+        scan_directory_manifests(&root, None),
+        &team_local_prefixes,
+    );
 
     // Step 2: 构建目录级 Merkle hash
     let directory_hashes = build_local_directory_hashes(&manifests);
@@ -210,7 +230,10 @@ pub async fn sync_vault(
     if !candidates_for_delete.is_empty() {
         for (path, ph) in &candidates_for_delete {
             if path.starts_with("assets/") || path.starts_with(".slash/assets/") {
-                log::debug!("🔥🔥🔥 [PersonalSync] GC'd Asset correctly detected for deleted_paths: path='{}'", path);
+                log::debug!(
+                    "🔥🔥🔥 [PersonalSync] GC'd Asset correctly detected for deleted_paths: path='{}'",
+                    path
+                );
             } else {
                 log::debug!(
                     "[PersonalSync] 🔍 delete candidate: path='{}' personal_hash='{}'",
@@ -287,6 +310,15 @@ pub async fn sync_vault(
             }
         }
     }
+    let deleted_files = deleted_paths
+        .iter()
+        .map(|path| slash_sync_proto::DeletedFile {
+            path: path.clone(),
+            file_id: unified_state
+                .get(path)
+                .and_then(|state| state.file_id.clone()),
+        })
+        .collect::<Vec<_>>();
 
     let negotiate_req = SyncNegotiateRequest {
         vault_id: vault_id.clone(),
@@ -295,6 +327,7 @@ pub async fn sync_vault(
         client_clock: 0,
         client_files,
         deleted_paths: deleted_paths.clone(),
+        deleted_files,
     };
 
     log::debug!(
@@ -332,8 +365,14 @@ pub async fn sync_vault(
             let local_full_path = root.join(deleted_path);
 
             // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-            if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&local_full_path, &root) {
-                log::error!("[PersonalSync] 🚫 Path traversal blocked on delete: path={}, err={}", deleted_path, e);
+            if let Err(e) =
+                crate::commands::sync::helpers::validate_path_in_vault(&local_full_path, &root)
+            {
+                log::error!(
+                    "[PersonalSync] 🚫 Path traversal blocked on delete: path={}, err={}",
+                    deleted_path,
+                    e
+                );
                 continue;
             }
 
@@ -346,7 +385,12 @@ pub async fn sync_vault(
                                 crate::commands::sync::helpers::extract_slash_id_str(&content)
                             {
                                 if local_uuid != *expected_uuid {
-                                    log::warn!("[PersonalSync] Skipping deletion of {} because local UUID {} does not match server UUID {}. This file was likely recreated.", deleted_path, local_uuid, expected_uuid);
+                                    log::warn!(
+                                        "[PersonalSync] Skipping deletion of {} because local UUID {} does not match server UUID {}. This file was likely recreated.",
+                                        deleted_path,
+                                        local_uuid,
+                                        expected_uuid
+                                    );
                                     continue;
                                 }
                             }
@@ -389,7 +433,10 @@ pub async fn sync_vault(
         for conflict in &negotiate_resp.identity_conflicts {
             log::warn!(
                 "[PersonalSync] ⚠️ Identity conflict: path='{}' client_fid={:?} server_fid={:?} reason='{}'",
-                conflict.path, conflict.client_file_id, conflict.server_file_id, conflict.reason
+                conflict.path,
+                conflict.client_file_id,
+                conflict.server_file_id,
+                conflict.reason
             );
         }
     }
@@ -433,7 +480,8 @@ pub async fn sync_vault(
                 if is_asset_path && !payload.content.is_empty() {
                     log::error!(
                         "[Phase6 PersonalSync] 🚫 FATAL: asset blob leaked into push payload! path={} content_bytes={}",
-                        payload.manifest.relative_path, payload.content.len()
+                        payload.manifest.relative_path,
+                        payload.content.len()
                     );
                     return Err(format!(
                         "Phase6 safety violation: asset blob in push payload (path={}, {} bytes)",
@@ -493,7 +541,9 @@ pub async fn sync_vault(
 
                         log::debug!(
                             "[Phase6 PersonalSync] 🔍 asset detected for slow transfer: path={} hash={} size={}",
-                            m.relative_path, m.content_hash, m.size
+                            m.relative_path,
+                            m.content_hash,
+                            m.size
                         );
 
                         match crate::core::transfer_manager::TransferManager::enqueue_upload(
@@ -515,7 +565,8 @@ pub async fn sync_vault(
                     if actually_enqueued > 0 || skipped_completed > 0 {
                         log::debug!(
                             "[Phase6 PersonalSync] upload enqueue summary: enqueued={} skipped_completed={}",
-                            actually_enqueued, skipped_completed
+                            actually_enqueued,
+                            skipped_completed
                         );
                     }
                     if actually_enqueued > 0 {
@@ -568,8 +619,14 @@ pub async fn sync_vault(
                 let local_path = root.join(rel_path);
 
                 // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-                if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&local_path, &root) {
-                    log::error!("[Phase6 PersonalSync] 🚫 Path traversal blocked on enqueue download: path={}, err={}", rel_path, e);
+                if let Err(e) =
+                    crate::commands::sync::helpers::validate_path_in_vault(&local_path, &root)
+                {
+                    log::error!(
+                        "[Phase6 PersonalSync] 🚫 Path traversal blocked on enqueue download: path={}, err={}",
+                        rel_path,
+                        e
+                    );
                     continue;
                 }
 
@@ -585,7 +642,9 @@ pub async fn sync_vault(
                 let total_bytes = asset_size_map.get(rel_path).copied().unwrap_or(0);
                 log::debug!(
                     "[Phase6 PersonalSync] asset missing locally, enqueue download: path={} hash={} size={}",
-                    rel_path, file.manifest.content_hash, total_bytes
+                    rel_path,
+                    file.manifest.content_hash,
+                    total_bytes
                 );
 
                 if let Some(db_state) = app.try_state::<crate::state::DbStateWrapper>() {
@@ -642,8 +701,14 @@ pub async fn sync_vault(
                 let file_path = root.join(rel_path);
 
                 // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
-                if let Err(e) = crate::commands::sync::helpers::validate_path_in_vault(&file_path, &root) {
-                    log::error!("[PersonalSync] 🚫 Path traversal blocked on write: path={}, err={}", rel_path, e);
+                if let Err(e) =
+                    crate::commands::sync::helpers::validate_path_in_vault(&file_path, &root)
+                {
+                    log::error!(
+                        "[PersonalSync] 🚫 Path traversal blocked on write: path={}, err={}",
+                        rel_path,
+                        e
+                    );
                     continue;
                 }
 
@@ -665,7 +730,11 @@ pub async fn sync_vault(
             if total > 0 {
                 log::debug!(
                     "[Phase6 PersonalSync] asset download summary: created={} revived={} skipped_valid={} skipped_inflight={} vault={}",
-                    dl_created, dl_revived, dl_skipped_valid, dl_skipped_inflight, vault_id
+                    dl_created,
+                    dl_revived,
+                    dl_skipped_valid,
+                    dl_skipped_inflight,
+                    vault_id
                 );
             }
             let needs_notify = dl_created > 0 || dl_revived > 0;
@@ -687,7 +756,11 @@ pub async fn sync_vault(
         .map(|m| (m.relative_path.clone(), m.content_hash.clone()))
         .collect();
 
-    let post_manifests = scan_directory_manifests(&root, None);
+    let post_manifests = filter_personal_manifests(
+        &root,
+        scan_directory_manifests(&root, None),
+        &team_local_prefixes,
+    );
     let post_hashes: std::collections::HashMap<String, String> = post_manifests
         .iter()
         .map(|m| (m.relative_path.clone(), m.content_hash.clone()))
@@ -747,17 +820,32 @@ pub async fn sync_vault(
 
     save_unified_state(&root, &new_state);
 
+    let should_refresh_vault = files_pushed > 0
+        || files_pulled > 0
+        || !deleted_paths.is_empty()
+        || team_files_pushed > 0
+        || team_files_pulled > 0
+        || !team_server_deleted.is_empty()
+        || !team_actually_pulled_paths.is_empty();
+
     std::mem::drop(_guard);
-    if let Some(db_state) = app.try_state::<crate::state::DbStateWrapper>() {
-        if let Err(e) = crate::commands::db::scan_vault(vault_path.clone(), db_state) {
-            log::error!("[PersonalSync] Failed to scan vault for sync compensation: {}", e);
-        } else {
-            log::debug!("[PersonalSync] Vault scan compensation completed successfully");
+    if should_refresh_vault {
+        if let Some(db_state) = app.try_state::<crate::state::DbStateWrapper>() {
+            if let Err(e) = crate::commands::db::scan_vault(vault_path.clone(), db_state) {
+                log::error!(
+                    "[PersonalSync] Failed to scan vault for sync compensation: {}",
+                    e
+                );
+            } else {
+                log::debug!("[PersonalSync] Vault scan compensation completed successfully");
+            }
         }
-    }
-    {
-        use tauri::Emitter;
-        let _ = app.emit("vault:refresh", ());
+        {
+            use tauri::Emitter;
+            let _ = app.emit("vault:refresh", ());
+        }
+    } else {
+        log::trace!("[PersonalSync] Skip vault scan compensation for no-op sync");
     }
 
     Ok(SyncResult {
@@ -765,10 +853,111 @@ pub async fn sync_vault(
         files_pushed: files_pushed + team_files_pushed,
         files_pulled: files_pulled + team_files_pulled,
         conflicts: negotiate_resp.conflicts,
+        server_deleted: team_server_deleted,
         skipped_pulls: skipped_pull_list,
         pulled_paths: team_pulled_paths,
         actually_pulled_paths: team_actually_pulled_paths,
         is_maintenance: team_is_maintenance,
         maintenance_started_at: team_maintenance_started_at,
     })
+}
+
+fn load_active_team_local_prefixes(root: &std::path::Path) -> Vec<String> {
+    let mut prefixes = std::collections::HashSet::new();
+
+    let directory_mappings_path = root.join(".slash").join("team_directory_mappings.json");
+    let directory_mappings = TeamDirectoryMappingsFile::load(&directory_mappings_path);
+    for team in directory_mappings.teams.values() {
+        for mapping in team.directories.values() {
+            if mapping.status == "active" && !mapping.local_path.trim().is_empty() {
+                prefixes.insert(normalize_prefix(mapping.local_path.trim_end_matches('/')));
+            }
+        }
+    }
+
+    let legacy_mappings_path = root.join(".slash").join("team_path_mappings.json");
+    let legacy_mappings = TeamPathMappingsFile::load(&legacy_mappings_path);
+    for team in legacy_mappings.teams.values() {
+        for local_path in team.keys() {
+            if !local_path.trim().is_empty() {
+                prefixes.insert(normalize_prefix(local_path.trim_end_matches('/')));
+            }
+        }
+    }
+
+    let mut prefixes: Vec<String> = prefixes.into_iter().collect();
+    prefixes.sort();
+    prefixes
+}
+
+fn filter_personal_manifests(
+    root: &std::path::Path,
+    manifests: Vec<slash_core::FileManifestBasic>,
+    team_local_prefixes: &[String],
+) -> Vec<slash_core::FileManifestBasic> {
+    if team_local_prefixes.is_empty() {
+        return manifests;
+    }
+
+    let mut personal_manifests = Vec::new();
+    let mut asset_manifests = Vec::new();
+
+    for manifest in manifests {
+        if is_asset_path(&manifest.relative_path) {
+            asset_manifests.push(manifest);
+            continue;
+        }
+        if is_under_team_local_dir(&manifest.relative_path, team_local_prefixes) {
+            continue;
+        }
+        personal_manifests.push(manifest);
+    }
+
+    let mut required_assets = std::collections::HashSet::new();
+    for manifest in &personal_manifests {
+        if !manifest.relative_path.ends_with(".md") {
+            continue;
+        }
+        let file_path = root.join(&manifest.relative_path);
+        let Ok(content) = std::fs::read(&file_path) else {
+            continue;
+        };
+        if let Some(assets) = extract_asset_refs(&content) {
+            for asset in assets {
+                required_assets.insert(asset.relative_path.replace('\\', "/"));
+            }
+        }
+    }
+
+    let retained_asset_count = asset_manifests
+        .iter()
+        .filter(|manifest| required_assets.contains(&manifest.relative_path))
+        .count();
+    let excluded_asset_count = asset_manifests.len().saturating_sub(retained_asset_count);
+
+    personal_manifests.extend(
+        asset_manifests
+            .into_iter()
+            .filter(|manifest| required_assets.contains(&manifest.relative_path)),
+    );
+
+    if excluded_asset_count > 0 {
+        log::debug!(
+            "[PersonalSync] excluded {} team/unreferenced asset manifest(s) from personal scope",
+            excluded_asset_count
+        );
+    }
+
+    personal_manifests
+}
+
+fn is_under_team_local_dir(relative_path: &str, team_local_prefixes: &[String]) -> bool {
+    let normalized = relative_path.replace('\\', "/");
+    team_local_prefixes
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_asset_path(relative_path: &str) -> bool {
+    relative_path.starts_with("assets/") || relative_path.starts_with(".slash/assets/")
 }

@@ -41,7 +41,7 @@ export function KanbanColumn({ id, title, tasks, onNavigateToNote }: KanbanColum
             className={cn(
                 "flex-1 min-w-[280px] max-w-[400px] rounded-xl p-4 transition-all duration-150",
                 styles.bg,
-                isOver && "ring-2 ring-indigo-500 ring-offset-2 scale-[1.02]"
+                isOver && "ring-2 ring-indigo-500 dark:ring-blue-400 ring-offset-2 scale-[1.02]"
             )}
         >
             {/* Column header */}

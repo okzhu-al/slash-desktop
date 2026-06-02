@@ -49,6 +49,15 @@ fn safe_create_dir(path: String) -> Result<(), String> {
     std::fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn write_clipboard_text(text: String) -> Result<(), String> {
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| format!("Failed to open clipboard: {e}"))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| format!("Failed to write clipboard: {e}"))
+}
+
 // ============================================================================
 // App Entry Point
 // ============================================================================
@@ -169,6 +178,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_sidecar_url,
+            write_clipboard_text,
             // Auth (New)
             commands::auth::secure_store_tokens,
             commands::auth::get_access_token,
@@ -274,6 +284,7 @@ pub fn run() {
             commands::tasks::filter_tasks,
             commands::tasks::scan_all_tasks,
             commands::tasks::update_task_completion,
+            commands::tasks::update_task_completion_state,
             // Classification (Smart Archiving)
             commands::ai::get_classification_suggestions,
             commands::ai::get_cached_classification,
@@ -321,6 +332,7 @@ pub fn run() {
             commands::sync::team::check_sync_connection,
             commands::sync::team::ensure_team_sync_state,
             commands::sync::team::get_sync_capabilities,
+            commands::sync::team::sync_team_vault,
             commands::sync::team::update_local_sync_capabilities,
             // Maintenance
             commands::maintenance::export_diagnostics,

@@ -241,7 +241,7 @@ export const CommentPanel = ({ notePath }: CommentPanelProps) => {
                         onChange={(e) => setNewComment(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={t('comments.input_placeholder', '写一条评论...')}
-                        className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 min-h-[36px] max-h-[100px]"
+                        className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 min-h-[36px] max-h-[100px]"
                         rows={1}
                     />
                     <button

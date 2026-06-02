@@ -82,7 +82,7 @@ export const SortDropdown = () => {
                                 <span>{option.label}</span>
                             </div>
                             {isSelected(option) && (
-                                <Check size={16} className="text-indigo-500" />
+                                <Check size={16} className="text-indigo-500 dark:text-blue-400" />
                             )}
                         </button>
                     ))}

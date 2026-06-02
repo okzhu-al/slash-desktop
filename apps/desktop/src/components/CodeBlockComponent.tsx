@@ -1,8 +1,9 @@
 import { NodeViewWrapper } from '@tiptap/react';
-import { Check, Copy, Code, Eye } from 'lucide-react';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Check, Copy, Code, Eye, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { SUPPORTED_LANGUAGES } from '@slash/editor-core';
+import { invoke } from '@tauri-apps/api/core';
 
 // Initialize mermaid with default config
 mermaid.initialize({
@@ -12,6 +13,13 @@ mermaid.initialize({
 });
 
 const writeClipboardText = async (text: string) => {
+    try {
+        await invoke('write_clipboard_text', { text });
+        return;
+    } catch (error) {
+        console.warn('[CodeBlock] Tauri clipboard write failed, falling back.', error);
+    }
+
     try {
         if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(text);
@@ -80,7 +88,9 @@ export const CodeBlockComponent: React.FC<any> = ({
     const [isEditing, setIsEditing] = useState(false);
     const [mermaidSvg, setMermaidSvg] = useState<string | null>(null);
     const [mermaidError, setMermaidError] = useState<string | null>(null);
+    const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
     const mermaidRef = useRef<HTMLDivElement>(null);
+    const toolbarRef = useRef<HTMLDivElement>(null);
 
     const isMermaid = defaultLanguage === 'mermaid';
 
@@ -169,7 +179,7 @@ export const CodeBlockComponent: React.FC<any> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActivated, isMermaid, isEditing, isMermaid ? node.textContent : null]);
 
-    const handleCopy = async (event?: React.MouseEvent) => {
+    const handleCopy = useCallback(async (event?: React.MouseEvent | React.PointerEvent) => {
         event?.preventDefault();
         event?.stopPropagation();
 
@@ -179,9 +189,11 @@ export const CodeBlockComponent: React.FC<any> = ({
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
-    };
+    }, [node.textContent]);
 
-    const toggleEdit = () => {
+    const toggleEdit = (event?: React.MouseEvent | React.PointerEvent) => {
+        event?.preventDefault();
+        event?.stopPropagation();
         setIsEditing(!isEditing);
     };
 
@@ -226,63 +238,111 @@ export const CodeBlockComponent: React.FC<any> = ({
 
     const showMermaidOverlay = isMermaid && !isEditing && (mermaidSvg || mermaidError);
 
-    // 🛡️ Memoized toolbar — 门控：仅激活后渲染
-    const toolbarElement = useMemo(() => {
-        if (!isActivated) return null; // 🚀 未激活时不渲染 Lucide 图标
-        if (showMermaidOverlay) return null;
-        return (
-            <div
-                className="code-block-toolbar absolute right-2 top-2 z-50 flex items-center gap-2"
-                style={{
-                    opacity: 0,
-                    transition: 'opacity 0.15s ease',
-                    pointerEvents: 'none'
-                }}
-                contentEditable={false}
-            >
-                {isMermaid && (
-                    <button
-                        onClick={toggleEdit}
-                        className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors flex items-center gap-1"
-                        style={{ pointerEvents: 'auto' }}
-                        title="Preview diagram"
-                    >
-                        <Eye size={14} />
-                        <span className="text-xs">Preview</span>
-                    </button>
-                )}
-                <select
-                    contentEditable={false}
-                    className="bg-zinc-800/90 text-zinc-300 text-xs rounded border border-zinc-700 px-2 py-1 outline-none hover:bg-zinc-700 transition-colors cursor-pointer appearance-none"
-                    style={{ pointerEvents: 'auto' }}
-                    value={defaultLanguage || ''}
-                    onChange={event => updateAttributes({ language: event.target.value })}
-                >
-                    <option value="">auto</option>
-                    <option disabled>—</option>
-                    {SUPPORTED_LANGUAGES.map((lang: string, index: number) => (
-                        <option key={index} value={lang}>
-                            {lang}
-                        </option>
-                    ))}
-                </select>
+    useEffect(() => {
+        if (!languageMenuOpen) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            if (toolbarRef.current?.contains(event.target as Node)) return;
+            setLanguageMenuOpen(false);
+        };
+        document.addEventListener('pointerdown', handlePointerDown, true);
+        return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+    }, [languageMenuOpen]);
 
+    const selectLanguage = (language: string, event: React.PointerEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        updateAttributes({ language });
+        setLanguageMenuOpen(false);
+    };
+
+    const toolbarElement = isActivated && !showMermaidOverlay ? (
+        <div
+            ref={toolbarRef}
+            className="code-block-toolbar absolute right-2 top-2 z-50 flex items-center gap-2"
+            style={{
+                opacity: languageMenuOpen ? 1 : 0,
+                transition: 'opacity 0.15s ease',
+                pointerEvents: languageMenuOpen ? 'auto' : 'none'
+            }}
+            contentEditable={false}
+            onPointerDown={(event) => event.stopPropagation()}
+        >
+            {isMermaid && (
                 <button
-                    onClick={handleCopy}
-                    onMouseDown={(event) => {
+                    onPointerDown={toggleEdit}
+                    onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
                     }}
-                    className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
+                    className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors flex items-center gap-1"
                     style={{ pointerEvents: 'auto' }}
-                    title="Copy code"
+                    title="Preview diagram"
+                    type="button"
                 >
-                    {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                    <Eye size={14} />
+                    <span className="text-xs">Preview</span>
                 </button>
+            )}
+            <div className="relative" contentEditable={false} style={{ pointerEvents: 'auto' }}>
+                <button
+                    type="button"
+                    className="min-w-[78px] bg-zinc-800/90 text-zinc-300 text-xs rounded border border-zinc-700 px-2 py-1 outline-none hover:bg-zinc-700 transition-colors cursor-pointer flex items-center justify-between gap-1"
+                    onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setLanguageMenuOpen(open => !open);
+                    }}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
+                    title="Code language"
+                >
+                    <span>{defaultLanguage || 'auto'}</span>
+                    <ChevronDown size={12} />
+                </button>
+                {languageMenuOpen && (
+                    <div
+                        className="absolute right-0 top-full mt-1 max-h-56 min-w-[120px] overflow-y-auto rounded-md border border-zinc-700 bg-zinc-900 shadow-xl"
+                        contentEditable={false}
+                    >
+                        <button
+                            type="button"
+                            className="block w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+                            onPointerDown={(event) => selectLanguage('', event)}
+                        >
+                            auto
+                        </button>
+                        <div className="my-1 h-px bg-zinc-700" />
+                        {SUPPORTED_LANGUAGES.map((lang: string) => (
+                            <button
+                                key={lang}
+                                type="button"
+                                className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-800 ${defaultLanguage === lang ? 'text-blue-300' : 'text-zinc-300'}`}
+                                onPointerDown={(event) => selectLanguage(lang, event)}
+                            >
+                                {lang}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
-        );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isActivated, defaultLanguage, copied, isMermaid, isEditing, showMermaidOverlay]);
+
+            <button
+                type="button"
+                onPointerDown={handleCopy}
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }}
+                className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
+                style={{ pointerEvents: 'auto' }}
+                title="Copy code"
+            >
+                {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+            </button>
+        </div>
+    ) : null;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 单一 return 路径：<pre><code/> 始终在同一 DOM 位置
@@ -321,21 +381,27 @@ export const CodeBlockComponent: React.FC<any> = ({
                         contentEditable={false}
                     >
                         <button
-                            onClick={toggleEdit}
+                            onPointerDown={toggleEdit}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                            }}
                             className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors flex items-center gap-1"
                             title="Edit code"
+                            type="button"
                         >
                             <Code size={14} />
                             <span className="text-xs">Edit</span>
                         </button>
                         <button
-                            onClick={handleCopy}
-                            onMouseDown={(event) => {
+                            onPointerDown={handleCopy}
+                            onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                             }}
                             className="bg-zinc-800/90 text-zinc-300 p-1.5 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
                             title="Copy code"
+                            type="button"
                         >
                             {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                         </button>

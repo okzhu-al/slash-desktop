@@ -10,7 +10,7 @@ import { syncService } from './SyncService';
 
 export interface CollabEvent {
     seq: number;
-    kind: 'annotation' | 'comment';
+    kind: 'annotation' | 'comment' | 'file_trashed' | 'folder_joined' | 'maintenance_toggled' | 'version' | 'status' | 'task_toggle';
     file_path: string;
     file_id?: string | null;
     directory_id?: string | null;

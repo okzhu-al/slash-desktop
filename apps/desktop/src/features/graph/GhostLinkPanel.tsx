@@ -244,7 +244,7 @@ export const GhostLinkPanel = ({ notePath, onNavigate, onConfirmLink, initialGho
                             >
                                 {/* Title and similarity */}
                                 <div
-                                    className="flex items-center gap-2 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400"
+                                    className="flex items-center gap-2 cursor-pointer hover:text-indigo-600 dark:hover:text-blue-300"
                                     onClick={() => onNavigate(note.note_path)}
                                 >
                                     <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate flex-1">
@@ -263,7 +263,7 @@ export const GhostLinkPanel = ({ notePath, onNavigate, onConfirmLink, initialGho
                                             onClick={() => setEditingRelation(
                                                 editingRelation === note.note_path ? null : note.note_path
                                             )}
-                                            className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded"
+                                            className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-blue-400 rounded"
                                         >
                                             {t(`relations.${note.relation}`) || note.relation}
                                             <ChevronDown size={12} />
@@ -287,7 +287,7 @@ export const GhostLinkPanel = ({ notePath, onNavigate, onConfirmLink, initialGho
                                                                 }
                                                             }}
                                                             placeholder="Enter relation..."
-                                                            className="w-full px-2 py-1 text-xs border rounded bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-indigo-500"
+                                                            className="w-full px-2 py-1 text-xs border rounded bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600 focus:outline-none focus:border-indigo-500 dark:focus:border-blue-400"
                                                             autoFocus
                                                         />
                                                         <div className="flex gap-1 mt-1">
@@ -326,7 +326,7 @@ export const GhostLinkPanel = ({ notePath, onNavigate, onConfirmLink, initialGho
                                                                     onClick={() => updateRelation(note.note_path, key)}
                                                                     className={cn(
                                                                         "w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-700",
-                                                                        note.relation === key && "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium"
+                                                                        note.relation === key && "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-blue-400 font-medium"
                                                                     )}
                                                                 >
                                                                     {t(`relations.${key}`, key)}

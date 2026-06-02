@@ -17,6 +17,8 @@ import { syncService } from '@/services/SyncService';
 import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 import { extractContentHash } from '@/shared/utils/taskHash';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useFileSystemStore } from '@/core/fs/store';
+import { executeTaskBypass, resolveLocalReadPath } from '@/services/TaskBypassDetector';
 
 // Removed PARA_MAP as it's no longer used
 
@@ -51,7 +53,7 @@ interface EditorTasksUpdatedDetail {
 function parseTasksFromMarkdown(content: string): Task[] {
     const lines = content.split('\n');
     const tasks: Task[] = [];
-    const taskRegex = /^(\s*)-\s+\[([ xX])\]\s+(.+)$/;
+    const taskRegex = /^(\s*)[-*+]\s+\[([ xX])\]\s+(.+)$/;
 
     for (let i = 0; i < lines.length; i++) {
         const match = lines[i].match(taskRegex);
@@ -95,6 +97,35 @@ function parseTasksFromMarkdown(content: string): Task[] {
     return tasks;
 }
 
+const TASK_LINE_PATTERN = /^\s*[-*+]\s\[[ xX]\]\s+(.*)$/;
+
+const normalizeTaskText = (text: string) => text.trim().replace(/\s+/g, ' ');
+
+function findOriginalTaskLine(content: string, task: Task, nextStatus: boolean): string | null {
+    const lines = content.split('\n');
+    const hintedIndex = Math.max(0, task.line_number - 1);
+    const expectedCurrentChecked = !nextStatus;
+    const targetText = normalizeTaskText(task.raw_text);
+
+    const matchesTask = (line: string) => {
+        const match = line.match(TASK_LINE_PATTERN);
+        if (!match) return false;
+
+        const lineChecked = /\[[xX]\]/.test(line);
+        if (lineChecked !== expectedCurrentChecked) return false;
+
+        const lineText = normalizeTaskText(match[1] ?? '');
+        return lineText === targetText || lineText.includes(targetText) || targetText.includes(lineText);
+    };
+
+    const hintedLine = lines[hintedIndex];
+    if (hintedLine && matchesTask(hintedLine)) {
+        return hintedLine;
+    }
+
+    return lines.find(matchesTask) ?? null;
+}
+
 export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTaskPanelProps) => {
     const { t } = useTranslation();
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -109,6 +140,29 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         if (!path) return null;
         return liveTaskSnapshotsRef.current.get(path) ?? null;
     }, []);
+
+    const getOriginalTaskLine = useCallback(async (targetNotePath: string, task: Task, nextStatus: boolean) => {
+        const fallbackPrefix = nextStatus ? '- [ ] ' : '- [x] ';
+        const fallback = fallbackPrefix + task.raw_text;
+
+        if (markdownContent) {
+            return findOriginalTaskLine(markdownContent, task, nextStatus) ?? fallback;
+        }
+
+        if (targetNotePath.startsWith('__team__/')) {
+            return fallback;
+        }
+
+        try {
+            const { readTextFile } = await import('@tauri-apps/plugin-fs');
+            const readPath = resolveLocalReadPath(targetNotePath);
+            if (!readPath) return fallback;
+            const content = await readTextFile(readPath);
+            return findOriginalTaskLine(content, task, nextStatus) ?? fallback;
+        } catch {
+            return fallback;
+        }
+    }, [markdownContent]);
 
     // Fetch tasks when note changes
     useEffect(() => {
@@ -331,10 +385,10 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                 let relativePath = parsedTeamNote.filePath || '';
                 let fileId = parsedTeamNote.fileId;
 
-                if (!teamVaultId) {
+                if (!teamVaultId || !fileId) {
                     throw new Error('Sync not configured for team space');
                 }
-                if (!relativePath && fileId) {
+                if (!relativePath) {
                     const file = await syncService.getVaultFileById(teamVaultId, fileId);
                     relativePath = file.filePath;
                     fileId = file.fileId;
@@ -358,16 +412,37 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                     checked: newStatus,
                     toggled_by: useSessionStore.getState().userId || 'unknown'
                 });
-            } else if (taskId < 0 && activeEditorNotePath) {
-                dispatchVisualToggle();
             } else {
-                dispatchVisualToggle();
-                // Local notes: traditional disk-based update (safe from missing IDs)
-                await invoke('update_task_completion', {
-                    notePath: targetNotePath,
-                    taskText: task.raw_text,
-                    isCompleted: newStatus
-                });
+                const rootPath = useFileSystemStore.getState().root?.path;
+                let isMappedTeamFile = false;
+                if (rootPath) {
+                    try {
+                        const { isTeamNoteAsync } = await import('@/hooks/useIsTeamNote');
+                        isMappedTeamFile = await isTeamNoteAsync(rootPath, targetNotePath);
+                    } catch { /* ignore */ }
+                }
+
+                if (isMappedTeamFile) {
+                    const originalLine = await getOriginalTaskLine(targetNotePath, task, newStatus);
+                    const count = await executeTaskBypass(targetNotePath, [{
+                        lineNumber: task.line_number,
+                        originalLine,
+                        checked: newStatus,
+                    }]);
+                    if (count <= 0) {
+                        throw new Error('Task bypass did not update any checkbox');
+                    }
+                } else if (taskId < 0 && activeEditorNotePath) {
+                    dispatchVisualToggle();
+                } else {
+                    dispatchVisualToggle();
+                    // Local notes: traditional disk-based update (safe from missing IDs)
+                    await invoke('update_task_completion', {
+                        notePath: targetNotePath,
+                        taskText: task.raw_text,
+                        isCompleted: newStatus
+                    });
+                }
             }
 
             // Update local UI state
@@ -381,7 +456,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
         } catch (e) {
             console.error('Failed to update task:', e);
         }
-    }, [notePath]);
+    }, [notePath, getOriginalTaskLine]);
 
     // Priority badge color
     const getPriorityColor = (priority: string | null) => {
@@ -404,7 +479,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
             {/* Header */}
             <div className="flex items-center gap-2 px-4 py-3 h-12 border-b border-zinc-200 dark:border-zinc-700">
                 <ListChecks size={16} className={cn(
-                    totalCount > 0 ? "text-indigo-500" : "text-zinc-400"
+                    totalCount > 0 ? "text-indigo-500 dark:text-blue-400" : "text-zinc-400"
                 )} />
                 <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     {totalCount > 0
@@ -438,7 +513,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                                     "group p-3 rounded-lg border cursor-pointer transition-all",
                                     task.is_completed
                                         ? "bg-zinc-50 dark:bg-zinc-800/30 border-zinc-200 dark:border-zinc-700/50"
-                                        : "bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:border-indigo-300 dark:hover:border-indigo-600"
+                                        : "bg-white dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 hover:border-indigo-300 dark:hover:border-blue-400/60"
                                 )}
                             >
                                 <div className="flex items-start gap-2">
@@ -449,7 +524,7 @@ export const NoteTaskPanel = ({ notePath, markdownContent, projectPath }: NoteTa
                                             "flex-shrink-0 mt-[2px] transition-colors",
                                             task.is_completed
                                                 ? "text-green-500 hover:text-green-600"
-                                                : "text-zinc-400 hover:text-indigo-500"
+                                                : "text-zinc-400 hover:text-indigo-500 dark:hover:text-blue-300"
                                         )}
                                     >
                                         {task.is_completed ? (

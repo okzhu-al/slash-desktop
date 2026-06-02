@@ -2,14 +2,44 @@
 
 use crate::core::db::models::Task;
 use crate::core::db::repository::{
-    delete_tasks_for_note, get_all_tasks, get_tasks_by_filter, get_tasks_for_note,
-    insert_tasks, TaskFilter,
+    delete_tasks_for_note, get_all_tasks, get_tasks_by_filter, get_tasks_for_note, insert_tasks,
+    TaskFilter,
 };
 use crate::core::db::task_scanner::scan_tasks;
 use crate::state::DbStateWrapper;
 use regex::Regex;
 use std::fs;
+use std::path::{Path, PathBuf};
 use tauri::State;
+
+fn normalize_slashes(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+fn is_windows_absolute_path(path: &str) -> bool {
+    let normalized = normalize_slashes(path);
+    let bytes = normalized.as_bytes();
+    bytes.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/' && bytes[0].is_ascii_alphabetic()
+}
+
+fn normalize_relative_path(vault_path: &Path, file_path: &Path, original_path: &str) -> String {
+    if let Ok(relative) = file_path.strip_prefix(vault_path) {
+        return normalize_slashes(&relative.to_string_lossy());
+    }
+
+    let normalized_file = normalize_slashes(&file_path.to_string_lossy());
+    let normalized_vault = normalize_slashes(&vault_path.to_string_lossy())
+        .trim_end_matches('/')
+        .to_string();
+
+    if let Some(relative) = normalized_file.strip_prefix(&(normalized_vault + "/")) {
+        return relative.to_string();
+    }
+
+    normalize_slashes(original_path)
+        .trim_start_matches('/')
+        .to_string()
+}
 
 /// Scan a single note for tasks and store them in DB
 /// Supports both absolute paths and relative paths
@@ -22,23 +52,24 @@ pub fn scan_note_tasks(db: State<DbStateWrapper>, note_path: String) -> Result<V
             .clone()
             .ok_or("No vault open")?;
 
-    // Determine if path is absolute or relative
-    let is_absolute = note_path.starts_with('/') || note_path.starts_with("\\\\");
+    // Determine if path is absolute or relative. Windows paths can arrive as
+    // C:\foo or C:/foo from the webview, so don't rely only on Path::is_absolute.
+    let note_path_normalized = normalize_slashes(&note_path);
+    let is_absolute = Path::new(&note_path).is_absolute()
+        || note_path.starts_with("\\\\")
+        || note_path_normalized.starts_with("//")
+        || is_windows_absolute_path(&note_path);
     let file_path = if is_absolute {
-        std::path::PathBuf::from(&note_path)
+        PathBuf::from(&note_path)
     } else {
-        vault_path.join(&note_path)
+        vault_path.join(&note_path_normalized)
     };
 
     // Calculate relative path for storage (used as key in DB)
     let relative_path = if is_absolute {
-        // Strip vault_path prefix to get relative path
-        file_path
-            .strip_prefix(&vault_path)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| note_path.clone())
+        normalize_relative_path(&vault_path, &file_path, &note_path)
     } else {
-        note_path.clone()
+        note_path_normalized.trim_start_matches('/').to_string()
     };
 
     let content =
@@ -87,7 +118,8 @@ pub fn scan_note_tasks(db: State<DbStateWrapper>, note_path: String) -> Result<V
         })
         .map_err(|e| format!("Failed to store tasks: {}", e))?;
 
-    log::debug!("📋 [Task] Scanned {} tasks in: {}",
+    log::debug!(
+        "📋 [Task] Scanned {} tasks in: {}",
         result.len(),
         relative_path
     );
@@ -104,6 +136,48 @@ pub fn get_tasks(db: State<DbStateWrapper>) -> Result<Vec<Task>, String> {
 #[tauri::command]
 pub fn get_note_tasks(db: State<DbStateWrapper>, note_path: String) -> Result<Vec<Task>, String> {
     db.0.with_connection(|conn| get_tasks_for_note(conn, &note_path))
+}
+
+/// Update only the local task cache. This is used after task-bypass succeeds:
+/// the server has accepted the checkbox change, but the local markdown file may
+/// not be pulled yet, so rewriting the source file here would trigger a solo
+/// body push. Keeping SQLite current makes get_tasks immediately accurate.
+#[tauri::command]
+pub fn update_task_completion_state(
+    db: State<DbStateWrapper>,
+    note_path: String,
+    task_text: String,
+    is_completed: bool,
+) -> Result<usize, String> {
+    let vault_path =
+        db.0.vault_path
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or("No vault open")?;
+
+    let note_path_normalized = normalize_slashes(&note_path);
+    let is_absolute = Path::new(&note_path).is_absolute()
+        || note_path.starts_with("\\\\")
+        || note_path_normalized.starts_with("//")
+        || is_windows_absolute_path(&note_path);
+    let relative_path = if is_absolute {
+        normalize_relative_path(&vault_path, &PathBuf::from(&note_path), &note_path)
+    } else {
+        note_path_normalized.trim_start_matches('/').to_string()
+    };
+    let task_text = task_text.trim().to_string();
+
+    db.0.with_connection(|conn| {
+        conn.execute(
+            r#"UPDATE tasks
+               SET is_completed = ?1, updated_at = unixepoch()
+               WHERE (note_path = ?2 OR ?2 LIKE '%' || note_path OR note_path LIKE '%' || ?2)
+                 AND (raw_text = ?3 OR raw_text LIKE '%' || ?3 || '%' OR ?3 LIKE '%' || raw_text || '%')"#,
+            rusqlite::params![is_completed, relative_path, task_text],
+        )
+    })
+    .map_err(|e| format!("Failed to update local task state: {}", e))
 }
 
 /// Get tasks matching filter criteria
@@ -180,8 +254,10 @@ pub fn update_task_completion(
     // Find the line containing the task by matching raw_text content
     // raw_text is the task content after the checkbox, e.g. "Buy milk 📅2024-01-25"
     let task_text = task_text.trim();
-    log::debug!("📝 [Task] Looking for task text: \"{}\" in {}",
-        task_text, note_path
+    log::debug!(
+        "📝 [Task] Looking for task text: \"{}\" in {}",
+        task_text,
+        note_path
     );
 
     let mut found_line_idx: Option<usize> = None;
@@ -190,10 +266,13 @@ pub fn update_task_completion(
         let line_trimmed = line.trim();
         let is_task_line = line_trimmed.starts_with("- [ ]")
             || line_trimmed.starts_with("* [ ]")
+            || line_trimmed.starts_with("+ [ ]")
             || line_trimmed.starts_with("- [x]")
             || line_trimmed.starts_with("- [X]")
             || line_trimmed.starts_with("* [x]")
-            || line_trimmed.starts_with("* [X]");
+            || line_trimmed.starts_with("* [X]")
+            || line_trimmed.starts_with("+ [x]")
+            || line_trimmed.starts_with("+ [X]");
 
         if is_task_line {
             // 安全性保证：由于 starts_with 匹配了 5 字节的 ASCII，所以直接切片 5.. 是绝对合法的字符边界
@@ -219,18 +298,22 @@ pub fn update_task_completion(
 
     let new_line = if is_completed {
         // Mark as complete
-        let re = Regex::new(r"^(\s*[-*]\s*)\[[xX ]\](\s?)").unwrap();
+        let re = Regex::new(r"^(\s*[-*+]\s*)\[[xX ]\](\s?)").unwrap();
         let replaced = re.replace(old_line, "${1}[x]${2}").to_string();
-        log::debug!("📝 [Task] Marking complete: \"{}\" -> \"{}\"",
-            old_line, replaced
+        log::debug!(
+            "📝 [Task] Marking complete: \"{}\" -> \"{}\"",
+            old_line,
+            replaced
         );
         replaced
     } else {
         // Mark as incomplete
-        let re = Regex::new(r"^(\s*[-*]\s*)\[[xX ]\](\s?)").unwrap();
+        let re = Regex::new(r"^(\s*[-*+]\s*)\[[xX ]\](\s?)").unwrap();
         let replaced = re.replace(old_line, "${1}[ ]${2}").to_string();
-        log::debug!("📝 [Task] Marking incomplete: \"{}\" -> \"{}\"",
-            old_line, replaced
+        log::debug!(
+            "📝 [Task] Marking incomplete: \"{}\" -> \"{}\"",
+            old_line,
+            replaced
         );
         replaced
     };
@@ -262,9 +345,11 @@ pub fn update_task_completion(
             }
         }
         Ok(())
-    }).map_err(|e| e.to_string())?;
+    })
+    .map_err(|e| e.to_string())?;
 
-    log::debug!("✅ [Task] Updated task \"{}\" in {} line {}: is_completed = {}",
+    log::debug!(
+        "✅ [Task] Updated task \"{}\" in {} line {}: is_completed = {}",
         task_text,
         note_path,
         line_idx + 1,

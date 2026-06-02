@@ -15,7 +15,7 @@ export const PairInputStep = ({ ctx }: { ctx: SyncFlowContext }) => {
             <BackButton to="welcome" onNavigate={ctx.setStep} onClearError={() => ctx.setError('')} />
             <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 space-y-3">
                 <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                    <Cloud size={16} className="text-[#002FA7]" /> {t('sync.connect_cloud')}
+                    <Cloud size={16} className="text-[#002FA7] dark:text-blue-400" /> {t('sync.connect_cloud')}
                 </h4>
                 <div>
                     <label className={syncLabelClass}>{t('sync.server_url')}</label>
@@ -33,7 +33,7 @@ export const PairInputStep = ({ ctx }: { ctx: SyncFlowContext }) => {
                     <div className="space-y-2">
                         <p className="text-xs text-[#A42227]">{ctx.error}</p>
                         <button onClick={ctx.handleRequestNewCode}
-                            className="text-xs text-[#002FA7] hover:text-[#002FA7] underline cursor-pointer">
+                            className="text-xs text-[#002FA7] dark:text-blue-400 hover:text-[#002FA7]/80 dark:hover:text-blue-300 underline cursor-pointer">
                             {t('sync.pair_code_expired')}
                         </button>
                     </div>

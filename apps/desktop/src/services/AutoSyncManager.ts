@@ -35,9 +35,10 @@ type StatusListener = (event: AutoSyncEvent) => void;
 
 const DEBOUNCE_MS = 500;         // 文件变更后 0.5s debounce（快照实时性优化）
 const PERIODIC_MS = 5 * 60_000;  // 5 分钟保底
+const TEAM_REMOTE_POLL_MS = 30_000; // 团队远端变化兜底：事件只做唤醒，事实仍由 sync 收敛
 const STARTUP_DELAY_MS = 3000;   // 启动后 3s 首次同步
 const FOREGROUND_MIN_GAP_MS = 60_000; // 前台恢复最小间隔 60s
-const COLLAB_POLL_MS = 30_000;   // 协作活动轮询间隔 30s
+const COLLAB_POLL_MS = 10_000;   // 协作活动轮询间隔 10s，删除/授权等结构事件需要更快收敛
 const COLLAB_CONSUMED_SEQ_KEY = 'slash_collab_consumed_seq'; // 本地热缓存，丢失可从服务端恢复
 
 // ============================================================
@@ -52,6 +53,7 @@ class AutoSyncManager {
     private dirtyQueue = new Set<string>();
     private debounceTimer: ReturnType<typeof setTimeout> | null = null;
     private periodicTimer: ReturnType<typeof setInterval> | null = null;
+    private teamRemotePollTimer: ReturnType<typeof setInterval> | null = null;
     private collabPollTimer: ReturnType<typeof setInterval> | null = null;
     private startupTimer: ReturnType<typeof setTimeout> | null = null;
     private isSyncing = false;
@@ -118,6 +120,7 @@ class AutoSyncManager {
         await this.setupFileChangeListener();
         this.setupLifecycleListeners();
         this.startPeriodicSync();
+        this.startTeamRemotePolling();
 
         // 启动后延迟首次同步
         this.startupTimer = setTimeout(() => {
@@ -130,10 +133,12 @@ class AutoSyncManager {
     }
 
     /** 允许外部组件探测到网络断开时，全局强制置为离线，保持 UI 绝对同步 */
-    reportNetworkError() {
+    reportNetworkError(error?: unknown) {
+        const errorMsg = error === undefined ? undefined : String(error);
         if (this.currentStatus !== 'offline' && this.enabled) {
-            this.updateStatus('offline');
+            this.updateStatus('offline', undefined, errorMsg);
         }
+        window.dispatchEvent(new CustomEvent('sync:physical-disconnected', { detail: { error: errorMsg } }));
     }
 
     /** 允许外部组件探测到网络恢复时，全局强制恢复，保持 UI 绝对同步 */
@@ -276,6 +281,10 @@ class AutoSyncManager {
             const { events, max_seq } = await collabService.getEvents(teamVaultId, consumedSeq);
 
             if (events.length > 0) {
+                if (events.some((ev: any) => ev.kind === 'file_trashed')) {
+                    this.requestSync('file_trashed');
+                }
+
                 // 3. dispatch（含事件详情，供 useCollabNotifyStore 按 seq 更新已读游标）
                 window.dispatchEvent(new CustomEvent('collab:new-events', {
                     detail: { events },
@@ -438,6 +447,10 @@ class AutoSyncManager {
             clearInterval(this.periodicTimer);
             this.periodicTimer = null;
         }
+        if (this.teamRemotePollTimer) {
+            clearInterval(this.teamRemotePollTimer);
+            this.teamRemotePollTimer = null;
+        }
         if (this.collabPollTimer) {
             clearInterval(this.collabPollTimer);
             this.collabPollTimer = null;
@@ -556,13 +569,19 @@ class AutoSyncManager {
         lineContent: string,
         checked: boolean,
     ): Promise<void> {
-        if (!this.enabled) return;
+        if (!this.enabled) {
+            return;
+        }
         const teamVaultId = useSessionStore.getState().teamVaultId;
-        if (!teamVaultId) return; // 非团队模式，跳过
+        if (!teamVaultId) {
+            return;
+        } // 非团队模式，跳过
 
         // 检查路径是否在团队同步范围（以大写 PARA 目录开头）
         const isTeamPath = relativePath.match(/^(01_PROJECTS|02_AREAS|03_RESOURCE|04_ARCHIVE)\//i);
-        if (!isTeamPath) return;
+        if (!isTeamPath) {
+            return;
+        }
 
         try {
             const change: CheckboxChange = {
@@ -570,10 +589,7 @@ class AutoSyncManager {
                 originalLine: lineContent,
                 checked,
             };
-            const count = await executeTaskBypass(relativePath, [change]);
-            if (count > 0) {
-                console.log(`[AutoSync] Task bypass succeeded: ${relativePath}:${lineNumber} → ${checked}`);
-            }
+            await executeTaskBypass(relativePath, [change]);
         } catch (e) {
             console.warn('[AutoSync] Task bypass failed, will sync normally:', e);
         }
@@ -698,7 +714,7 @@ class AutoSyncManager {
         // 网络断开自动切离线状态
         const handleOffline = () => {
             if (!this.enabled) return;
-            this.updateStatus('offline');
+            this.reportNetworkError('browser offline');
         };
         window.addEventListener('offline', handleOffline);
         this.unlisteners.push(() => window.removeEventListener('offline', handleOffline));
@@ -728,6 +744,16 @@ class AutoSyncManager {
 
             this.requestSync('periodic');
         }, PERIODIC_MS);
+    }
+
+    /** 团队远端变化兜底：事件链漏掉时，仍由 sync 快链定期收敛删除/rename/新增 */
+    private startTeamRemotePolling() {
+        this.teamRemotePollTimer = setInterval(() => {
+            if (!this.enabled) return;
+            if (!useSessionStore.getState().teamVaultId) return;
+
+            this.requestSync('team_remote_poll');
+        }, TEAM_REMOTE_POLL_MS);
     }
 
     // ============================================================
@@ -762,8 +788,8 @@ class AutoSyncManager {
         this.executeSync(reason);
     }
 
-    /** 执行一次完整同步 */
-    private async executeSync(_reason: string): Promise<void> {
+    /** 执行一次同步 */
+    private async executeSync(reason: string): Promise<void> {
         if (!this.vaultPath || this.isSyncing) return;
         if (!syncService.isConfigured()) return;
 
@@ -798,7 +824,9 @@ class AutoSyncManager {
             // 团队显示名：团队同步 Push 时注入 Editor 字段到 YAML frontmatter
             const editorName = useSessionStore.getState().displayName || undefined;
 
-            const result = await syncService.syncVault(this.vaultPath, editingPath, editorName);
+            const result = reason === 'team_remote_poll'
+                ? await syncService.syncTeamVault(this.vaultPath, editingPath, editorName)
+                : await syncService.syncVault(this.vaultPath, editingPath, editorName);
             
             // 🛡️ App 生命周期防御：如果同步期间 manager 被 stop了（如切换仓库），
             // 则放弃后续状态更新与事件派发，防止 Callback Warning 与状态污染。
@@ -851,7 +879,8 @@ class AutoSyncManager {
             // Pull 成功 或 有文件被本地注入（如 editor 字段），通知编辑器刷新当前笔记
             // handleSyncPulled 内部有内容对比，相同则跳过 reload
             // 🛡️ 仅在实际有文件被 Pull 时才触发 reload，避免 push-only 同步覆盖编辑器正在编辑的内容
-            if (result.files_pulled > 0) {
+            const hasServerDeleted = Boolean(result.server_deleted && result.server_deleted.length > 0);
+            if (result.files_pulled > 0 || hasServerDeleted) {
                 window.dispatchEvent(new CustomEvent('sync:pulled', { detail: result }));
 
                 // 团队变更通知：dispatch collab:new-events（替代 Toast）
@@ -881,21 +910,21 @@ class AutoSyncManager {
                     });
                 }
             }
-
-            // 任何成功的同步都通知 UI 刷新
-            window.dispatchEvent(new CustomEvent('sync:completed', { detail: result }));
-
-            // 团队文件树只在远端确有文件变化时刷新，避免无变化同步反复请求目录树。
-            if ((result.pulled_paths && result.pulled_paths.length > 0) || filesPulled > 0) {
-                window.dispatchEvent(new Event('team:tree-refresh'));
+            if (hasServerDeleted) {
+                window.dispatchEvent(new CustomEvent('slash:team-file-deleted', {
+                    detail: { files: result.server_deleted },
+                }));
             }
 
-            // Pull 下来的 .md 文件自动提取待办任务到 SQLite（未打开的文件也能入 Kanban）
-
-            if (result.pulled_paths && result.pulled_paths.length > 0) {
-                const mdPaths = result.pulled_paths.filter((p: string) => p.endsWith('.md'));
+            // Pull 下来的 .md 文件自动提取待办任务到 SQLite（未打开的文件也能入 Kanban）。
+            // pulled_paths 可能包含 team sync 为 task 扫描扩充的全量团队文件；这里必须只扫描真正写盘的文件，
+            // 否则 30s team poll 的无变化轮次会反复扫描所有团队笔记并触发 UI 刷新噪音。
+            let taskScanPromise: Promise<unknown> = Promise.resolve();
+            const taskScanPaths = result.actually_pulled_paths ?? [];
+            if (taskScanPaths.length > 0) {
+                const mdPaths = taskScanPaths.filter((p: string) => p.endsWith('.md'));
                 if (mdPaths.length > 0) {
-                    Promise.allSettled(
+                    taskScanPromise = Promise.allSettled(
                         mdPaths.map((p: string) => invoke('scan_note_tasks', { notePath: p }))
                     ).then(results => {
                         const failed = results.filter(r => r.status === 'rejected');
@@ -907,6 +936,26 @@ class AutoSyncManager {
                         });
                     });
                 }
+            }
+
+            await taskScanPromise;
+
+            const hasMeaningfulSyncChange =
+                filesPulled > 0
+                || (result.files_pushed ?? 0) > 0
+                || pulledPaths.length > 0
+                || hasServerDeleted;
+
+            // 只有真实数据变化才通知 UI 刷新。必须在 task scan 之后发送，
+            // 否则 Project Kanban 重新读取 get_tasks 时会读到旧 SQLite 状态。
+            // 空结果同步不应触发任务面板、目录页或协作面板重载。
+            if (hasMeaningfulSyncChange) {
+                window.dispatchEvent(new CustomEvent('sync:completed', { detail: result }));
+            }
+
+            // 团队文件树只在远端确有文件变化时刷新，避免无变化同步反复请求目录树。
+            if (pulledPaths.length > 0 || filesPulled > 0 || hasServerDeleted) {
+                window.dispatchEvent(new Event('team:tree-refresh'));
             }
 
             this.updateStatus('success', label);
@@ -921,11 +970,16 @@ class AutoSyncManager {
             const errorMsg = String(err);
 
             // 区分网络错误 vs 服务器错误
+            const lowerError = errorMsg.toLowerCase();
             const isNetworkError = !navigator.onLine ||
-                errorMsg.includes('fetch') ||
-                errorMsg.includes('network') ||
-                errorMsg.includes('Failed to fetch') ||
-                errorMsg.includes('connect');
+                lowerError.includes('fetch') ||
+                lowerError.includes('network') ||
+                lowerError.includes('failed to fetch') ||
+                lowerError.includes('connect') ||
+                lowerError.includes('connection') ||
+                lowerError.includes('refused') ||
+                lowerError.includes('timeout') ||
+                lowerError.includes('unreachable');
 
             if (isNetworkError) {
                 // 网络错误：dirty_queue 保留，等恢复后自动重试

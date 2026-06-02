@@ -451,7 +451,7 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
                             <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-[#C8C8C8] dark:border-zinc-800 p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
                                 <div className="flex items-center justify-between">
                                     <p className="text-base font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-                                        <UserCog size={16} className="text-[#002FA7]" />
+                                        <UserCog size={16} className="text-[#002FA7] dark:text-blue-400" />
                                         {t('team.profile_title')}
                                     </p>
                                     <button

@@ -49,9 +49,16 @@ export const SyncStatusIndicator = ({ vaultPath, onOpenSyncSettings }: SyncStatu
         };
         window.addEventListener('sync:auth-expired', handleAuthExpired);
 
+        const handlePhysicalDisconnected = () => {
+            setStatus('offline');
+            setLastConnected(false);
+        };
+        window.addEventListener('sync:physical-disconnected', handlePhysicalDisconnected);
+
         return () => {
             window.removeEventListener('sync:config-changed', handleConfigChanged);
             window.removeEventListener('sync:auth-expired', handleAuthExpired);
+            window.removeEventListener('sync:physical-disconnected', handlePhysicalDisconnected);
         };
     }, []);
 

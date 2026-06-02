@@ -3,21 +3,16 @@ import { Loader2, RefreshCw, CheckCircle2, XCircle, Globe, HardDrive, Eye, EyeOf
 import { useTranslation } from "react-i18next";
 import { cn } from "@/shared/utils/cn";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { CustomSkillsTab } from "./CustomSkillsTab";
 
 import { useAiSettingsManager } from './hooks/useAiSettingsManager';
+import {
+    getOllamaDownload,
+    startOllamaDownload,
+    subscribeModelDownloads,
+} from '@/services/ModelDownloadStore';
 interface OllamaModelCheck {
     available: boolean;
-    error: string | null;
-}
-
-interface PullProgress {
-    model: string;
-    status: string;
-    completed: number;
-    total: number;
-    done: boolean;
     error: string | null;
 }
 
@@ -53,13 +48,8 @@ export const AITab = ({
     const [ollamaConnected, setOllamaConnected] = useState<boolean | null>(null);
     const [showEngineSettings, setShowEngineSettings] = useState(false);
 
-    // Pull (download) progress states
-    const [genPulling, setGenPulling] = useState(false);
-    const [genPullProgress, setGenPullProgress] = useState<{ status: string; completed: number; total: number } | null>(null);
-    const [genPullError, setGenPullError] = useState<string | null>(null);
-    const [ebdPulling, setEbdPulling] = useState(false);
-    const [ebdPullProgress, setEbdPullProgress] = useState<{ status: string; completed: number; total: number } | null>(null);
-    const [ebdPullError, setEbdPullError] = useState<string | null>(null);
+    // Pull (download) progress is process-wide so it survives tab switches.
+    const [, setDownloadVersion] = useState(0);
 
     // Online provider selection state
     const [selectedOnlineId, setSelectedOnlineId] = useState<string | null>(null);
@@ -67,14 +57,26 @@ export const AITab = ({
     // ── Helpers ──
     const isModelLocal = (name: string) => localModels.some(m => m === name || m === `${name}:latest` || name === m.replace(/:latest$/, ''));
 
-    const fetchLocalModels = async () => {
+    const fetchLocalModels = async (options?: { retries?: number; retryDelayMs?: number }) => {
         if (localModelsLoading) return [];
         setLocalModelsLoading(true);
+        const attempts = Math.max(1, (options?.retries ?? 0) + 1);
         try {
-            const models = await invoke<string[]>('list_ollama_models', { host: ollamaHost, port: ollamaPort });
-            setOllamaConnected(true);
-            setLocalModels(models);
-            return models;
+            let lastError: unknown = null;
+            for (let attempt = 0; attempt < attempts; attempt += 1) {
+                try {
+                    const models = await invoke<string[]>('list_ollama_models', { host: ollamaHost, port: ollamaPort });
+                    setOllamaConnected(true);
+                    setLocalModels(models);
+                    return models;
+                } catch (e) {
+                    lastError = e;
+                    if (attempt < attempts - 1) {
+                        await new Promise(resolve => window.setTimeout(resolve, options?.retryDelayMs ?? 800));
+                    }
+                }
+            }
+            throw lastError;
         } catch (e) {
             console.error('Failed to list local models:', e);
             setOllamaConnected(false);
@@ -84,6 +86,17 @@ export const AITab = ({
             setLocalModelsLoading(false);
         }
     };
+
+    useEffect(() => subscribeModelDownloads(() => setDownloadVersion(v => v + 1)), []);
+
+    const genDownload = getOllamaDownload(generationModel);
+    const ebdDownload = getOllamaDownload(FIXED_EMBEDDING_MODEL);
+    const genPulling = genDownload?.status === 'downloading';
+    const ebdPulling = ebdDownload?.status === 'downloading';
+    const genPullProgress = genDownload?.status === 'downloading' ? genDownload.progress : null;
+    const ebdPullProgress = ebdDownload?.status === 'downloading' ? ebdDownload.progress : null;
+    const genPullError = genDownload?.status === 'error' ? genDownload.error : null;
+    const ebdPullError = ebdDownload?.status === 'error' ? ebdDownload.error : null;
 
     const autoCheckModel = async (modelName: string): Promise<boolean> => {
         try {
@@ -120,7 +133,9 @@ export const AITab = ({
 
     // ── Load local models on mount (always, since embedding always needs Ollama) ──
     useEffect(() => {
-        fetchLocalModels().then(models => {
+        if (!configLoaded) return;
+        setOllamaConnected(null);
+        fetchLocalModels({ retries: 2, retryDelayMs: 1000 }).then(models => {
             // Auto-check current models on load
             if (generationModel) {
                 const exists = models.some(m => m === generationModel || m === `${generationModel}:latest` || generationModel === m.replace(/:latest$/, ''));
@@ -128,7 +143,26 @@ export const AITab = ({
             }
             autoCheckModel(FIXED_EMBEDDING_MODEL).then(setEbdModelReady);
         });
-    }, [ollamaHost, ollamaPort]);
+    }, [configLoaded, ollamaHost, ollamaPort]);
+
+    const handledCompletedDownloads = useRef(new Set<string>());
+    useEffect(() => {
+        if (genDownload?.status !== 'done') return;
+        const key = `gen:${generationModel}:${genDownload.updatedAt}`;
+        if (handledCompletedDownloads.current.has(key)) return;
+        handledCompletedDownloads.current.add(key);
+        fetchLocalModels();
+        commitModel(generationModel, 'gen');
+    }, [genDownload?.status, genDownload?.updatedAt, generationModel]);
+
+    useEffect(() => {
+        if (ebdDownload?.status !== 'done') return;
+        const key = `ebd:${FIXED_EMBEDDING_MODEL}:${ebdDownload.updatedAt}`;
+        if (handledCompletedDownloads.current.has(key)) return;
+        handledCompletedDownloads.current.add(key);
+        fetchLocalModels();
+        commitModel(FIXED_EMBEDDING_MODEL, 'ebd');
+    }, [ebdDownload?.status, ebdDownload?.updatedAt]);
 
     // ── Initialize online provider selection ──
     useEffect(() => {
@@ -145,49 +179,8 @@ export const AITab = ({
         }
     }, [savedProviders]);
 
-    // ── Pull model (download) ──
-    const pullModel = async (
-        modelName: string,
-        setPulling: (v: boolean) => void,
-        setProgress: (v: { status: string; completed: number; total: number } | null) => void,
-        setPullError: (v: string | null) => void,
-        target: 'gen' | 'ebd',
-    ) => {
-        setPulling(true);
-        setProgress(null);
-        setPullError(null);
-
-        let unlisten: UnlistenFn | null = null;
-        try {
-            unlisten = await listen<PullProgress>('ollama:pull-progress', (event) => {
-                const p = event.payload;
-                if (p.model !== modelName) return;
-
-                if (p.error) {
-                    setPullError(p.error);
-                    setPulling(false);
-                    setProgress(null);
-                    return;
-                }
-                if (p.done) {
-                    setPulling(false);
-                    setProgress(null);
-                    // Auto-check + auto-save + refresh list
-                    fetchLocalModels();
-                    commitModel(modelName, target);
-                    return;
-                }
-                setProgress({ status: p.status, completed: p.completed, total: p.total });
-            });
-
-            await invoke('pull_ollama_model', { host: ollamaHost, port: ollamaPort, modelName });
-        } catch (e) {
-            setPullError(`${e}`);
-            setPulling(false);
-            setProgress(null);
-        } finally {
-            if (unlisten) unlisten();
-        }
+    const pullModel = (modelName: string) => {
+        startOllamaDownload(ollamaHost, ollamaPort, modelName);
     };
 
     const copyToClipboard = async (text: string, label: string) => {
@@ -332,7 +325,7 @@ export const AITab = ({
                                     <label className="text-[10px] text-[#545454]">{t('settings.ollama_address', 'Ollama 地址')}</label>
                                     <button
                                         onClick={() => copyToClipboard(`curl ${ollamaHost}:${ollamaPort}`, 'curl 命令')}
-                                        className="flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 transition-colors"
+                                        className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-blue-300 transition-colors"
                                         title={t('settings.copy_test_cmd_title')}
                                     >
                                         <Copy size={10} /> {t('settings.copy_test_cmd')}
@@ -344,14 +337,14 @@ export const AITab = ({
                                         value={ollamaHost}
                                         onChange={e => { setOllamaHost(e.target.value); setGenModelReady(null); setEbdModelReady(null); }}
                                         placeholder="http://localhost"
-                                        className="flex-1 px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
+                                        className="flex-1 px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
                                     />
                                     <input
                                         type="number"
                                         value={ollamaPort}
                                         onChange={e => { setOllamaPort(Number(e.target.value)); setGenModelReady(null); setEbdModelReady(null); }}
                                         placeholder="11434"
-                                        className="w-24 px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
+                                        className="w-24 px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
                                     />
                                 </div>
                             </div>
@@ -375,7 +368,7 @@ export const AITab = ({
                             </div>
                             {ebdModelReady === false && !ebdPulling && (
                                 <button
-                                    onClick={() => pullModel(FIXED_EMBEDDING_MODEL, setEbdPulling, setEbdPullProgress, setEbdPullError, 'ebd')}
+                                    onClick={() => pullModel(FIXED_EMBEDDING_MODEL)}
                                     className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#006540] hover:bg-[#005030] text-white rounded-lg transition-colors whitespace-nowrap"
                                 >
                                     <Download size={12} /> {t('settings.download')}
@@ -406,10 +399,10 @@ export const AITab = ({
                                     <input
                                         type="text"
                                         value={generationModel}
-                                        onChange={e => { setGenerationModel(e.target.value); setGenModelReady(null); setGenPullError(null); }}
+                                        onChange={e => { setGenerationModel(e.target.value); setGenModelReady(null); }}
                                         onFocus={() => { if (localModels.length > 0) setShowModelDropdown(true); }}
                                         placeholder={t('settings.generation_model_placeholder', '选择或填写模型名称下载')}
-                                        className="w-full px-3 py-2 pr-8 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
+                                        className="w-full px-3 py-2 pr-8 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
                                     />
                                     <button
                                         onClick={() => {
@@ -424,7 +417,7 @@ export const AITab = ({
                                 {/* Download button — only when model is not local */}
                                 {generationModel && !isModelLocal(generationModel) && !genPulling && (
                                     <button
-                                        onClick={() => pullModel(generationModel, setGenPulling, setGenPullProgress, setGenPullError, 'gen')}
+                                        onClick={() => pullModel(generationModel)}
                                         className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-[#006540] hover:bg-[#005030] text-white rounded-lg transition-colors whitespace-nowrap"
                                     >
                                         <Download size={12} /> {t('settings.download')}
@@ -444,13 +437,12 @@ export const AITab = ({
                                             key={m}
                                             onClick={() => {
                                                 setShowModelDropdown(false);
-                                                setGenPullError(null);
                                                 commitModel(m, 'gen');
                                             }}
                                             className={cn(
                                                 "w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors",
                                                 generationModel === m
-                                                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/10"
+                                                    ? "text-indigo-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/10"
                                                     : "text-zinc-700 dark:text-zinc-300"
                                             )}
                                         >
@@ -530,7 +522,7 @@ export const AITab = ({
                                 value={onlineBaseUrl}
                                 onChange={e => setOnlineBaseUrl(e.target.value)}
                                 placeholder="https://api.example.com"
-                                className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
+                                className="w-full px-3 py-2 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454]"
                             />
                         </div>
                     )}
@@ -544,7 +536,7 @@ export const AITab = ({
                                 value={onlineApiKey}
                                 onChange={e => { setOnlineApiKey(e.target.value); setProviderTestResult(null); }}
                                 placeholder={getSavedInfo(selectedPreset.id)?.has_key ? '••••••••' : selectedPreset.keyPrefix}
-                                className="w-full px-3 py-2 pr-10 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454] font-mono"
+                                className="w-full px-3 py-2 pr-10 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 placeholder:text-[#545454] font-mono"
                             />
                             <button
                                 type="button"
@@ -597,7 +589,7 @@ export const AITab = ({
                                         }
                                     }}
                                     disabled={modelsFetching}
-                                    className="flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 transition-colors disabled:opacity-50"
+                                    className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-blue-300 transition-colors disabled:opacity-50"
                                 >
                                     {modelsFetching
                                         ? <><Loader2 size={10} className="animate-spin" /> {t('settings.online_fetching')}</>
@@ -610,7 +602,7 @@ export const AITab = ({
                             value={onlineModel}
                             onChange={e => { setOnlineModel(e.target.value); setProviderTestResult(null); }}
                             disabled={availableModels.length === 0 && !onlineModel}
-                            className="w-full h-9 px-3 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-zinc-900 dark:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full h-9 px-3 text-sm bg-white dark:bg-zinc-900 border border-[#C8C8C8] dark:border-[#C8C8C8]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 text-zinc-900 dark:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <option value="">{t('settings.online_select_model')}</option>
                             {/* If the current model is set but not in the fetched list, include it as an option */}
@@ -825,7 +817,7 @@ const WhisperModelPanel = () => {
                 <button
                     onClick={fetchModels}
                     disabled={loading}
-                    className="flex items-center gap-1 text-[10px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 text-[10px] text-indigo-500 dark:text-blue-400 hover:text-indigo-600 dark:hover:text-blue-300 transition-colors disabled:opacity-50"
                 >
                     {loading ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
                     {t('settings.refresh')}
@@ -849,7 +841,7 @@ const WhisperModelPanel = () => {
                         className={cn(
                             "flex items-center gap-3 px-4 py-3 rounded-xl border transition-all",
                             m.active
-                                ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800"
+                                ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-blue-500/35"
                                 : "bg-[#C8C8C8]/10 dark:bg-zinc-800/50 border-[#C8C8C8] dark:border-[#C8C8C8]/30"
                         )}
                     >
@@ -861,7 +853,7 @@ const WhisperModelPanel = () => {
                                     {formatSize(m.size_mb)}
                                 </span>
                                 {m.active && (
-                                    <span className="flex items-center gap-1 text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                                    <span className="flex items-center gap-1 text-[10px] text-indigo-600 dark:text-blue-400 font-medium">
                                         <CheckCircle2 size={10} />
                                         {t('settings.whisper_active')}
                                     </span>
@@ -872,7 +864,7 @@ const WhisperModelPanel = () => {
                             {/* 下载进度 */}
                             {m.download_status === 'downloading' && (
                                 <div className="mt-2 flex items-center gap-2">
-                                    <Loader2 size={10} className="animate-spin text-indigo-500" />
+                                    <Loader2 size={10} className="animate-spin text-indigo-500 dark:text-blue-400" />
                                     <div className="flex-1 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-indigo-500 rounded-full transition-all duration-300"

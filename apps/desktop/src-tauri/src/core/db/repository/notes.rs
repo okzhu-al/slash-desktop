@@ -9,6 +9,17 @@ use std::path::Path;
 
 /// Upsert a note into the database
 pub fn upsert_note(conn: &Connection, note: &Note) -> SqliteResult<i64> {
+    // UUID-First: a pulled team note may keep the same slash_id while its local
+    // path changes because of team directory mapping/conflict avoidance.
+    // The scanner has already regenerated slash_id for real alive-file copies,
+    // so a remaining duplicate here is a stale DB row from the old path.
+    if let Some(slash_id) = note.slash_id.as_deref() {
+        conn.execute(
+            "DELETE FROM notes WHERE slash_id = ?1 AND path <> ?2",
+            params![slash_id, note.path],
+        )?;
+    }
+
     conn.execute(
         r#"
         INSERT INTO notes (

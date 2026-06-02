@@ -273,7 +273,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         return [
             'span',
             mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-                class: 'wiki-link text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline',
+                class: 'wiki-link text-indigo-600 dark:text-blue-400 cursor-pointer hover:underline',
             }),
             node.attrs.label, // Display without brackets
         ];

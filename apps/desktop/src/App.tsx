@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, Suspense, lazy } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { useGhostLinkManager } from "@/hooks/useGhostLinkManager";
 import { useAppEventListeners } from "@/hooks/useAppEventListeners";
@@ -37,11 +38,12 @@ import { OutlinePanel } from "@/features/sidebar/components/OutlinePanel";
 import { useIsTeamNote } from '@/hooks/useIsTeamNote';
 const SearchPanel = lazy(() => import("@/features/search").then(m => ({ default: m.SearchPanel })));
 import { autoSyncManager } from "@/services/AutoSyncManager";
-import { syncService } from "@/services/SyncService";
+import { syncService, type DeletedFileInfo } from "@/services/SyncService";
 import { useSessionStore, migrateFromLegacyLocalStorage } from '@/stores/useSessionStore';
 import { getBasename, getParentPath, normalizePath, getRelativePath } from '@/shared/utils/pathUtils';
 import { historyCache } from '@/features/editor/utils/historyCache';
 import { buildLegacyTeamNoteId, buildStableTeamNoteId, parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
+import { isDeletedTeamNote, markDeletedTeamNotes, matchesDeletedTeamPath } from '@/shared/utils/deletedTeamNoteGuard';
 function App() {
 
   
@@ -76,6 +78,159 @@ function App() {
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [showGlobalGraph, setShowGlobalGraph] = useState(false);
   const [showTeamManage, setShowTeamManage] = useState(false);
+  const tabsSnapshot = useTabsStore(state => state.tabs);
+  const activeTabIdSnapshot = useTabsStore(state => state.activeTabId);
+  const selectedNoteRef = useRef(selectedNote);
+  useEffect(() => {
+    selectedNoteRef.current = selectedNote;
+  }, [selectedNote]);
+
+  const clearOrphanTeamEditor = useCallback((source: string) => {
+    const currentSelected = selectedNoteRef.current;
+    if (!currentSelected?.id) return false;
+
+    const tabsStore = useTabsStore.getState();
+    const parsedSelected = parseTeamNoteId(currentSelected.id);
+    const selectedFileId = (currentSelected.metadata?.slash_id as string | undefined) || parsedSelected.fileId;
+    const selectedTeamPath = currentSelected.metadata?.team_path as string | undefined;
+    const selectedPath = normalizePath(selectedTeamPath || parsedSelected.filePath || currentSelected.id)
+      .replace(/^__team__\//, '')
+      .toLowerCase();
+    const hasMatchingTab = tabsStore.tabs.some(tab => {
+      const parsedTab = parseTeamNoteId(tab.id);
+      const tabFileId = tab.fileId || parsedTab.fileId || null;
+      const tabPath = normalizePath(tab.teamPath || parsedTab.filePath || tab.id)
+        .replace(/^__team__\//, '')
+        .toLowerCase();
+      return tab.id === currentSelected.id
+        || normalizePath(tab.id) === normalizePath(currentSelected.id)
+        || Boolean(selectedFileId && tabFileId === selectedFileId)
+        || Boolean(selectedPath && tabPath === selectedPath);
+    });
+
+    if (hasMatchingTab) return false;
+
+    console.warn('[TeamDeleteClose] clearing orphan selected note without tab', {
+      source,
+      selectedId: currentSelected.id,
+      selectedFileId,
+      selectedPath,
+      activeTabId: tabsStore.activeTabId,
+      tabs: tabsStore.tabs.map(tab => ({
+        id: tab.id,
+        fileId: tab.fileId,
+        teamPath: tab.teamPath,
+      })),
+    });
+    setSelectedNote(null);
+    setContent('');
+    setIsNewNote(false);
+    autoSyncManager.setEditingPath(null);
+    return true;
+  }, [setSelectedNote, setContent, setIsNewNote]);
+
+  const closeDeletedNotes = useCallback((deletedFiles: DeletedFileInfo[] | undefined) => {
+    if (!deletedFiles?.length) return false;
+
+    markDeletedTeamNotes(deletedFiles);
+    const deletedIds = new Set(deletedFiles.map(file => file.file_id).filter(Boolean) as string[]);
+    const deletedPaths = deletedFiles.map(file => normalizePath(file.path).replace(/^__team__\//, '').toLowerCase());
+    const tabsStore = useTabsStore.getState();
+    const activeTabIdBeforeClose = tabsStore.activeTabId;
+    let closedActive = false;
+    const closedTabIds = new Set<string>();
+    const closedFileIds = new Set<string>();
+    const closedPaths = new Set<string>();
+    const tabsToClose: typeof tabsStore.tabs = [];
+
+    for (const tab of tabsStore.tabs) {
+      const parsed = parseTeamNoteId(tab.id);
+      const tabPath = normalizePath(tab.teamPath || parsed.filePath || tab.id).replace(/^__team__\//, '').toLowerCase();
+      const fileId = tab.fileId || parsed.fileId || null;
+      const matchedPaths = deletedPaths.filter(path => matchesDeletedTeamPath(tabPath, path));
+      const shouldClose = Boolean(fileId && deletedIds.has(fileId))
+        || matchedPaths.length > 0;
+
+      if (shouldClose) {
+        const activeMatchesTab = activeTabIdBeforeClose === tab.id
+          || normalizePath(activeTabIdBeforeClose || '') === normalizePath(tab.id);
+        if (activeMatchesTab) closedActive = true;
+        closedTabIds.add(tab.id);
+        if (fileId) closedFileIds.add(fileId);
+        closedPaths.add(tabPath);
+        tabsToClose.push(tab);
+      }
+    }
+
+    const selectedTeamPath = selectedNote?.id?.startsWith('__team__/')
+      ? (selectedNote.metadata?.team_path as string | undefined)
+      : undefined;
+    const selectedPath = normalizePath(selectedTeamPath || selectedNote?.id || '').replace(/^__team__\//, '').toLowerCase();
+    const selectedFileId = (selectedNote?.metadata?.slash_id as string | undefined) || parseTeamNoteId(selectedNote?.id || '').fileId;
+    const remainingTabs = tabsStore.tabs.filter(tab => !closedTabIds.has(tab.id));
+    const selectedStillHasTab = selectedNote
+      ? remainingTabs.some(tab => {
+        const parsed = parseTeamNoteId(tab.id);
+        const tabFileId = tab.fileId || parsed.fileId || null;
+        const tabPath = normalizePath(tab.teamPath || parsed.filePath || tab.id).replace(/^__team__\//, '').toLowerCase();
+        return tab.id === selectedNote.id
+          || Boolean(selectedFileId && tabFileId === selectedFileId)
+          || Boolean(selectedPath && tabPath === selectedPath);
+      })
+      : true;
+    const selectedDeleted = Boolean(selectedFileId && deletedIds.has(selectedFileId))
+      || Boolean(selectedFileId && closedFileIds.has(selectedFileId))
+      || Boolean(selectedNote?.id && closedTabIds.has(selectedNote.id))
+      || (closedTabIds.size > 0 && selectedNote && !selectedStillHasTab)
+      || closedPaths.has(selectedPath)
+      || Array.from(closedPaths).some(path => matchesDeletedTeamPath(selectedPath, path))
+      || deletedPaths.some(path => matchesDeletedTeamPath(selectedPath, path));
+
+    for (const tab of tabsToClose) {
+      tabsStore.closeTab(tab.id);
+    }
+
+    if (closedActive || selectedDeleted) {
+      setSelectedNote(null);
+      setContent('');
+      setIsNewNote(false);
+      autoSyncManager.setEditingPath(null);
+      toast.info(t('sync.remote_file_deleted', '当前笔记已被团队成员删除，已关闭标签。'));
+      return true;
+    }
+    return false;
+  }, [selectedNote, setSelectedNote, setContent, setIsNewNote, t]);
+
+  useEffect(() => {
+    void activeTabIdSnapshot;
+    void tabsSnapshot;
+    clearOrphanTeamEditor('tabs-snapshot');
+  }, [tabsSnapshot, activeTabIdSnapshot, clearOrphanTeamEditor]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    const runAfterRefresh = (source: string) => {
+      window.setTimeout(() => clearOrphanTeamEditor(source), 0);
+      window.setTimeout(() => clearOrphanTeamEditor(`${source}:delayed`), 300);
+    };
+    const handleWindowVaultRefresh = () => runAfterRefresh('window-vault-refresh');
+
+    listen('vault:refresh', () => runAfterRefresh('tauri-vault-refresh')).then(cleanup => {
+      if (cancelled) {
+        cleanup();
+      } else {
+        unlisten = cleanup;
+      }
+    }).catch(err => console.warn('[TeamDeleteClose] failed to listen vault:refresh', err));
+
+    window.addEventListener('vault:refresh', handleWindowVaultRefresh);
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+      window.removeEventListener('vault:refresh', handleWindowVaultRefresh);
+    };
+  }, [clearOrphanTeamEditor]);
 
   // ── GhostLink 管理（委托至独立 hook）──
   const {
@@ -262,6 +417,9 @@ function App() {
   useEffect(() => {
     const handleSyncPulled = async (e: Event) => {
       const customEvent = e as CustomEvent;
+      if (closeDeletedNotes(customEvent.detail?.server_deleted)) {
+        return;
+      }
       const paths = (customEvent.detail?.actually_pulled_paths || customEvent.detail?.pulled_paths) as string[] | undefined;
       const selectedTeamPath = selectedNote?.id?.startsWith('__team__/')
         ? (selectedNote.metadata?.team_path as string | undefined)
@@ -278,7 +436,7 @@ function App() {
       if (shouldRefresh && selectedNote?.id && repo) {
         try {
           const freshNote = await repo.getNote(selectedNote.id);
-          if (freshNote) {
+          if (freshNote && !isDeletedTeamNote(freshNote)) {
             setSelectedNote(freshNote);
             setContent(freshNote.content);
           }
@@ -289,7 +447,7 @@ function App() {
     };
     window.addEventListener('sync:pulled', handleSyncPulled);
     return () => window.removeEventListener('sync:pulled', handleSyncPulled);
-  }, [selectedNote?.id, repo, setSelectedNote]);
+  }, [selectedNote?.id, repo, setSelectedNote, closeDeletedNotes]);
 
   // Save tabs state when app closes (beforeunload)
   useEffect(() => {
@@ -503,7 +661,7 @@ function App() {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-zinc-900">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500 dark:border-t-blue-400" />
           <span className="text-sm text-zinc-400">恢复中...</span>
         </div>
       </div>
@@ -542,7 +700,7 @@ function App() {
             fontWeight: '500',
             padding: '12px 16px',
           },
-          className: 'dark:!bg-zinc-900/90 dark:!border-indigo-500/20 dark:!border-l-indigo-500 dark:!text-zinc-200 dark:!shadow-[0_8px_32px_rgba(0,0,0,0.3),0_2px_8px_rgba(99,102,241,0.1)]',
+          className: 'dark:!bg-zinc-900/90 dark:!border-blue-400/25 dark:!border-l-blue-400 dark:!text-zinc-200 dark:!shadow-[0_8px_32px_rgba(0,0,0,0.3),0_2px_8px_rgba(99,102,241,0.1)]',
         }}
       />
       <Suspense fallback={<div className="h-full border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-black/20 shrink-0" style={{ width: sidebarWidth, display: sidebarOpen ? 'block' : 'none' }} />}>
@@ -852,7 +1010,7 @@ function App() {
           onResizeStart={() => setIsResizing(true)}
           onResizeEnd={() => setIsResizing(false)}
         >
-          <Suspense fallback={<div className="p-4 flex items-center justify-center h-full"><div className="w-5 h-5 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /></div>}>
+          <Suspense fallback={<div className="p-4 flex items-center justify-center h-full"><div className="w-5 h-5 border-2 border-indigo-500/30 dark:border-blue-400/25 border-t-indigo-500 dark:border-t-blue-400 rounded-full animate-spin" /></div>}>
             {rightPanelMode === 'outline' ? (
             <OutlinePanel />
           ) : rightPanelMode === 'tasks' ? (

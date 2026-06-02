@@ -142,7 +142,7 @@ export function StorageDashboard() {
             {/* ── 头部 ── */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Cloud size={18} className="text-[#002FA7]" />
+                    <Cloud size={18} className="text-[#002FA7] dark:text-blue-400" />
                     <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">{t('team.storage_title', '云端存储空间')}</h2>
                 </div>
                 <button
@@ -181,7 +181,7 @@ export function StorageDashboard() {
                 {/* A. Team Space */}
                 <div className="rounded-xl border border-[#002FA7]/30 dark:border-blue-500/35 p-5 space-y-4 bg-white dark:bg-zinc-900 border-t-4 border-t-[#002FA7] shadow-sm flex flex-col">
                     <div className="flex items-center gap-2 mb-2">
-                        <Users size={16} className="text-[#002FA7]" />
+                        <Users size={16} className="text-[#002FA7] dark:text-blue-400" />
                         <h3 className="font-semibold text-[#002FA7] dark:text-blue-400">A. {t('team.storage_team_space')}</h3>
                     </div>
                     <div className="flex-1 space-y-3">

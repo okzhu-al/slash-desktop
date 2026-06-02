@@ -4,6 +4,8 @@ import { Note } from '@/core/storage/types';
 import { FileSystemNoteRepository } from '@/core/storage/FileSystemNoteRepository';
 import { useFileSystemStore } from '@/core/fs/store';
 import { useTabsStore } from '@/core/tabs/TabsStore';
+import { isTeamNoteId } from '@/shared/utils/teamNoteIdentity';
+import { isDeletedTeamNote } from '@/shared/utils/deletedTeamNoteGuard';
 
 /**
  * Note navigation state and actions
@@ -73,6 +75,7 @@ export function useNoteNavigation(
      */
     const selectNote = useCallback(async (note: Note) => {
         if (!repo) return;
+        if (isDeletedTeamNote(note)) return;
 
         // Extract title for tab display (filename without extension)
         const fileName = note.id.split(/[/\\]/).pop() || note.id;
@@ -94,6 +97,7 @@ export function useNoteNavigation(
 
         // 团队文件（来自云端 API）— 直接使用预填 content，不读磁盘
         if (note.id.startsWith('__team__/')) {
+            if (isDeletedTeamNote(note)) return;
             setViewMode('editor');
             setIsNewNote(false);
             setShouldFocusBody(false);
@@ -145,7 +149,7 @@ export function useNoteNavigation(
 
         try {
             const fullNote = await repo.getNote(note.id);
-            if (fullNote) {
+            if (fullNote && !isDeletedTeamNote(fullNote)) {
 
                 setSelectedNote(fullNote); // REFRESH with full content and metadata
                 setContent(fullNote.content);
@@ -179,7 +183,7 @@ export function useNoteNavigation(
         // Find the note by tabId (which is the note.id)
         try {
             const note = await repo.getNote(tabId);
-            if (note) {
+            if (note && !isDeletedTeamNote(note)) {
                 const ext = tabId.split('.').pop()?.toLowerCase() || '';
 
                 if (MEDIA_EXTENSIONS.includes(ext)) {
@@ -192,6 +196,18 @@ export function useNoteNavigation(
                     setNoteSelectionKey(k => k + 1);
                     setSelectedNote(note);
                     setContent(note.content);
+                }
+            } else if (!isTeamNoteId(tabId)) {
+                const tabsStore = useTabsStore.getState();
+                const wasActive = tabsStore.activeTabId === tabId;
+                tabsStore.closeTab(tabId);
+                if (wasActive) {
+                    setSelectedNote(null);
+                    setContent(null);
+                    setIsNewNote(false);
+                }
+                if (vaultPath) {
+                    useTabsStore.getState().saveForVault(vaultPath);
                 }
             }
         } catch (e) {

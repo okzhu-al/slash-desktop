@@ -91,7 +91,7 @@ export const OutlinePanel = () => {
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-zinc-200/50 dark:border-zinc-800/50">
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
+                    <div className="w-6 h-6 rounded bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-500 dark:text-blue-400">
                         <List size={14} />
                     </div>
                     <span className="text-xs font-semibold tracking-wide text-zinc-700 dark:text-zinc-300">
@@ -116,7 +116,7 @@ export const OutlinePanel = () => {
                                 "group flex items-center py-1.5 px-2 rounded-md cursor-pointer",
                                 "transition-colors duration-150",
                                 isActive
-                                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-blue-300"
                                     : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/80"
                             )}
                             style={{

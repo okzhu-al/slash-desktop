@@ -9,6 +9,8 @@ import { TaskCard } from './TaskCard';
 import { syncService } from '@/services/SyncService';
 import { extractContentHash } from '@/shared/utils/taskHash';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { executeTaskBypass, resolveLocalReadPath } from '@/services/TaskBypassDetector';
+import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 
 interface ProjectKanbanProps {
     /** Absolute path to the project folder */
@@ -52,6 +54,16 @@ export function ProjectKanban({
         ? normProject.slice(normVault.length + 1)
         : normProject;
 
+    const normalizeTaskPath = useCallback((path: string | null | undefined) => {
+        if (!path) return '';
+        const normalized = path.replace(/\\/g, '/');
+        const vault = (vaultPath || localStorage.getItem('slash_vault_path') || '').replace(/\\/g, '/').replace(/\/$/, '');
+        if (vault && normalized.startsWith(vault + '/')) {
+            return normalized.slice(vault.length + 1);
+        }
+        return normalized;
+    }, [vaultPath]);
+
     // Load tasks on mount
     const loadTasks = useCallback(async () => {
         setIsLoading(true);
@@ -75,6 +87,51 @@ export function ProjectKanban({
         loadTasks();
     }, [loadTasks]);
 
+    useEffect(() => {
+        const handleRemoteTaskToggle = (event: Event) => {
+            const detail = (event as CustomEvent<{
+                notePath?: string;
+                lineNumber?: number;
+                rawText?: string;
+                isCompleted?: boolean;
+            }>).detail;
+            if (!detail?.rawText || typeof detail.isCompleted !== 'boolean') return;
+
+            const detailPath = normalizeTaskPath(detail.notePath);
+            const detailText = detail.rawText.trim();
+            const isCompleted = detail.isCompleted;
+
+            setTasks(prev => prev.map(task => {
+                const taskPath = normalizeTaskPath(task.note_path);
+                const samePath = detailPath
+                    ? taskPath === detailPath || detailPath.endsWith(`/${taskPath}`) || taskPath.endsWith(`/${detailPath}`)
+                    : true;
+                const sameText = task.raw_text.trim() === detailText;
+                // Remote task events may carry the server-side physical line while local
+                // task rows can use editor/frontmatter-adjusted line numbers. Path + text
+                // is the stable identity for immediate Kanban rendering.
+                const sameLine = true;
+
+                if (samePath && sameText && sameLine) {
+                    return { ...task, is_completed: isCompleted };
+                }
+                return task;
+            }));
+        };
+
+        const handleSyncCompleted = () => {
+            loadTasks();
+            window.setTimeout(loadTasks, 500);
+        };
+
+        window.addEventListener('slash:remote-task-toggle', handleRemoteTaskToggle);
+        window.addEventListener('sync:completed', handleSyncCompleted);
+        return () => {
+            window.removeEventListener('slash:remote-task-toggle', handleRemoteTaskToggle);
+            window.removeEventListener('sync:completed', handleSyncCompleted);
+        };
+    }, [loadTasks, normalizeTaskPath]);
+
     // Split tasks by completion status
     const todoTasks = tasks.filter(t => !t.is_completed);
     const doneTasks = tasks.filter(t => t.is_completed);
@@ -97,16 +154,18 @@ export function ProjectKanban({
         const taskData = active.data.current?.task as Task | undefined;
         const targetColumn = over.data.current?.columnId as ColumnId | undefined;
 
-        if (!taskData || !targetColumn) return;
+        if (!taskData || !targetColumn) {
+            return;
+        }
 
         // Determine new completion status
         const newCompleted = targetColumn === 'done';
         if (taskData.is_completed === newCompleted) return; // No change
 
         try {
-            // Check permissions BEFORE optimistic UI update to prevent flickering
+            // Check whether the task belongs to a locally mapped team file. Task checkbox
+            // state is allowed through task-bypass even when the note body is solo/locked.
             let isMappedTeamFile = false;
-            
             if (!taskData.note_path.startsWith('__team__/')) {
                 const vaultPathStr = vaultPath || localStorage.getItem('slash_vault_path') || '';
                 if (vaultPathStr) {
@@ -114,32 +173,6 @@ export function ProjectKanban({
                         const { isTeamNoteAsync } = await import('@/hooks/useIsTeamNote');
                         isMappedTeamFile = await isTeamNoteAsync(vaultPathStr, taskData.note_path);
                     } catch { /* ignore */ }
-                    
-                    if (isMappedTeamFile) {
-                        const { isUserNoteOwner } = await import('@/features/collaboration/utils/workspaceAuth');
-                        const isOwner = await isUserNoteOwner(`${vaultPathStr}/${taskData.note_path}`);
-                        
-                        let isCollab = false;
-                        try {
-                            const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                            const content = await readTextFile(`${vaultPathStr}/${taskData.note_path}`);
-                            const match = content.match(/^doc_status:\s*['"]?(solo|collab)['"]?\s*/m);
-                            if (match && match[1] === 'collab') {
-                                isCollab = true;
-                            }
-                        } catch (e) {
-                            console.warn('[Kanban] Failed to parse note doc_status:', e);
-                        }
-
-                        if (!isOwner && !isCollab) {
-                            import('sonner').then(({ toast }) => {
-                                toast.error(t('kanban.solo_lock'), {
-                                    description: t('kanban.solo_lock_desc')
-                                });
-                            });
-                            throw new Error('Solo Workspace Lock: team-mapped tasks cannot be modified directly via local view by contributors.');
-                        }
-                    }
                 }
             }
 
@@ -150,12 +183,18 @@ export function ProjectKanban({
 
             if (taskData.note_path.startsWith('__team__/')) {
                 // Collab Mode virtual paths: Use bypass to update server directly
-                const parts = taskData.note_path.substring(9).split('/');
-                const teamVaultId = parts[0];
-                const relativePath = parts.slice(1).join('/');
+                const parsedTeamNote = parseTeamNoteId(taskData.note_path);
+                const teamVaultId = parsedTeamNote.teamVaultId || useSessionStore.getState().teamVaultId;
+                let relativePath = parsedTeamNote.filePath || '';
+                let fileId = parsedTeamNote.fileId;
 
-                if (!teamVaultId) {
+                if (!teamVaultId || !fileId) {
                     throw new Error('Sync not configured for team space');
+                }
+                if (!relativePath) {
+                    const file = await syncService.getVaultFileById(teamVaultId, fileId);
+                    relativePath = file.filePath;
+                    fileId = file.fileId;
                 }
 
                 const prefix = newCompleted ? '- [x] ' : '- [ ] '; 
@@ -168,11 +207,32 @@ export function ProjectKanban({
                 await syncService.taskBypass({
                     vault_id: teamVaultId,
                     file_path: relativePath,
+                    file_id: fileId,
                     line_number: taskData.line_number,
                     line_content_hash: contentHash,
                     checked: newCompleted,
                     toggled_by: useSessionStore.getState().userId || 'unknown'
                 });
+            } else if (isMappedTeamFile) {
+                const fallbackPrefix = newCompleted ? '- [ ] ' : '- [x] ';
+                let originalLine = fallbackPrefix + taskData.raw_text;
+                try {
+                    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                    const readPath = resolveLocalReadPath(taskData.note_path);
+                    if (readPath) {
+                        const content = await readTextFile(readPath);
+                        originalLine = content.split('\n')[Math.max(0, taskData.line_number - 1)] ?? originalLine;
+                    }
+                } catch { /* use fallback */ }
+
+                const count = await executeTaskBypass(taskData.note_path, [{
+                    lineNumber: taskData.line_number,
+                    originalLine,
+                    checked: newCompleted,
+                }]);
+                if (count <= 0) {
+                    throw new Error('Task bypass did not update any checkbox');
+                }
             } else {
                 // Local Editor/Solo notes: Use disk-based update
                 await taskService.updateTaskCompletion(taskData.note_path, taskData.raw_text, newCompleted);

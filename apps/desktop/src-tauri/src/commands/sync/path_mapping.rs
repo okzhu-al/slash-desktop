@@ -25,7 +25,7 @@ impl TeamPathMappingsFile {
             return Self::default();
         }
         let data = std::fs::read_to_string(path).unwrap_or_default();
-        
+
         // Try parsing as V2
         if let Ok(v2) = serde_json::from_str::<Self>(&data) {
             return v2;
@@ -37,7 +37,7 @@ impl TeamPathMappingsFile {
             vault_id: String,
             mappings: std::collections::HashMap<String, String>,
         }
-        
+
         if let Ok(old) = serde_json::from_str::<OldFormat>(&data) {
             let mut teams = std::collections::HashMap::new();
             if !old.vault_id.is_empty() && !old.mappings.is_empty() {
@@ -99,6 +99,113 @@ impl Default for TeamDirectoryMappingsFile {
     }
 }
 
+/// UUID-first 团队文件本地落点映射。
+///
+/// `remote_path` 是团队空间事实路径；`local_path` 只是当前客户端的物理落点。
+/// 当本地 Vault 已有同 basename 文件时，团队文件可以落到避让名，但同步仍按
+/// `file_id -> remote_path` 推回团队空间。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TeamFileMapping {
+    pub file_id: String,
+    pub local_path: String,
+    pub remote_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory_id: Option<String>,
+    pub status: String,
+}
+
+/// 单个 team vault 下的文件映射。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct TeamFileMappings {
+    pub files: std::collections::HashMap<String, TeamFileMapping>,
+}
+
+/// 磁盘持久化格式：.slash/team_file_mappings.json
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TeamFileMappingsFile {
+    pub version: u8,
+    pub teams: std::collections::HashMap<String, TeamFileMappings>,
+}
+
+impl Default for TeamFileMappingsFile {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            teams: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl TeamFileMappingsFile {
+    pub fn load(path: &std::path::Path) -> Self {
+        if !path.exists() {
+            return Self::default();
+        }
+        let data = std::fs::read_to_string(path).unwrap_or_default();
+        serde_json::from_str::<Self>(&data).unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &std::path::Path) {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let tmp_path = path.with_extension("json.tmp");
+            if std::fs::write(&tmp_path, &json).is_ok() {
+                if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&tmp_path) {
+                    let _ = f.sync_all();
+                }
+                let _ = std::fs::rename(&tmp_path, path);
+            }
+        }
+    }
+
+    pub fn upsert(
+        &mut self,
+        team_vault_id: &str,
+        file_id: String,
+        local_path: String,
+        remote_path: String,
+        directory_id: Option<String>,
+    ) {
+        let team = self.teams.entry(team_vault_id.to_string()).or_default();
+        team.files.insert(
+            file_id.clone(),
+            TeamFileMapping {
+                file_id,
+                local_path,
+                remote_path,
+                directory_id,
+                status: "active".to_string(),
+            },
+        );
+    }
+
+    pub fn active_for_team(
+        &self,
+        team_vault_id: &str,
+    ) -> std::collections::HashMap<String, TeamFileMapping> {
+        self.teams
+            .get(team_vault_id)
+            .map(|team| {
+                team.files
+                    .iter()
+                    .filter(|(_, entry)| entry.status == "active")
+                    .map(|(file_id, entry)| (file_id.clone(), entry.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn mark_deleted(&mut self, team_vault_id: &str, file_id: &str) {
+        if let Some(team) = self.teams.get_mut(team_vault_id) {
+            if let Some(entry) = team.files.get_mut(file_id) {
+                entry.status = "deleted".to_string();
+            }
+        }
+    }
+}
+
 impl TeamDirectoryMappingsFile {
     pub fn load(path: &std::path::Path) -> Self {
         if !path.exists() {
@@ -131,10 +238,7 @@ impl TeamDirectoryMappingsFile {
         remote_path: String,
         role: String,
     ) {
-        let team = self
-            .teams
-            .entry(team_vault_id.to_string())
-            .or_default();
+        let team = self.teams.entry(team_vault_id.to_string()).or_default();
         team.directories.insert(
             directory_id.clone(),
             TeamDirectoryMapping {

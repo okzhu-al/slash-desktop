@@ -61,9 +61,9 @@ const getFileTheme = (ext: string) => {
         case 'rs':
         case 'go':
             return {
-                icon: 'text-indigo-500',
+                icon: 'text-indigo-500 dark:text-blue-400',
                 bg: 'bg-indigo-50 dark:bg-indigo-900/20',
-                border: 'border-indigo-200 dark:border-indigo-900/30',
+                border: 'border-indigo-200 dark:border-blue-500/25',
                 hover: 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
             };
         case 'txt':
@@ -123,9 +123,9 @@ export const FileAttachmentComponent = ({ node }: FileAttachmentProps) => {
     if (isHttpLink && !ext) {
         displayExt = 'LINK';
         theme = {
-            icon: 'text-indigo-500',
+            icon: 'text-indigo-500 dark:text-blue-400',
             bg: 'bg-indigo-50 dark:bg-indigo-900/20',
-            border: 'border-indigo-200 dark:border-indigo-900/30',
+            border: 'border-indigo-200 dark:border-blue-500/25',
             hover: 'hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
         };
         try {

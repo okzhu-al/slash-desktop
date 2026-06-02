@@ -41,7 +41,7 @@ export const ShortcutsTab = () => {
                                             <div className="flex items-center gap-2">
                                                 {isEditing ? (
                                                     <div
-                                                        className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 border-2 border-indigo-500 rounded text-xs font-medium text-indigo-700 dark:text-indigo-300 animate-pulse"
+                                                        className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 border-2 border-indigo-500 dark:border-blue-400/60 rounded text-xs font-medium text-indigo-700 dark:text-blue-300 animate-pulse"
                                                         tabIndex={0}
                                                         autoFocus
                                                         onKeyDown={(e) => {
@@ -67,8 +67,8 @@ export const ShortcutsTab = () => {
                                                     <button
                                                         onClick={() => setEditingCommandId(cmd.id)}
                                                         className={cn(
-                                                            "flex gap-1 cursor-pointer hover:ring-2 hover:ring-indigo-300 dark:hover:ring-indigo-600 rounded transition-all",
-                                                            isCustom && "ring-1 ring-indigo-400"
+                                                            "flex gap-1 cursor-pointer hover:ring-2 hover:ring-indigo-300 dark:hover:ring-blue-400/40 rounded transition-all",
+                                                            isCustom && "ring-1 ring-indigo-400 dark:ring-blue-400/60"
                                                         )}
                                                         title={t("settings.click_to_change") || "Click to change"}
                                                     >

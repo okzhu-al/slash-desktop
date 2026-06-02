@@ -42,7 +42,7 @@ function YamlEditor({
                 "border border-zinc-200 dark:border-zinc-700",
                 "text-zinc-800 dark:text-zinc-200",
                 "placeholder:text-zinc-400 dark:placeholder:text-zinc-500",
-                "focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400",
+                "focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:focus:ring-blue-400/20 focus:border-indigo-400 dark:focus:border-blue-400/60",
                 "resize-y"
             )}
             value={value}
@@ -79,7 +79,7 @@ function InlineEditorPanel({
     return (
         <div
             ref={editorRef}
-            className="ml-2 pl-4 border-l-2 border-indigo-400/50 space-y-3 py-3 animate-in slide-in-from-top-2 duration-200"
+            className="ml-2 pl-4 border-l-2 border-indigo-400/50 dark:border-blue-400/40 space-y-3 py-3 animate-in slide-in-from-top-2 duration-200"
         >
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -257,7 +257,7 @@ export function CustomSkillsTab() {
             {/* Header */}
             <div>
                 <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                    <Sparkles size={16} className="text-indigo-500" />
+                    <Sparkles size={16} className="text-indigo-500 dark:text-blue-400" />
                     {t('customSkills.title', '自定义 AI Skills')}
                 </h3>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -356,7 +356,7 @@ export function CustomSkillsTab() {
                                     "flex items-center justify-between px-4 py-3 rounded-lg",
                                     "border border-zinc-200 dark:border-zinc-700",
                                     "bg-white dark:bg-zinc-800/50",
-                                    editingId === skill.id && "ring-2 ring-indigo-500/30 border-indigo-300 dark:border-indigo-600"
+                                    editingId === skill.id && "ring-2 ring-indigo-500 dark:ring-blue-400/30 border-indigo-300 dark:border-blue-400/50"
                                 )}
                             >
                                 <div className="flex-1 min-w-0">
@@ -380,8 +380,8 @@ export function CustomSkillsTab() {
                                         className={cn(
                                             "p-1.5 rounded-md transition-colors",
                                             editingId === skill.id
-                                                ? "text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30"
-                                                : "text-zinc-400 hover:text-indigo-500 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                                                ? "text-indigo-500 dark:text-blue-400 bg-indigo-50 dark:bg-indigo-900/30"
+                                                : "text-zinc-400 hover:text-indigo-500 dark:hover:text-blue-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                                         )}
                                         title={t('customSkills.edit', '编辑')}
                                     >
