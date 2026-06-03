@@ -67,6 +67,8 @@ export interface TeamScopeResponse {
 export interface DirectoryPermissionInfo {
     directory_id?: string | null;
     directory_path: string;
+    inherited?: boolean;
+    source_directory_path?: string | null;
     user_id: string;
     username: string;
     display_name: string | null;
@@ -310,6 +312,7 @@ class TeamServiceImpl {
         oldPrefix: string,
         newPrefix: string,
         directoryId?: string | null,
+        destinationDirectoryId?: string | null,
     ): Promise<{ renamed: number }> {
         return this.request(
             serverUrl,
@@ -319,6 +322,7 @@ class TeamServiceImpl {
             {
                 vault_id: vaultId,
                 directory_id: directoryId,
+                destination_directory_id: destinationDirectoryId,
                 old_prefix: oldPrefix,
                 new_prefix: newPrefix,
             },
@@ -535,6 +539,8 @@ class TeamServiceImpl {
         vaultId: string,
         sourcePath: string,
         destinationDir: string,
+        fileId?: string | null,
+        destinationDirectoryId?: string | null,
     ): Promise<{ success: boolean; new_path: string }> {
         return this.request(
             serverUrl,
@@ -543,7 +549,9 @@ class TeamServiceImpl {
             '/api/team/directories/files/move',
             {
                 vault_id: vaultId,
+                file_id: fileId,
                 source_path: sourcePath,
+                destination_directory_id: destinationDirectoryId,
                 destination_dir: destinationDir,
             },
             { clearAuthOnForbidden: false },

@@ -26,6 +26,24 @@ use super::state::{
 
 struct TeamSyncingGuard(tauri::AppHandle);
 
+struct PendingServerDeletedFile {
+    local_rel: String,
+    team_path: String,
+    file_id: String,
+}
+
+fn push_frontend_server_deleted(
+    frontend_server_deleted: &mut Vec<slash_sync_proto::DeletedFile>,
+    frontend_server_deleted_keys: &mut std::collections::HashSet<String>,
+    path: String,
+    file_id: Option<String>,
+) {
+    let key = format!("{}:{}", path, file_id.as_deref().unwrap_or(""));
+    if frontend_server_deleted_keys.insert(key) {
+        frontend_server_deleted.push(slash_sync_proto::DeletedFile { path, file_id });
+    }
+}
+
 impl TeamSyncingGuard {
     fn new(app: tauri::AppHandle) -> Self {
         use tauri::Manager;
@@ -644,6 +662,7 @@ async fn sync_team_single(
     // 🛡️ BUG-E07 Fix 1: 收集被 server_deleted 删除的本地路径，防止 Step 10 复活状态
     let mut server_deleted_local_paths: std::collections::HashSet<String> =
         std::collections::HashSet::new();
+    let mut pending_server_deleted_files: Vec<PendingServerDeletedFile> = Vec::new();
     let mut frontend_server_deleted: Vec<slash_sync_proto::DeletedFile> = Vec::new();
     let mut frontend_server_deleted_keys: std::collections::HashSet<String> =
         std::collections::HashSet::new();
@@ -654,12 +673,6 @@ async fn sync_team_single(
         );
         for deleted_file in &negotiate_resp.server_deleted {
             let deleted_team_path = &deleted_file.path;
-            let mut record_frontend_deleted = |path: String, file_id: Option<String>| {
-                let key = format!("{}:{}", path, file_id.as_deref().unwrap_or(""));
-                if frontend_server_deleted_keys.insert(key) {
-                    frontend_server_deleted.push(slash_sync_proto::DeletedFile { path, file_id });
-                }
-            };
             // 反向查找本地路径：优先 file_id 文件映射，再使用目录 reverse_mappings。
             let local_rel = deleted_file
                 .file_id
@@ -772,12 +785,20 @@ async fn sync_team_single(
                         if let Some(parent) = local_full_path.parent() {
                             let _ = std::fs::remove_dir(parent); // 仅删除空目录，非空会自动失败
                         }
-                        record_frontend_deleted(local_rel.clone(), deleted_file.file_id.clone());
                         server_deleted_local_paths.insert(local_rel.clone());
-                        if let Some(file_id) = deleted_file.file_id.as_deref() {
-                            file_mappings_file.mark_deleted(team_vault_id, file_id);
-                            file_mappings.remove(file_id);
-                            file_mappings_changed = true;
+                        if let Some(file_id) = deleted_file.file_id.clone() {
+                            pending_server_deleted_files.push(PendingServerDeletedFile {
+                                local_rel: local_rel.clone(),
+                                team_path: deleted_team_path.clone(),
+                                file_id,
+                            });
+                        } else {
+                            push_frontend_server_deleted(
+                                &mut frontend_server_deleted,
+                                &mut frontend_server_deleted_keys,
+                                local_rel.clone(),
+                                None,
+                            );
                         }
                         if let Some(entry) = unified_state.get_mut(&local_rel) {
                             entry.team_hash.clear();
@@ -785,12 +806,20 @@ async fn sync_team_single(
                         }
                     }
                 } else {
-                    record_frontend_deleted(local_rel.clone(), deleted_file.file_id.clone());
                     server_deleted_local_paths.insert(local_rel.clone());
-                    if let Some(file_id) = deleted_file.file_id.as_deref() {
-                        file_mappings_file.mark_deleted(team_vault_id, file_id);
-                        file_mappings.remove(file_id);
-                        file_mappings_changed = true;
+                    if let Some(file_id) = deleted_file.file_id.clone() {
+                        pending_server_deleted_files.push(PendingServerDeletedFile {
+                            local_rel: local_rel.clone(),
+                            team_path: deleted_team_path.clone(),
+                            file_id,
+                        });
+                    } else {
+                        push_frontend_server_deleted(
+                            &mut frontend_server_deleted,
+                            &mut frontend_server_deleted_keys,
+                            local_rel.clone(),
+                            None,
+                        );
                     }
                     if let Some(entry) = unified_state.get_mut(&local_rel) {
                         entry.team_hash.clear();
@@ -802,7 +831,20 @@ async fn sync_team_single(
                     "[TeamSync] Cannot resolve local path for deleted team file: {}",
                     deleted_team_path
                 );
-                record_frontend_deleted(deleted_team_path.clone(), deleted_file.file_id.clone());
+                if let Some(file_id) = deleted_file.file_id.clone() {
+                    pending_server_deleted_files.push(PendingServerDeletedFile {
+                        local_rel: deleted_team_path.clone(),
+                        team_path: deleted_team_path.clone(),
+                        file_id,
+                    });
+                } else {
+                    push_frontend_server_deleted(
+                        &mut frontend_server_deleted,
+                        &mut frontend_server_deleted_keys,
+                        deleted_team_path.clone(),
+                        None,
+                    );
+                }
             }
         }
     }
@@ -1291,6 +1333,34 @@ async fn sync_team_single(
         }
     }
 
+    for pending in &pending_server_deleted_files {
+        let revived_mapping = file_mappings.get(&pending.file_id).filter(|mapping| {
+            mapping.status == "active"
+                && mapping.remote_path != pending.team_path
+                && root.join(&mapping.local_path).exists()
+        });
+
+        if let Some(mapping) = revived_mapping {
+            log::debug!(
+                "[TeamSync] server_deleted for old path '{}' resolved as move to '{}' (file_id={})",
+                pending.team_path,
+                mapping.remote_path,
+                pending.file_id
+            );
+            continue;
+        }
+
+        push_frontend_server_deleted(
+            &mut frontend_server_deleted,
+            &mut frontend_server_deleted_keys,
+            pending.local_rel.clone(),
+            Some(pending.file_id.clone()),
+        );
+        file_mappings_file.mark_deleted(team_vault_id, &pending.file_id);
+        file_mappings.remove(&pending.file_id);
+        file_mappings_changed = true;
+    }
+
     // 🔔 Pull 阶段 download 汇总
     {
         let total =
@@ -1684,11 +1754,17 @@ fn resolve_path_mappings(
         directory_mappings_changed = true;
     }
 
-    // T-3: 自动发现 scope_dirs 中的新目录，建立 PARA 反向映射
-    let existing_targets: std::collections::HashSet<String> =
-        path_mappings.values().cloned().collect();
+    // T-3: 自动发现 scope_dirs 中的新目录，建立 PARA 反向映射。
+    // 父级团队目录 mapping 已经覆盖其子树；嵌套 scope 不能再按本地同名冲突
+    // 生成 ` - owner` 落点，否则 promote 会把自己的子目录误判成别人共享的同名目录。
+    let mut ordered_scope_dirs: Vec<&slash_sync_proto::TeamScopeDir> =
+        scope.scope_dirs.iter().collect();
+    ordered_scope_dirs.sort_by_key(|sd| {
+        let path = sd.directory_path.trim_end_matches('/');
+        (path.matches('/').count(), path.len())
+    });
 
-    for sd in &scope.scope_dirs {
+    for sd in ordered_scope_dirs {
         let team_dir = sd.directory_path.trim_end_matches('/');
         let Some(directory_id) = sd.directory_id.as_deref() else {
             continue;
@@ -1699,12 +1775,17 @@ fn resolve_path_mappings(
             continue;
         }
 
-        if existing_targets.contains(team_dir) {
+        let already_mapped = path_mappings.values().any(|t| t.as_str() == team_dir);
+        if already_mapped {
             continue;
         }
 
-        let already_mapped = path_mappings.values().any(|t| t.as_str() == team_dir);
-        if already_mapped {
+        if is_team_dir_covered_by_parent_mapping(team_dir, None, &path_mappings) {
+            log::debug!(
+                "[TeamSync] T-3 skip nested scope covered by parent mapping: {} (directory_id={})",
+                team_dir,
+                directory_id
+            );
             continue;
         }
 
@@ -1743,6 +1824,57 @@ fn resolve_path_mappings(
 
     let mut mappings_changed = directory_mappings_changed;
     let mut legacy_mappings_changed = false;
+
+    {
+        let nested_mappings_to_remove: Vec<String> = path_mappings
+            .iter()
+            .filter_map(|(source, target)| {
+                if is_team_dir_covered_by_parent_mapping(target, Some(source), &path_mappings) {
+                    Some(source.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for src in nested_mappings_to_remove {
+            log::debug!(
+                "[TeamSync] Removing nested directory mapping covered by parent scope: {}",
+                src
+            );
+            let local_dir = root.join(&src);
+            if local_dir.is_dir() {
+                match std::fs::remove_dir(&local_dir) {
+                    Ok(_) => {
+                        log::debug!("[TeamSync] Removed empty nested mapping directory: {}", src);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+                        log::debug!(
+                            "[TeamSync] Keeping non-empty nested mapping directory after unmapping: {}",
+                            src
+                        );
+                    }
+                    Err(e) => {
+                        log::debug!(
+                            "[TeamSync] Failed to remove nested mapping directory '{}': {}",
+                            src,
+                            e
+                        );
+                    }
+                }
+            }
+            path_mappings.remove(&src);
+            legacy_path_mappings.remove(&src);
+            directory_id_mappings.remove(&src);
+            remove_directory_mapping_by_local_path(
+                &mut directory_mappings_file,
+                team_vault_id,
+                &src,
+            );
+            mappings_changed = true;
+            legacy_mappings_changed = true;
+        }
+    }
 
     // T-4: 🧹 幽灵清剿（如果 Owner 删除了目录或收回权限，将本地映射抹除并物理超度）
     // 🛡️ BUG-E07 Fix 3: Admin 也需要清理过期映射。Admin 使用 managed_dirs 作为参照：
@@ -1888,6 +2020,34 @@ fn choose_team_local_path(
         index += 1;
     }
     candidate
+}
+
+fn is_team_dir_covered_by_parent_mapping(
+    team_dir: &str,
+    source_to_ignore: Option<&str>,
+    path_mappings: &std::collections::HashMap<String, String>,
+) -> bool {
+    let team_dir = team_dir.trim_end_matches('/').to_ascii_lowercase();
+    if team_dir.is_empty() {
+        return false;
+    }
+
+    path_mappings.iter().any(|(source, mapped_target)| {
+        if source_to_ignore
+            .map(|ignored| ignored == source.as_str())
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
+        let parent = mapped_target.trim_end_matches('/');
+        if parent.is_empty() || !parent.contains('/') {
+            return false;
+        }
+
+        let parent = parent.to_ascii_lowercase();
+        team_dir != parent && team_dir.starts_with(&format!("{parent}/"))
+    })
 }
 
 fn resolve_team_pull_local_path(

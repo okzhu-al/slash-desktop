@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core';
 import type { FileSystemItem } from '@/core/fs/types';
 import { getBasename, getParentPath } from '@/shared/utils/pathUtils';
+import { moveTeamMappedItemFromLocalTree } from '../utils/teamLocalMove';
 interface UseSidebarDragDropProps {
     rootDir?: string;
     hasTeamVault: boolean;
@@ -107,14 +108,22 @@ export function useSidebarDragDrop({
         if (draggedParent === dropTarget.path) return;
         if (draggedItem.path === dropTarget.path) return;
 
-        // 🛡️ 团队目录保护
+        // 团队目录内的本地树拖拽必须走 Team API，由服务端按 Owner/editor 规则裁决。
         if (hasTeamVault && teamDirectories.size > 0) {
-            for (const [fullPath] of teamDirectories) {
-                if (draggedItem.path === fullPath || draggedItem.path.startsWith(fullPath + '/')) {
-                    const { message } = await import('@tauri-apps/plugin-dialog');
-                    await message(t('team.permission_denied_move_file', '团队目录内的文件不允许移动位置，请保持团队空间目录结构。'), { title: t('team.permission_denied_title', '越权提示'), kind: 'error' });
-                    return;
+            const teamMoveResult = await moveTeamMappedItemFromLocalTree({
+                rootDir,
+                sourcePath: draggedItem.path,
+                destFolder: dropTarget.path,
+                isDirectory: draggedItem.type === 'folder',
+                teamDirectories,
+                t,
+            });
+            if (teamMoveResult.handled) {
+                if (teamMoveResult.newPath && draggedItem.path.endsWith('.md')) {
+                    onNoteRenamed?.(draggedItem.path, teamMoveResult.newPath);
                 }
+                refreshTree();
+                return;
             }
         }
 

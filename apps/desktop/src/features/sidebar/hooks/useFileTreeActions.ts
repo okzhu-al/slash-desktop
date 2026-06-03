@@ -23,6 +23,109 @@ import type { FileSystemItem } from '@/core/fs/types';
 import type { FileSystemNoteRepository } from '@/core/storage/FileSystemNoteRepository';
 import type { Note } from '@/core/storage/types';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { moveTeamMappedItemFromLocalTree } from '../utils/teamLocalMove';
+
+interface TeamDeleteTarget {
+    vaultId: string;
+    remotePath: string;
+    directoryId?: string | null;
+}
+
+const normalizePath = (path: string): string => path.replace(/\\/g, '/').replace(/\/+$/, '');
+const normalizePathKey = (path: string): string => normalizePath(path).toLowerCase();
+
+async function resolveTeamDeleteTarget(
+    itemPath: string,
+    vaultRoot: string | undefined,
+    teamVaultId: string | undefined | null,
+    teamDirectories: Map<string, any>,
+    activeMappings: Map<string, string>,
+): Promise<TeamDeleteTarget | null> {
+    if (!vaultRoot || !teamVaultId) return null;
+
+    const currentRelPath = normalizePath(getRelativePath(itemPath, vaultRoot));
+    const currentRelKey = currentRelPath.toLowerCase();
+
+    try {
+        const { readTextFile } = await import('@tauri-apps/plugin-fs');
+        const raw = await readTextFile(`${vaultRoot}/.slash/team_directory_mappings.json`);
+        const data = JSON.parse(raw);
+        const directories = data?.teams?.[teamVaultId]?.directories;
+        if (directories && typeof directories === 'object') {
+            const entries = Object.entries(directories) as Array<[string, any]>;
+
+            for (const [id, mapping] of entries) {
+                if (mapping?.status !== 'active') continue;
+                const localPath = typeof mapping.local_path === 'string' ? normalizePath(mapping.local_path) : '';
+                const remotePath = typeof mapping.remote_path === 'string' ? normalizePath(mapping.remote_path) : '';
+                if (!localPath || !remotePath) continue;
+                if (localPath.toLowerCase() === currentRelKey) {
+                    return {
+                        vaultId: teamVaultId,
+                        remotePath,
+                        directoryId: mapping.directory_id || id || null,
+                    };
+                }
+            }
+
+            for (const [, mapping] of entries) {
+                if (mapping?.status !== 'active') continue;
+                const localPath = typeof mapping.local_path === 'string' ? normalizePath(mapping.local_path) : '';
+                const remotePath = typeof mapping.remote_path === 'string' ? normalizePath(mapping.remote_path) : '';
+                if (!localPath || !remotePath) continue;
+                const localKey = localPath.toLowerCase();
+                if (currentRelKey.startsWith(`${localKey}/`)) {
+                    const suffix = currentRelPath.slice(localPath.length);
+                    return {
+                        vaultId: teamVaultId,
+                        remotePath: `${remotePath}${suffix}`,
+                        directoryId: null,
+                    };
+                }
+            }
+        }
+    } catch {
+        // v3 mapping is optional; fall back to legacy mappings below.
+    }
+
+    const legacyEntries = Array.from(activeMappings.entries());
+    for (const [source, target] of legacyEntries) {
+        const sourcePath = normalizePath(source);
+        if (sourcePath.toLowerCase() === currentRelKey) {
+            return { vaultId: teamVaultId, remotePath: normalizePath(target), directoryId: null };
+        }
+    }
+    for (const [source, target] of legacyEntries) {
+        const sourcePath = normalizePath(source);
+        const sourceKey = sourcePath.toLowerCase();
+        if (currentRelKey.startsWith(`${sourceKey}/`)) {
+            const suffix = currentRelPath.slice(sourcePath.length);
+            return { vaultId: teamVaultId, remotePath: `${normalizePath(target)}${suffix}`, directoryId: null };
+        }
+    }
+
+    const currentAbsKey = normalizePathKey(itemPath);
+    const mappedDirs = Array.from(teamDirectories.entries())
+        .map(([fullPath, info]) => ({ fullPath: normalizePath(fullPath), info }))
+        .sort((a, b) => b.fullPath.length - a.fullPath.length);
+
+    for (const { fullPath, info } of mappedDirs) {
+        const fullKey = fullPath.toLowerCase();
+        if (currentAbsKey === fullKey || currentAbsKey.startsWith(`${fullKey}/`)) {
+            const relToMapping = currentAbsKey === fullKey ? '' : normalizePath(itemPath).slice(fullPath.length + 1);
+            const remotePath = normalizePath(info.remotePath || '');
+            if (!remotePath) continue;
+            return {
+                vaultId: info.vaultId || teamVaultId,
+                remotePath: relToMapping ? `${remotePath}/${relToMapping}` : remotePath,
+                directoryId: currentAbsKey === fullKey ? (info.directoryId || null) : null,
+            };
+        }
+    }
+
+    return null;
+}
+
 interface UseFileTreeActionsOptions {
     repo: FileSystemNoteRepository;
     hasTeamVault: boolean;
@@ -60,98 +163,53 @@ export function useFileTreeActions({
 
     // ── handleDelete ──
     const handleDelete = async (item: FileSystemItem) => {
-        let targetRemotePath = '';
-        let currentTeamVaultId = '';
         const config = syncService.getConfig();
+        const sessionTeamVaultId = useSessionStore.getState().teamVaultId;
+        const teamDeleteTarget = hasTeamVault
+            ? await resolveTeamDeleteTarget(item.path, repo?.rootDir, sessionTeamVaultId, teamDirectories, activeMappings)
+            : null;
+        let targetRemotePath = teamDeleteTarget?.remotePath || '';
+        let currentTeamVaultId = teamDeleteTarget?.vaultId || '';
 
         // [前哨防御 1]: 防御单个"他人名下"文件的越权处决
-        if (item.type === 'file' && hasTeamVault) {
-            const vaultRoot = repo?.rootDir;
-            const isTeamSubItem = item.path.includes('/__team__/') || (vaultRoot && (() => {
-                const relPath = getRelativePath(item.path, vaultRoot).replace(/\\/g, '/').toLowerCase();
-                for (const src of activeMappings.keys()) {
-                    const srcNorm = src.replace(/\\/g, '/').toLowerCase();
-                    if (relPath === srcNorm || relPath.startsWith(srcNorm + '/')) return true;
-                }
-                return false;
-            })());
+        if (item.type === 'file' && teamDeleteTarget) {
+            try {
+                const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                const content = await readTextFile(item.path);
+                const { metadataService } = await import('@/core/metadata/MetadataService');
+                const { metadata } = metadataService.parse(item.path, content);
 
-            if (isTeamSubItem) {
-                try {
-                    const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                    const content = await readTextFile(item.path);
-                    const { metadataService } = await import('@/core/metadata/MetadataService');
-                    const { metadata } = metadataService.parse(item.path, content);
-
-                    const currentUserName = useSessionStore.getState().displayName;
-                    if (metadata.editor && currentUserName && metadata.editor !== currentUserName) {
-                        const { message } = await import('@tauri-apps/plugin-dialog');
-                        await message(t('team.permission_denied_delete_file', '您不是该笔记的 Editor，无法进行删除操作。如需删除请联系 Editor。'), { title: t('team.permission_denied_title', "越权提示"), kind: 'error' });
-                        return;
-                    }
-                } catch (e) {
-                    console.warn("[useFileTreeActions] File editor validation check failed:", e);
+                const currentUserName = useSessionStore.getState().displayName;
+                if (metadata.editor && currentUserName && metadata.editor !== currentUserName) {
+                    const { message } = await import('@tauri-apps/plugin-dialog');
+                    await message(t('team.permission_denied_delete_file', '您不是该笔记的 Editor，无法进行删除操作。如需删除请联系 Editor。'), { title: t('team.permission_denied_title', "越权提示"), kind: 'error' });
+                    return;
                 }
+            } catch (e) {
+                console.warn("[useFileTreeActions] File editor validation check failed:", e);
             }
         }
 
-        // [前哨防御 2 & 3]: 统一提取 Team targetRemotePath
-        if (hasTeamVault) {
-            const vaultRoot = repo?.rootDir;
-            if (vaultRoot) {
-                for (const [fullPath, info] of teamDirectories) {
-                    if (item.path === fullPath || item.path.startsWith(fullPath + '/')) {
-                        const relToMapping = item.path === fullPath ? '' : item.path.slice(fullPath.length + 1);
-                        targetRemotePath = relToMapping ? `${info.remotePath}/${relToMapping}` : info.remotePath;
-                        break;
-                    }
-                }
-            }
+        if (teamDeleteTarget && (!currentTeamVaultId || !config)) {
+            const { message } = await import('@tauri-apps/plugin-dialog');
+            await message(t('team.delete_validation_failed', '团队内容删除权限校验失败，请确认服务端连接后重试。'), { title: t('team.permission_denied_title', "越权提示"), kind: 'error' });
+            return;
         }
 
-        // 🌸 史诗级自愈增强：如果上面因为 teamVaultId 为空导致无法算出，我们在此直接基于物理 mapping 自动补齐
-        if (!targetRemotePath && hasTeamVault) {
-            const vaultRoot = repo?.rootDir;
-            if (vaultRoot) {
-                try {
-                    const { readTextFile } = await import('@tauri-apps/plugin-fs');
-                    const raw = await readTextFile(`${vaultRoot}/.slash/team_path_mappings.json`);
-                    const data = JSON.parse(raw);
-                    let parsedTeams: Record<string, Record<string, string>> = {};
-                    if (data.teams) {
-                        parsedTeams = data.teams;
-                    } else if (data.vault_id && data.mappings) {
-                        parsedTeams[data.vault_id] = data.mappings;
-                    }
-
-                    const currentRelPath = getRelativePath(item.path, vaultRoot).replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-                    for (const [vId, maps] of Object.entries(parsedTeams)) {
-                        for (const [src, tgt] of Object.entries(maps)) {
-                            const srcNorm = src.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-                            if (currentRelPath === srcNorm || currentRelPath.startsWith(srcNorm + '/')) {
-                                currentTeamVaultId = vId;
-                                const tgtNorm = tgt.replace(/\\/g, '/').replace(/\/$/, '');
-                                const relToSrc = currentRelPath === srcNorm ? '' : currentRelPath.slice(srcNorm.length + 1);
-                                targetRemotePath = relToSrc ? `${tgtNorm}/${relToSrc}` : tgtNorm;
-                                break;
-                            }
-                        }
-                        if (currentTeamVaultId) break;
-                    }
-                } catch (e) {
-                    console.warn('[useFileTreeActions] Failed to resolve team details from mapping:', e);
-                }
-            }
-        }
-
-        if (item.type === 'folder' && targetRemotePath) {
-            currentTeamVaultId = currentTeamVaultId || useSessionStore.getState().teamVaultId || '';
+        if (item.type === 'folder' && teamDeleteTarget) {
             if (currentTeamVaultId && config) {
                 let toastId;
                 try {
                     const { teamService } = await import('@/services/TeamService');
                     toastId = toast.loading(t('team.delete_checking', '正在安全扫描团队目录...'));
-                    const res = await teamService.canDeleteDirectory(config.serverUrl, config.accessToken, currentTeamVaultId, targetRemotePath, false);
+                    const res = await teamService.canDeleteDirectory(
+                        config.serverUrl,
+                        config.accessToken,
+                        currentTeamVaultId,
+                        targetRemotePath,
+                        false,
+                        teamDeleteTarget.directoryId,
+                    );
                     toast.dismiss(toastId);
 
                     if (!res.allowed) {
@@ -168,8 +226,15 @@ export function useFileTreeActions({
                     }
                 } catch (e) {
                     toast.dismiss(toastId);
-                    console.warn("[useFileTreeActions] Validation failed, relying on backend fallback:", e);
+                    console.warn("[useFileTreeActions] Team directory delete validation failed:", e);
+                    const { message } = await import('@tauri-apps/plugin-dialog');
+                    await message(t('team.delete_validation_failed', '团队目录删除权限校验失败，请确认服务端连接后重试。'), { title: t('team.permission_denied_title', "越权提示"), kind: 'error' });
+                    return;
                 }
+            } else {
+                const { message } = await import('@tauri-apps/plugin-dialog');
+                await message(t('team.delete_validation_failed', '团队目录删除权限校验失败，请确认服务端连接后重试。'), { title: t('team.permission_denied_title', "越权提示"), kind: 'error' });
+                return;
             }
         }
 
@@ -182,14 +247,20 @@ export function useFileTreeActions({
             if (!yes) return;
 
             // 服务端最终裁决：若为团队项目，正式通知云端实施物理拔除
-            currentTeamVaultId = currentTeamVaultId || useSessionStore.getState().teamVaultId || '';
-            if (targetRemotePath && currentTeamVaultId && config) {
+            if (teamDeleteTarget && currentTeamVaultId && config) {
                 let toastId;
                 try {
                     const { teamService } = await import('@/services/TeamService');
                     if (item.type === 'folder') {
                         toastId = toast.loading(t('team.deleting_dir', '正在粉碎云端目录...'));
-                        await teamService.deleteDirectory(config.serverUrl, config.accessToken, currentTeamVaultId, targetRemotePath, false);
+                        await teamService.deleteDirectory(
+                            config.serverUrl,
+                            config.accessToken,
+                            currentTeamVaultId,
+                            targetRemotePath,
+                            false,
+                            teamDeleteTarget.directoryId,
+                        );
                     } else {
                         toastId = toast.loading(t('team.deleting_file', '正在粉碎云端文件...'));
                         await teamService.deleteFile(config.serverUrl, config.accessToken, currentTeamVaultId, targetRemotePath, false);
@@ -244,6 +315,9 @@ export function useFileTreeActions({
                     
                     if (errMsg === 'not_owner' || errMsg.includes('not_owner')) {
                         errMsg = t('team.permission_denied_delete_dir', '您必须是该目录的 Owner 或管理员才能删除。');
+                        title = t('team.permission_denied_title', "越权提示");
+                    } else if (errMsg.includes('Only the editor')) {
+                        errMsg = t('team.permission_denied_delete_file', '您不是该笔记的 Editor，无法进行删除操作。如需删除请联系 Editor。');
                         title = t('team.permission_denied_title', "越权提示");
                     } else if (errMsg?.startsWith('has_other:') || errMsg?.includes('has_other:')) {
                         const user = errMsg.split('has_other:')[1].trim();
@@ -593,14 +667,24 @@ export function useFileTreeActions({
 
     // ── handleMoveFile ──
     const handleMoveFile = async (sourcePath: string, destFolder: string) => {
-        // 🛡️ 团队目录保护：禁止移动团队映射目录下的内容
+        // 团队目录内的本地树移动必须走 Team API，由服务端按 Owner/editor 规则裁决。
         if (hasTeamVault && teamDirectories.size > 0) {
-            for (const [fullPath] of teamDirectories) {
-                if (sourcePath === fullPath || sourcePath.startsWith(fullPath + '/')) {
-                    const { message } = await import('@tauri-apps/plugin-dialog');
-                    await message(t('team.permission_denied_move_file', '团队目录内的文件不允许移动位置，请保持团队空间目录结构。'), { title: t('team.permission_denied_title', '越权提示'), kind: 'error' });
-                    return;
+            const teamMoveResult = await moveTeamMappedItemFromLocalTree({
+                rootDir: repo?.rootDir,
+                sourcePath,
+                destFolder,
+                isDirectory: false,
+                teamDirectories,
+                t,
+            });
+            if (teamMoveResult.handled) {
+                if (teamMoveResult.newPath && sourcePath.endsWith('.md')) {
+                    onNoteRenamed?.(sourcePath, teamMoveResult.newPath);
                 }
+                await refreshNode(getParentPath(sourcePath));
+                await refreshNode(destFolder);
+                await toggleFolder(destFolder, true);
+                return;
             }
         }
 

@@ -48,6 +48,8 @@ interface FolderPageProps {
 
 type ProviderChoice = 'local' | 'online';
 
+const normalizeRelPath = (path: string): string => path.replace(/\\/g, '/').replace(/\/+$/, '');
+
 export function FolderPage({
     folderPath,
     folderName,
@@ -119,32 +121,45 @@ export function FolderPage({
                         // v3 mapping is optional for legacy vaults.
                     }
 
+                    const normalizedInitialPath = normalizeRelPath(initialRelativePath);
+
                     for (const entry of v3Mappings) {
-                        const localPath = entry.local_path;
-                        const remotePath = entry.remote_path;
+                        const localPath = entry.local_path ? normalizeRelPath(entry.local_path) : null;
+                        const remotePath = entry.remote_path ? normalizeRelPath(entry.remote_path) : null;
                         if (!localPath || !remotePath) continue;
                         if (mode === 'personal') {
-                            if (localPath === initialRelativePath) {
+                            if (localPath === normalizedInitialPath) {
                                 foundTeam = remotePath;
                                 foundTeamDirectoryId = entry.directory_id || null;
                                 break;
                             }
-                            if (initialRelativePath.startsWith(`${localPath}/`)) {
-                                const suffix = initialRelativePath.slice(localPath.length);
-                                foundTeam = `${remotePath}${suffix}`;
-                                foundTeamDirectoryId = entry.directory_id || null;
-                                break;
-                            }
                         } else {
-                            if (remotePath === initialRelativePath) {
+                            if (remotePath === normalizedInitialPath) {
                                 foundLocal = localPath;
                                 foundTeamDirectoryId = entry.directory_id || null;
                                 break;
                             }
-                            if (initialRelativePath.startsWith(`${remotePath}/`)) {
-                                const suffix = initialRelativePath.slice(remotePath.length);
+                        }
+                    }
+
+                    if (!foundTeamDirectoryId) {
+                        for (const entry of v3Mappings) {
+                            const localPath = entry.local_path ? normalizeRelPath(entry.local_path) : null;
+                            const remotePath = entry.remote_path ? normalizeRelPath(entry.remote_path) : null;
+                            if (!localPath || !remotePath) continue;
+                            if (mode === 'personal') {
+                                if (!foundTeam && normalizedInitialPath.startsWith(`${localPath}/`)) {
+                                    const suffix = normalizedInitialPath.slice(localPath.length);
+                                    foundTeam = `${remotePath}${suffix}`;
+                                    // 子目录可以继承父 mapping 的路径关系，但不能继承父 directory_id。
+                                    foundTeamDirectoryId = null;
+                                    break;
+                                }
+                            } else if (!foundLocal && normalizedInitialPath.startsWith(`${remotePath}/`)) {
+                                const suffix = normalizedInitialPath.slice(remotePath.length);
                                 foundLocal = `${localPath}${suffix}`;
-                                foundTeamDirectoryId = entry.directory_id || null;
+                                // 子目录可以继承父 mapping 的路径关系，但不能继承父 directory_id。
+                                foundTeamDirectoryId = null;
                                 break;
                             }
                         }

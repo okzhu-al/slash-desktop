@@ -327,9 +327,6 @@ export function useSyncFlow(vaultPath?: string, onBlockClose?: (blocked: boolean
             }
         } catch (e) {
             console.warn('[SyncTab] fetchServerInfo failed:', e);
-            if (syncService.isConfigured()) {
-                autoSyncManager.reportNetworkError(e);
-            }
         }
     }, [serverUrl]); // Dependency on serverUrl to ensure latest
 

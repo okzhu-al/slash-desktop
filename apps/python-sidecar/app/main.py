@@ -233,11 +233,12 @@ app.add_middleware(
 
 # ── faster-whisper 离线转写引擎（可切换模型管理器）──
 
-# HuggingFace 多镜像源（按优先级排序）
+# HuggingFace 多镜像源（按优先级排序：国内镜像优先，官方兜底）
 HF_MIRRORS = [
-    "https://huggingface.co",
     "https://hf-mirror.com",
+    "https://aifasthub.com",
     "https://huggingface.sukaka.top",
+    "https://huggingface.co",
 ]
 
 # Whisper 模型元信息
@@ -421,7 +422,19 @@ async def whisper_download(request: dict):
                     print(f"[WARN] Mirror {mirror} failed: {e}")
                     continue
 
-            _download_progress[model_name] = {"status": "error", "progress": 0, "error": f"All mirrors failed: {last_error}"}
+            # Classify error: network issues get a structured code for friendly frontend display
+            error_lower = (last_error or "").lower()
+            is_network = any(kw in error_lower for kw in [
+                "connecttimeout", "connectionerror", "timeout",
+                "unreachable", "network", "dns", "refused",
+                "winerror", "sslerror", "proxy", "connect",
+                "locate the files on the hub",
+                "appropriate snapshot",
+            ])
+            if is_network:
+                _download_progress[model_name] = {"status": "error", "progress": 0, "error": "NETWORK_UNREACHABLE"}
+            else:
+                _download_progress[model_name] = {"status": "error", "progress": 0, "error": last_error}
         except Exception as e:
             _download_progress[model_name] = {"status": "error", "progress": 0, "error": str(e)}
 

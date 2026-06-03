@@ -488,6 +488,10 @@ pub struct DirectoryPermissionInfo {
     #[serde(default)]
     pub directory_id: Option<String>,
     pub directory_path: String,
+    #[serde(default)]
+    pub inherited: bool,
+    #[serde(default)]
+    pub source_directory_path: Option<String>,
     pub user_id: String,
     pub username: String,
     pub display_name: Option<String>,
@@ -570,6 +574,8 @@ pub struct RenameDirectoryRequest {
     pub vault_id: String,
     #[serde(default)]
     pub directory_id: Option<String>,
+    #[serde(default)]
+    pub destination_directory_id: Option<String>,
     /// 旧目录前缀，如 "01_PROJECTS/P-3"
     #[serde(default)]
     pub old_prefix: String,

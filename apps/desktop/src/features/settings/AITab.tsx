@@ -875,7 +875,22 @@ const WhisperModelPanel = () => {
                                 </div>
                             )}
                             {m.download_status === 'error' && (
-                                <p className="mt-1 text-[10px] text-red-500">❌ {m.download_error}</p>
+                                m.download_error === 'NETWORK_UNREACHABLE' ? (
+                                    <div className="mt-2 p-2.5 bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-700/40 rounded-lg">
+                                        <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                                            {t('settings.whisper_download_network_error')}
+                                        </p>
+                                        <p className="mt-1.5 text-[10px] text-amber-600/80 dark:text-amber-500/70 font-mono select-all leading-relaxed">
+                                            macOS / Linux: ~/.cache/huggingface/hub/<br />
+                                            Windows: C:\Users\&lt;user&gt;\.cache\huggingface\hub\
+                                        </p>
+                                        <p className="mt-1 text-[10px] text-amber-600/60 dark:text-amber-500/50">
+                                            {t('settings.whisper_download_network_repo', { model: m.name })}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="mt-1 text-[10px] text-red-500">❌ {m.download_error}</p>
+                                )
                             )}
                         </div>
 

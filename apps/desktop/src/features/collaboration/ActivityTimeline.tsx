@@ -13,7 +13,7 @@ import { keepSnapshotsVisibleFromLocalState, snapshotService, SnapshotInfo, Snap
 import { annotationService, AnnotationInfo } from '@/services/AnnotationService';
 import { commentService, CommentInfo } from '@/services/CommentService';
 import { syncService } from '@/services/SyncService';
-import { collabService, StatusEventInfo } from '@/services/CollabService';
+import { collabService, CollabEvent, StatusEventInfo } from '@/services/CollabService';
 import { useCollabNotifyStore } from '@/stores/useCollabNotifyStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { SnapshotReadonlyEditor } from './SnapshotReadonlyEditor';
@@ -30,7 +30,8 @@ type RawEvent =
     | { kind: 'version';    ts: number; data: SnapshotInfo }
     | { kind: 'annotation'; ts: number; data: AnnotationInfo }
     | { kind: 'comment';    ts: number; data: CommentInfo }
-    | { kind: 'status';     ts: number; data: StatusEventInfo };
+    | { kind: 'status';     ts: number; data: StatusEventInfo }
+    | { kind: 'system';     ts: number; data: CollabEvent };
 
 // 组内节点：单条事件 or 折叠的多次修改
 type DayItem =
@@ -549,6 +550,18 @@ function EventRow({ t, event, currentUser, noteName, onPreviewVersion,
         Icon = RefreshCw;
         iconCls = 'text-purple-500';
         actionText = event.data.new_status === 'collab' ? t('activity.action_status_collab', '{{author}} 将笔记切换为协作模式', { author }) : t('activity.action_status_single', '{{author}} 将笔记切换为单人模式', { author });
+    } else if (event.kind === 'system') {
+        const systemName = getBasename(event.data.file_path)?.replace(/\.md$/, '') ?? noteName;
+        if (event.data.kind === 'file_restored') {
+            Icon = RefreshCw;
+            iconCls = 'text-emerald-500';
+            actionText = t('activity.action_file_restored', '{{author}} 恢复了 {{note}}', { author, note: systemName });
+        } else {
+            Icon = Trash2;
+            iconCls = 'text-red-500';
+            actionText = t('activity.action_file_deleted', '{{author}} 删除了 {{note}}', { author, note: systemName });
+        }
+        isClickable = false;
     }
 
     const eventId = (event.data as any).id;
@@ -767,6 +780,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
     const [annotations, setAnnotations] = useState<AnnotationInfo[]>([]);
     const [comments,    setComments]    = useState<CommentInfo[]>([]);
     const [statusEvents,setStatusEvents]= useState<StatusEventInfo[]>([]);
+    const [systemEvents,setSystemEvents]= useState<CollabEvent[]>([]);
     const [loading,     setLoading]     = useState(false);
     const [everLoaded,  setEverLoaded]  = useState(false);
     const [previewSnap, setPreviewSnap] = useState<SnapshotInfo | null>(null);
@@ -822,7 +836,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
     const unreadSince = frozenUnreadSince > 0 ? frozenUnreadSince : currentStoreUnreadSince;
 
     useEffect(() => {
-        setSnapshots([]); setAnnotations([]); setComments([]);
+        setSnapshots([]); setAnnotations([]); setComments([]); setSystemEvents([]);
         setEverLoaded(false); setReplyingTo(null); setShowCompose(false);
         setClickedTs(new Set());
         setFrozenUnreadSince(0); // 切换笔记时强制解冻游标
@@ -873,7 +887,8 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         ...filteredSnapshots.map(s => ({ kind: 'version' as const, ts: new Date(s.created_at).getTime(), data: s })),
         ...annotations.map(a => ({ kind: 'annotation' as const, ts: new Date(a.created_at).getTime(), data: a })),
         ...topLevelComments.map(c => ({ kind: 'comment' as const, ts: new Date(c.created_at).getTime(), data: c })),
-        ...statusEvents.map(se => ({ kind: 'status' as const, ts: new Date(se.created_at).getTime(), data: se }))
+        ...statusEvents.map(se => ({ kind: 'status' as const, ts: new Date(se.created_at).getTime(), data: se })),
+        ...systemEvents.map(se => ({ kind: 'system' as const, ts: new Date(se.created_at).getTime(), data: se }))
     ];
     const dayGroups = buildDayGroups(rawEvents, t);
     
@@ -883,9 +898,10 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
             ...filteredSnapshots.map(s => ({ kind: 'version' as const, ts: new Date(s.created_at).getTime(), data: s })),
             ...annotations.map(a => ({ kind: 'annotation' as const, ts: new Date(a.created_at).getTime(), data: a })),
             ...comments.map(c => ({ kind: 'comment' as const, ts: new Date(c.created_at).getTime(), data: c })),
-            ...statusEvents.map(se => ({ kind: 'status' as const, ts: new Date(se.created_at).getTime(), data: se }))
+            ...statusEvents.map(se => ({ kind: 'status' as const, ts: new Date(se.created_at).getTime(), data: se })),
+            ...systemEvents.map(se => ({ kind: 'system' as const, ts: new Date(se.created_at).getTime(), data: se }))
         ].sort((a, b) => b.ts - a.ts);
-    }, [filteredSnapshots, annotations, comments, statusEvents]);
+    }, [filteredSnapshots, annotations, comments, statusEvents, systemEvents]);
 
     const activeUnreadEvents = useMemo(() => {
         if (unreadSince === 0) return [];
@@ -918,7 +934,6 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
 
         const teamVaultId = useSessionStore.getState().teamVaultId ?? '';
         const st = useCollabNotifyStore.getState();
-        const basename = getBasename(relPath) ?? '';
 
         let hasGlobalRedDot = false;
         let matchedPath = relPath;
@@ -935,35 +950,31 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         if (matchedEntry) {
             hasGlobalRedDot = true;
             matchedPath = matchedEntry.filePath;
-        } else {
-            for (const entry of st.unreadFiles.values()) {
-                if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
-                    hasGlobalRedDot = true;
-                    matchedPath = entry.filePath;
-                    break;
-                }
-            }
         }
 
         if (hasGlobalRedDot) {
-            // 如果全部点完了，或者原来根本就没有未读结果（虚假红点/数据已清）
-            if (allClicked || !hasUnread) {
+            // Only explicit user consumption should clear a file red dot.
+            // On Windows, path resolution can briefly fail while the panel opens; treating
+            // "!hasUnread" as read would optimistically clear unrelated red dots until the
+            // next server refresh brings them back.
+            if (allClicked && clickedTs.size > 0) {
                 markRead(matchedPath, teamVaultId);
                 setLastRead(matchedPath, Date.now());
                 if (matchedPath !== relPath) setLastRead(relPath, Date.now());
             }
         }
-    }, [everLoaded, notePath, clickedTs, activeUnreadEvents, markRead, setLastRead, unreadFiles]); // eslint-disable-line
+    }, [everLoaded, notePath, clickedTs, activeUnreadEvents, markRead, setLastRead, unreadFiles, currentFileId]); // eslint-disable-line
 
     const loadAll = useCallback(async () => {
         if (!resolved) return;
         setLoading(true);
         try {
-            const [sRes, aRes, cRes, stRes] = await Promise.allSettled([
+            const [sRes, aRes, cRes, stRes, sysRes] = await Promise.allSettled([
                 snapshotService.listSnapshots(resolved.vaultId, resolved.filePath, 200, currentFileId),
                 annotationService.listAnnotations(resolved.vaultId, resolved.filePath, currentFileId),
                 commentService.listComments(resolved.vaultId, resolved.filePath, currentFileId),
-                collabService.getStatusEvents(resolved.vaultId, resolved.filePath, currentFileId)
+                collabService.getStatusEvents(resolved.vaultId, resolved.filePath, currentFileId),
+                collabService.getFileEvents(resolved.vaultId, resolved.filePath, currentFileId)
             ]);
             if (sRes.status === 'fulfilled') {
                 setSnapshots(await keepSnapshotsVisibleFromLocalState(sRes.value.snapshots, notePath));
@@ -972,6 +983,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
             if (aRes.status === 'fulfilled') setAnnotations(aRes.value);
             if (cRes.status === 'fulfilled') setComments(cRes.value);
             if (stRes.status === 'fulfilled') setStatusEvents(stRes.value);
+            if (sysRes.status === 'fulfilled') setSystemEvents(sysRes.value);
             setEverLoaded(true);
             const anns = aRes.status === 'fulfilled' ? aRes.value : [];
             window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { annotations: anns } }));

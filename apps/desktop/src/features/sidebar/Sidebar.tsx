@@ -1,11 +1,10 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from "react-i18next";
 import { FileSystemNoteRepository } from "@/core/storage/FileSystemNoteRepository";
 import { Note } from "@/core/storage/types";
 import { FilePlus, FolderPlus, Globe, Users, FileText, Folder, MoreHorizontal, User } from "lucide-react";
 import { syncService, type TeamTreeNode } from '@/services/SyncService';
-import type { TeamScopeDir } from '@/services/TeamService';
 import { useTeamDirectoryMapping } from './hooks/useTeamDirectoryMapping';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { useFileTreeActions } from './hooks/useFileTreeActions';
@@ -104,52 +103,18 @@ export const Sidebar = ({
 
     const [teamDirectoryOptions, setTeamDirectoryOptions] = useState<string[]>([]);
     const [teamTree, setTeamTree] = useState<TeamTreeNode[]>([]);
-    const [teamScopeDirs, setTeamScopeDirs] = useState<TeamScopeDir[]>([]);
     const [teamExpandedDirs, setTeamExpandedDirs] = useState<Set<string>>(new Set());
     const lastTeamRefreshAtRef = useRef(0);
 
     const teamRole = useSessionStore(s => s.teamRole);
-    const currentUserId = useSessionStore(s => s.userId);
     const isAdminManageMode = useSessionStore(s => s.isAdminManageMode);
     const isGlobalAdmin = teamRole === 'admin';
     const isTeamAdmin = isGlobalAdmin && isAdminManageMode;
 
-    const normalizeTeamPath = useCallback((path: string) => path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase(), []);
-    const ownerScopeDirs = useMemo(() => {
-        return teamScopeDirs
-            .filter(dir => dir.role === 'owner')
-            .slice()
-            .sort((a, b) => b.directory_path.length - a.directory_path.length);
-    }, [teamScopeDirs]);
-    const findOwnerBoundary = useCallback((path: string): TeamScopeDir | null => {
-        const target = normalizeTeamPath(path);
-        return ownerScopeDirs.find(dir => {
-            const boundary = normalizeTeamPath(dir.directory_path);
-            return target === boundary || target.startsWith(`${boundary}/`);
-        }) || null;
-    }, [normalizeTeamPath, ownerScopeDirs]);
-    const sameOwnerBoundary = useCallback((left: TeamScopeDir | null, right: TeamScopeDir | null) => {
-        if (!left || !right) return false;
-        if (left.directory_id && right.directory_id) return left.directory_id === right.directory_id;
-        return normalizeTeamPath(left.directory_path) === normalizeTeamPath(right.directory_path);
-    }, [normalizeTeamPath]);
-    const canMoveTeamNode = useCallback((node: TeamTreeNode) => {
-        if (isTeamAdmin) return true;
-        const boundary = findOwnerBoundary(node.path);
-        if (!boundary) return false;
-        if (node.is_dir && normalizeTeamPath(node.path) === normalizeTeamPath(boundary.directory_path)) {
-            return false;
-        }
-        if (!node.is_dir) {
-            return Boolean(node.editor_id && currentUserId && node.editor_id === currentUserId);
-        }
-        return true;
-    }, [currentUserId, findOwnerBoundary, isTeamAdmin, normalizeTeamPath]);
-    const canDropTeamNode = useCallback((srcNode: TeamTreeNode, destNode: TeamTreeNode) => {
-        if (isTeamAdmin) return true;
-        if (!destNode.is_dir || !canMoveTeamNode(srcNode)) return false;
-        return sameOwnerBoundary(findOwnerBoundary(srcNode.path), findOwnerBoundary(destNode.path));
-    }, [canMoveTeamNode, findOwnerBoundary, isTeamAdmin, sameOwnerBoundary]);
+    const canMoveTeamNode = useCallback((_node: TeamTreeNode) => isTeamAdmin, [isTeamAdmin]);
+    const canDropTeamNode = useCallback((_srcNode: TeamTreeNode, destNode: TeamTreeNode) => {
+        return isTeamAdmin && destNode.is_dir;
+    }, [isTeamAdmin]);
 
     const { teamDirectories, teamRoots, activeMappings, removeMapping } = useTeamDirectoryMapping({
         rootDir: repo?.rootDir,
@@ -167,19 +132,6 @@ export const Sidebar = ({
                 return next;
             });
         }).catch(() => { });
-    }, []);
-
-    const refreshTeamScope = useCallback(async (vaultId: string) => {
-        try {
-            const config = syncService.getConfig();
-            if (!config) return;
-            const { teamService } = await import('@/services/TeamService');
-            const scope = await teamService.getMyScope(config.serverUrl, config.accessToken, vaultId);
-            setTeamScopeDirs(scope.scope_dirs || []);
-        } catch (e) {
-            console.warn('[Sidebar] Failed to load team scope:', e);
-            setTeamScopeDirs([]);
-        }
     }, []);
 
     const { handleAdminDeleteFile, handleAdminDeleteDir, handleAdminRenameDir, handleAdminRenameFile, handleTeamDragEnd } = useTeamAdminActions({
@@ -335,10 +287,8 @@ export const Sidebar = ({
                         teamRole: me.global_role.toLowerCase(),
                     });
                 }
-                await refreshTeamScope(teamVaultId);
             } catch (e) {
                 console.warn('[Sidebar] Failed to load team members:', e);
-                setTeamScopeDirs([]);
             }
         })();
 
@@ -347,7 +297,6 @@ export const Sidebar = ({
             if (now - lastTeamRefreshAtRef.current < 2000) return;
             lastTeamRefreshAtRef.current = now;
             refreshTeamData(teamVaultId);
-            refreshTeamScope(teamVaultId);
         };
         window.addEventListener('team:tree-refresh', handleTeamRefresh);
         window.addEventListener('team:directories-changed', handleTeamRefresh);
@@ -355,16 +304,15 @@ export const Sidebar = ({
             window.removeEventListener('team:tree-refresh', handleTeamRefresh);
             window.removeEventListener('team:directories-changed', handleTeamRefresh);
             (window as any).__slashTeamMembers = [];
-            setTeamScopeDirs([]);
         };
-    }, [hasTeamVault, teamVaultId, refreshTeamData, refreshTeamScope]);
+    }, [hasTeamVault, teamVaultId, refreshTeamData]);
 
     const handleTeamTreeDragEnd = useCallback((event: Parameters<typeof handleTeamDragEnd>[0]) => {
         const srcNode = event.active.data.current?.teamNode as TeamTreeNode | undefined;
         const destNode = event.over?.data.current?.teamNode as TeamTreeNode | undefined;
         if (srcNode && destNode && !canDropTeamNode(srcNode, destNode)) {
             setActiveTeamDragNode(null);
-            toast.error(t('team.permission_denied_move_dir', '您只能在自己拥有的团队目录内部移动内容。'));
+            toast.error(t('team.permission_denied_team_tree_move', '只有 Admin 维护模式可以在团队空间树中移动内容。'));
             return;
         }
         handleTeamDragEnd(event, setActiveTeamDragNode);

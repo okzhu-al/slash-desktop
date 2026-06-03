@@ -10,7 +10,7 @@ import { syncService } from './SyncService';
 
 export interface CollabEvent {
     seq: number;
-    kind: 'annotation' | 'comment' | 'file_trashed' | 'folder_joined' | 'maintenance_toggled' | 'version' | 'status' | 'task_toggle';
+    kind: 'annotation' | 'comment' | 'file_trashed' | 'file_deleted' | 'file_restored' | 'folder_joined' | 'maintenance_toggled' | 'version' | 'status' | 'task_toggle';
     file_path: string;
     file_id?: string | null;
     directory_id?: string | null;
@@ -162,6 +162,23 @@ class CollabServiceImpl {
             if (!resp.ok) return [];
             const data = await resp.json();
             return data.unread_files ?? [];
+        } catch {
+            return [];
+        }
+    }
+
+    /** 查询指定文件的系统协作事件（恢复、删除等） */
+    async getFileEvents(vaultId: string, filePath: string, fileId?: string | null): Promise<CollabEvent[]> {
+        const auth = await this.getFreshAuth();
+        if (!auth) return [];
+
+        try {
+            const params = new URLSearchParams({ vault_id: vaultId, file_path: filePath });
+            if (fileId) params.set('file_id', fileId);
+            const resp = await fetch(`${auth.base}/api/collab/file_events?${params}`, { headers: auth.headers });
+            if (!resp.ok) return [];
+            const data = await resp.json();
+            return data.events ?? [];
         } catch {
             return [];
         }

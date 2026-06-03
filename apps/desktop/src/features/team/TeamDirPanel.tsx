@@ -211,7 +211,10 @@ export function TeamDirPanel({
                 );
                 if (seq !== loadSeqRef.current) return;
                 setArrayIfChanged(dirMembersSigRef, setDirMembers, permResult);
-                if (permResult.length > 0) {
+                const directPerms = permResult.filter(p => !p.inherited);
+                if (directPerms.length > 0) {
+                    setObserverVisible(directPerms[0].observer_visible);
+                } else if (permResult.length > 0) {
                     setObserverVisible(permResult[0].observer_visible);
                 } else {
                     setObserverVisible(false);
@@ -356,9 +359,10 @@ export function TeamDirPanel({
         const newVal = !observerVisible;
         setObserverVisible(newVal);
         try {
-            if (dirMembers.length > 0) {
+            const directMembers = dirMembers.filter(m => !m.inherited);
+            if (directMembers.length > 0) {
                 // 更新所有现有权限记录的 observer_visible
-                for (const m of dirMembers) {
+                for (const m of directMembers) {
                     await teamService.setDirectoryPermissions(
                         config.serverUrl, config.accessToken, teamVaultId,
                         directoryPath, m.user_id, m.dir_role, newVal, directoryId,
@@ -597,7 +601,7 @@ export function TeamDirPanel({
                                                 {m.dir_role === 'Owner' ? 'Owner' : 'Member'}
                                             </span>
                                         </div>
-                                        {canManageDir && (
+                                        {canManageDir && !m.inherited && (
                                             <div className="flex items-center gap-1">
                                                 <button
                                                     onClick={() => handleToggleRole(m.user_id, m.dir_role)}

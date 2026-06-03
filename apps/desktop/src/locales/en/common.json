@@ -233,6 +233,8 @@
         "whisper_model_small": "Good quality, suitable for most scenarios",
         "whisper_model_medium": "High quality, suitable for professional transcription",
         "whisper_model_large_v3": "Highest quality, requires more resources",
+        "whisper_download_network_error": "Unable to reach Hugging Face or any mirror. You can download the model manually and copy it to the cache directory below, then click Refresh:",
+        "whisper_download_network_repo": "HuggingFace repo: Systran/faster-whisper-{{model}}",
         "sync": "Slash Server"
     },
     "commands": {
@@ -1189,6 +1191,8 @@
         "action_comment": "{{author}} commented",
         "action_status_collab": "{{author}} switched note to collab mode",
         "action_status_single": "{{author}} switched note to single mode",
+        "action_file_restored": "{{author}} restored {{note}}",
+        "action_file_deleted": "{{author}} deleted {{note}}",
         "edited_note": "{{author}} edited note",
         "no_history": "No history",
         "new_comment": "Write a comment...",

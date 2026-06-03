@@ -241,6 +241,8 @@
         "whisper_model_small": "较好质量，适合大多数场景",
         "whisper_model_medium": "高质量，适合专业转写",
         "whisper_model_large_v3": "最高质量，需要较多资源",
+        "whisper_download_network_error": "当前网络无法连接 Hugging Face 及所有镜像源。你可以自行下载模型后手动拷贝到以下缓存目录，完成后点击右上角刷新按钮：",
+        "whisper_download_network_repo": "HuggingFace 仓库名：Systran/faster-whisper-{{model}}",
         "sync": "Slash Server"
     },
     "commands": {
@@ -1198,6 +1200,8 @@
         "action_comment": "{{author}} 发布评论",
         "action_status_collab": "{{author}} 将笔记切换为协作模式",
         "action_status_single": "{{author}} 将笔记切换为单人模式",
+        "action_file_restored": "{{author}} 恢复了 {{note}}",
+        "action_file_deleted": "{{author}} 删除了 {{note}}",
         "edited_note": "{{author}} 修改了笔记",
         "no_history": "暂无历史",
         "new_comment": "发评论...",
