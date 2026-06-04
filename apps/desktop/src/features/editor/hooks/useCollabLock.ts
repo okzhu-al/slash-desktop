@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { collabService } from '@/services/CollabService';
 import { autoSyncManager } from '@/services/AutoSyncManager';
 
-export type CollabLockState = 'acquired' | 'locked_by_other' | 'idle' | 'offline' | 'loading';
+export type CollabLockState = 'acquired' | 'locked_by_other' | 'idle' | 'offline' | 'loading' | 'unavailable';
 
 interface UseCollabLockResult {
     lockState: CollabLockState;
@@ -47,6 +47,12 @@ export function useCollabLock(
     }, []);
 
     const enforceOffline = useCallback(() => {
+        if (!isCollabRef.current) {
+            setLockState('acquired');
+            setLockedByName(null);
+            stopHeartbeat();
+            return;
+        }
         console.warn(`🔌 [Collab/Lock] Enforcing offline lock state (network offline or error) for vaultId: ${vaultIdRef.current}, fileId: ${fileIdRef.current}`);
         setLockState('offline');
         setLockedByName(null);
@@ -107,10 +113,20 @@ export function useCollabLock(
             }
         } catch (err) {
             console.error(`❌ [Collab/Lock] Failed to acquire lock due to network or server error for vaultId: ${vaultIdRef.current}, fileId: ${fileIdRef.current}:`, err);
-            autoSyncManager.reportNetworkError();
-            enforceOffline();
+            if (!navigator.onLine) {
+                autoSyncManager.reportNetworkError('browser offline');
+                enforceOffline();
+                return;
+            }
+            // A single collab-lock fetch failure can be transient WebView pressure
+            // (for example ERR_INSUFFICIENT_RESOURCES). It must not poison the
+            // global sync/server status; real physical disconnects are promoted
+            // by AutoSyncManager's sync/token/server probes or browser offline.
+            setLockState('unavailable');
+            setLockedByName(null);
+            stopHeartbeat();
         }
-    }, [enforceOffline, scheduleIdleRelease, startHeartbeat]);
+    }, [enforceOffline, scheduleIdleRelease, startHeartbeat, stopHeartbeat]);
 
     // Sync online/offline status using AutoSyncManager as the single source of truth
     useEffect(() => {
@@ -121,6 +137,8 @@ export function useCollabLock(
             } else if (['idle', 'success', 'syncing'].includes(event.status)) {
                 if (isOfflineRef.current) {
                     isOfflineRef.current = false;
+                    setLockState(isCollabRef.current ? 'idle' : 'acquired');
+                } else if (lockStateRef.current === 'unavailable') {
                     setLockState(isCollabRef.current ? 'idle' : 'acquired');
                 }
             }
@@ -160,9 +178,10 @@ export function useCollabLock(
         setLockState('idle');
         setLockedByName(null);
 
-        // Also poll every 15s if we are 'locked_by_other' or 'offline' just in case they leave without us knowing or network silently restores
+        // Also poll every 15s if the lock is unavailable, offline, or held by
+        // someone else, so transient fetch/WebView failures can recover locally.
         const pollTimer = setInterval(() => {
-            if (lockStateRef.current === 'locked_by_other' || lockStateRef.current === 'offline') {
+            if (lockStateRef.current === 'locked_by_other' || lockStateRef.current === 'offline' || lockStateRef.current === 'unavailable') {
                 if (navigator.onLine) attemptAcquire();
             }
         }, HEARTBEAT_INTERVAL);

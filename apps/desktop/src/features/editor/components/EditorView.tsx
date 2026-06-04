@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { EditorContent } from '@tiptap/react';
-import { Lock } from 'lucide-react';
+import { AlertTriangle, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils/cn';
@@ -68,6 +68,7 @@ export const EditorView = (props: EditorContainerState) => {
         noteId,
         activeNoteId,
         effectiveReadOnly,
+        readOnlyReason,
         isTeamNote,
         isNoteEditor,
         isVaultOwner,
@@ -138,6 +139,31 @@ export const EditorView = (props: EditorContainerState) => {
     const canSwitchDocStatus = !effectiveReadOnly && (isNoteEditor || isVaultOwner);
     // 是否展示协作锁胶囊（仅 collab 模式）
     const showCollabBadge = isTeamNote && noteDocStatus === 'collab';
+    const readOnlyMessage = (() => {
+        if (!effectiveReadOnly) return null;
+        switch (readOnlyReason) {
+            case 'collab_offline':
+                return t('editor.readonly_reason_collab_offline', '协作模式离线，恢复连接后可编辑。');
+            case 'collab_unavailable':
+                return t('editor.readonly_reason_collab_unavailable', '暂时无法取得协作编辑锁，Slash 会自动重试。');
+            case 'collab_locked_by_other':
+                return collabLockedByName
+                    ? t('editor.readonly_reason_collab_locked_by', { name: collabLockedByName, defaultValue: `${collabLockedByName} 正在编辑，暂时只读。` })
+                    : t('editor.readonly_reason_collab_locked', '其他成员正在编辑，暂时只读。');
+            case 'collab_lock_loading':
+                return t('editor.readonly_reason_collab_loading', '正在取得协作编辑锁，请稍候。');
+            case 'collab_lock_required':
+                return t('editor.readonly_reason_collab_required', '协作模式需要先取得编辑锁，请点击正文后稍候。');
+            case 'solo_not_editor':
+                return t('editor.readonly_reason_solo_not_editor', { name: localUser || '', defaultValue: 'Solo 模式仅 Editor 可编辑。' });
+            case 'solo_missing_editor':
+                return t('editor.readonly_reason_solo_missing_editor', '该 Solo 团队笔记缺少 Editor 信息，已进入保护性只读。');
+            case 'forced':
+                return t('editor.readonly_reason_forced', '当前页面处于只读模式。');
+            default:
+                return t('editor.readonly_reason_team', '当前团队笔记处于只读保护状态。');
+        }
+    })();
 
     return (
         <>
@@ -170,12 +196,19 @@ export const EditorView = (props: EditorContainerState) => {
                     {effectiveReadOnly && (
                         <div 
                             className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 shadow-sm select-none shrink-0 transition-colors" 
-                            title={t('editor.readonly_mode', '团队空间为只读模式')}
+                            title={readOnlyMessage || t('editor.readonly_mode', '团队空间为只读模式')}
                         >
                             <Lock size={12} className="text-amber-600 dark:text-amber-500" />
                             <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">{t('editor.readonly', '只读')}</span>
                         </div>
                     )}
+                </div>
+            )}
+
+            {isTeamNote && effectiveReadOnly && readOnlyMessage && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span className="leading-5">{readOnlyMessage}</span>
                 </div>
             )}
 

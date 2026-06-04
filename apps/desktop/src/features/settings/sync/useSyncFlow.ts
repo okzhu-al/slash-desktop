@@ -226,6 +226,9 @@ export function useSyncFlow(vaultPath?: string, onBlockClose?: (blocked: boolean
 
     // 团队认证
     const [username, setUsername] = useState('');
+    const setSafeUsername = useCallback((value: string) => {
+        setUsername(value.replace(/[^A-Za-z0-9_.-]/g, ''));
+    }, []);
     const [displayName, setDisplayName] = useState('');
     const [password, setPassword] = useState('');
     const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -308,11 +311,10 @@ export function useSyncFlow(vaultPath?: string, onBlockClose?: (blocked: boolean
                 } catch (e) {
                     console.warn('[SyncTab] Failed to fetch team role:', e);
                 }
-            }
-        } catch (e) {
-            console.warn('[SyncTab] refreshCloudInfo failed:', e);
-            autoSyncManager.reportNetworkError(e);
         }
+    } catch (e) {
+        console.warn('[SyncTab] refreshCloudInfo failed:', e);
+    }
     }, []);
 
     const fetchServerInfo = useCallback(async () => {
@@ -407,16 +409,16 @@ export function useSyncFlow(vaultPath?: string, onBlockClose?: (blocked: boolean
         const handlePhysicalDisconnected = () => {
             if (syncService.isConfigured()) {
                 setStep('welcome');
-                setError(t('sync.physical_disconnected', '网络或服务不可用，请联系管理员'));
+                setError(t('sync.physical_disconnected', '网络或服务暂不可用，恢复后会自动重试'));
             }
         };
 
         // 挂载时如果检测到已经是离线或错误状态，直接置为 welcome 并注入物理断开提示
         if (syncService.isConfigured()) {
             const status = autoSyncManager.getStatus();
-            if (status === 'offline' || status === 'error' || !navigator.onLine) {
+            if (status === 'offline' || !navigator.onLine) {
                 setStep('welcome');
-                setError(t('sync.physical_disconnected', '网络或服务不可用，请联系管理员'));
+                setError(t('sync.physical_disconnected', '网络或服务暂不可用，恢复后会自动重试'));
             }
         }
 
@@ -1232,7 +1234,7 @@ export function useSyncFlow(vaultPath?: string, onBlockClose?: (blocked: boolean
         pinSet, serverInfo,
         syncStatus, syncResult,
         pairCodeMessage, setPairCodeMessage,
-        username, setUsername,
+        username, setUsername: setSafeUsername,
         displayName, setDisplayName,
         selectedTeamId, setSelectedTeamId,
         password, setPassword,

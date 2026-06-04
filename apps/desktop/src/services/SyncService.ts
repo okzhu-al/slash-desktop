@@ -173,12 +173,23 @@ class SyncServiceImpl {
                 const { useSessionStore } = await import('@/stores/useSessionStore');
                 this.clearConfig();
                 useSessionStore.getState().clearAll();
-                window.dispatchEvent(new CustomEvent('sync:auth-expired'));
+                window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                    detail: { reason: 'forbidden' },
+                }));
                 throw err;
             }
 
             // 401 → 尝试刷新 Token 后重试
             if (errMsg.includes('401') || errMsg.includes('Unauthorized')) {
+                if (this.isAdminRevokedSessionError(errMsg)) {
+                    const { useSessionStore } = await import('@/stores/useSessionStore');
+                    this.clearConfig();
+                    useSessionStore.getState().clearAll();
+                    window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                        detail: { reason: 'admin_revoked' },
+                    }));
+                    throw err;
+                }
                 const refreshed = await this.refreshToken();
                 if (refreshed) {
                     const newConfig = this.getConfig()!;
@@ -222,11 +233,22 @@ class SyncServiceImpl {
                 const { useSessionStore } = await import('@/stores/useSessionStore');
                 this.clearConfig();
                 useSessionStore.getState().clearAll();
-                window.dispatchEvent(new CustomEvent('sync:auth-expired'));
+                window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                    detail: { reason: 'forbidden' },
+                }));
                 throw err;
             }
 
             if (errMsg.includes('401') || errMsg.includes('Unauthorized')) {
+                if (this.isAdminRevokedSessionError(errMsg)) {
+                    const { useSessionStore } = await import('@/stores/useSessionStore');
+                    this.clearConfig();
+                    useSessionStore.getState().clearAll();
+                    window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                        detail: { reason: 'admin_revoked' },
+                    }));
+                    throw err;
+                }
                 const refreshed = await this.refreshToken();
                 if (refreshed) {
                     const newConfig = this.getConfig()!;
@@ -243,6 +265,10 @@ class SyncServiceImpl {
             }
             throw err;
         }
+    }
+
+    private isAdminRevokedSessionError(error: string): boolean {
+        return error.toLowerCase().includes('terminated by administrator');
     }
 
     /** 尝试刷新 Token，成功返回 true */
@@ -289,7 +315,9 @@ class SyncServiceImpl {
             } else {
                 // 逻辑断联：清理已失效配置（实现状态熔断），防止后续继续使用过期的 Token 和轮询
                 this.clearConfig();
-                window.dispatchEvent(new CustomEvent('sync:auth-expired'));
+                window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                    detail: { reason: 'session_expired' },
+                }));
             }
             return false;
         }

@@ -5,6 +5,7 @@
  * - acquired:       "[自己] 编辑中"  (Pencil 图标, 绿色)
  * - locked_by_other: "[对方] 编辑中" (Lock 图标, 琥珀色)
  * - offline:        "离线"           (WifiOff 图标, 红色)
+ * - unavailable:    "暂不可用"       (WifiOff 图标, 红色)
  * - idle/loading:   不显示
  */
 
@@ -45,6 +46,11 @@ export function CollabLockBadge({ lockState, lockedByName, localUser }: CollabLo
         case 'offline':
             icon = <WifiOff size={11} />;
             label = t('collabLock.offline');
+            pillClass = 'bg-red-500/10 text-red-500 dark:text-red-400 ring-red-500/20';
+            break;
+        case 'unavailable':
+            icon = <WifiOff size={11} />;
+            label = t('collabLock.unavailable', '暂不可用');
             pillClass = 'bg-red-500/10 text-red-500 dark:text-red-400 ring-red-500/20';
             break;
         default:

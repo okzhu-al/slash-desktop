@@ -99,18 +99,27 @@ class TeamServiceImpl {
         });
 
         if (!resp.ok) {
-            // 🚨 熔断拦截：处理强制下线或被删除导致的 401/403 权限失效
+            const err = await resp.json().catch(() => ({ error: resp.statusText }));
+            const errorMessage = String(err.error || `Team API error: ${resp.status}`);
+            // 401 means the local session is no longer usable. 403 is often a
+            // normal team permission denial (not Owner, not Editor, etc.), so
+            // callers must opt in before it clears auth.
             const shouldClearAuth =
-                resp.status === 401 || (resp.status === 403 && options?.clearAuthOnForbidden !== false);
+                resp.status === 401 || (resp.status === 403 && options?.clearAuthOnForbidden === true);
             if (shouldClearAuth) {
                 const { syncService } = await import('@/services/SyncService');
                 const { useSessionStore } = await import('@/stores/useSessionStore');
                 syncService.clearConfig();
                 useSessionStore.getState().clearAll();
-                window.dispatchEvent(new CustomEvent('sync:auth-expired'));
+                window.dispatchEvent(new CustomEvent('sync:auth-expired', {
+                    detail: {
+                        reason: errorMessage.toLowerCase().includes('terminated by administrator')
+                            ? 'admin_revoked'
+                            : resp.status === 401 ? 'unauthorized' : 'forbidden',
+                    },
+                }));
             }
-            const err = await resp.json().catch(() => ({ error: resp.statusText }));
-            throw new Error(err.error || `Team API error: ${resp.status}`);
+            throw new Error(errorMessage);
         }
 
         return resp.json();

@@ -461,16 +461,21 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [vaultPath]);
 
-  // 🚨 全局监听会话过期/管理员下线/踢出事件，触发状态熔断与 UI 强退阻断
+  // 全局监听会话失效事件，触发状态熔断与 UI 强退阻断
   useEffect(() => {
-    const handleAuthExpired = () => {
-      // 1. 弹出极其 premium 且长留的全局红色报错 toast，警告用户
-      toast.error(`⚠️ ${t('sync.session_terminated')}`, {
+    const handleAuthExpired = (event: Event) => {
+      const reason = (event as CustomEvent<{ reason?: string }>).detail?.reason;
+      const message = reason === 'admin_revoked'
+        ? t('sync.session_admin_revoked', '您已被管理员强制下线，请重新登录。')
+        : reason === 'forbidden'
+            ? t('sync.session_forbidden', '登录状态已失效，或当前账号不再拥有该团队空间权限，请重新登录。')
+            : t('sync.auth_expired', '登录已过期，请重新连接');
+
+      toast.error(`⚠️ ${message}`, {
         duration: 8000,
         position: 'top-center',
       });
 
-      // 2. 清空并重置 UI 的各种团队操作状态
       setShowTeamManage(false);
       setSelectedFolder(null);
       setSelectedNote(null);
@@ -489,7 +494,7 @@ function App() {
       const now = Date.now();
       if (now - lastToastTime > 15000) { // 15秒防重防刷屏
         lastToastTime = now;
-        toast.error(`⚠️ ${t('sync.physical_disconnected', '网络或服务不可用，请联系管理员')}`, {
+        toast.error(`⚠️ ${t('sync.physical_disconnected', '网络或服务暂不可用，恢复后会自动重试')}`, {
           duration: 8000,
           position: 'top-center',
         });

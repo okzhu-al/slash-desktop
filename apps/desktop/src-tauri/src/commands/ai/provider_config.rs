@@ -448,7 +448,7 @@ pub fn get_online_providers(db: State<DbStateWrapper>) -> Result<Vec<OnlineProvi
 }
 
 /// 保存一个 Online Provider 配置（upsert by id）
-/// 如果是新增且列表为空，自动设为 active
+/// 设置页的“保存并测试”语义是启用当前服务商，因此保存后总是设为 active。
 #[tauri::command]
 pub fn save_online_provider(
     db: State<DbStateWrapper>,
@@ -465,8 +465,6 @@ pub fn save_online_provider(
     }
 
     let mut providers = load_online_providers_raw(&db)?;
-    let is_new = !providers.iter().any(|p| p.id == id);
-    let auto_activate = providers.is_empty() || (is_new && !providers.iter().any(|p| p.active));
 
     if let Some(existing) = providers.iter_mut().find(|p| p.id == id) {
         existing.label = label;
@@ -478,28 +476,19 @@ pub fn save_online_provider(
             label,
             base_url,
             model,
-            active: auto_activate,
+            active: false,
         });
     }
 
-    // If auto-activating, ensure only this one is active
-    if auto_activate {
-        for p in providers.iter_mut() {
-            p.active = p.id == id;
-        }
+    // Saving from Settings is an explicit selection of the current provider.
+    for p in providers.iter_mut() {
+        p.active = p.id == id;
     }
 
     save_online_providers_raw(&db, &providers)?;
+    apply_active_provider_to_service(&db, &ai, &providers, &id)?;
 
-    // If this provider is active (or just auto-activated), rebuild AIService
-    if providers.iter().any(|p| p.id == id && p.active) {
-        apply_active_provider_to_service(&db, &ai, &providers, &id)?;
-    }
-
-    log::debug!(
-        "✅ [OnlineProviders] Saved provider '{}', auto_activate={}",
-        id, auto_activate
-    );
+    log::debug!("✅ [OnlineProviders] Saved and activated provider '{}'", id);
     Ok(())
 }
 

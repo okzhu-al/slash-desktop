@@ -13,6 +13,7 @@ interface CollaborationState {
     isNoteEditor: boolean;
     isVaultOwner: boolean;
     effectiveReadOnly: boolean;
+    readOnlyReason: string | null;
     collabLockState: CollabLockState;
     collabLockedByName: string | null;
     /** 是否处于协作离线状态（用于封锁评论/批注/回复） */
@@ -223,6 +224,22 @@ export function useEditorCollaboration(
     const collabBlocked = isTeamNote && noteDocStatus === 'collab' && lockState !== 'acquired';
     const effectiveReadOnly = activeReadOnlyProp || (isCollabSoloStatusBlocked && !isOrphaned) || collabBlocked;
 
+    const readOnlyReason = (() => {
+        if (!effectiveReadOnly) return null;
+        if (activeReadOnlyProp) return 'forced';
+        if (isCollabSoloStatusBlocked && !isOrphaned) {
+            return noteEditorName ? 'solo_not_editor' : 'solo_missing_editor';
+        }
+        if (isTeamNote && noteDocStatus === 'collab') {
+            if (lockState === 'offline') return 'collab_offline';
+            if (lockState === 'unavailable') return 'collab_unavailable';
+            if (lockState === 'locked_by_other') return 'collab_locked_by_other';
+            if (lockState === 'loading') return 'collab_lock_loading';
+            return 'collab_lock_required';
+        }
+        return 'team_readonly';
+    })();
+
     return useMemo(() => ({
         isTeam,
         localUser,
@@ -232,9 +249,10 @@ export function useEditorCollaboration(
         isNoteEditor,
         isVaultOwner,
         effectiveReadOnly,
+        readOnlyReason,
         collabLockState: lockState,
         collabLockedByName: lockedByName,
-        isCollabOffline: lockState === 'offline',
+        isCollabOffline,
         reportActivity,
-    }), [isTeam, localUser, teamRole, noteDocStatus, noteEditorName, isNoteEditor, isVaultOwner, effectiveReadOnly, lockState, lockedByName, isCollabOffline, reportActivity]);
+    }), [isTeam, localUser, teamRole, noteDocStatus, noteEditorName, isNoteEditor, isVaultOwner, effectiveReadOnly, readOnlyReason, lockState, lockedByName, isCollabOffline, reportActivity]);
 }
