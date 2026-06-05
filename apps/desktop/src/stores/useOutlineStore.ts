@@ -5,6 +5,7 @@ export interface OutlineHeading {
     text: string;
     pos: number;
     id: string;
+    noteId?: string | null;
 }
 
 interface OutlineStore {

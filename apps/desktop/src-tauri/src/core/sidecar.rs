@@ -559,6 +559,12 @@ impl SidecarManager {
             *p = None;
         }
     }
+
+    /// 更新安装前关闭 sidecar 并清理同名残留进程，避免 Windows 安装器覆盖文件时被占用。
+    pub fn shutdown_for_update(&self) {
+        self.shutdown();
+        Self::kill_existing_sidecars();
+    }
 }
 
 impl Drop for SidecarManager {

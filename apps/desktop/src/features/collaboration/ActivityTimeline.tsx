@@ -17,7 +17,7 @@ import { collabService, CollabEvent, StatusEventInfo } from '@/services/CollabSe
 import { useCollabNotifyStore } from '@/stores/useCollabNotifyStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { SnapshotReadonlyEditor } from './SnapshotReadonlyEditor';
-import { confirm, message } from '@tauri-apps/plugin-dialog';
+import { message } from '@tauri-apps/plugin-dialog';
 import type { DocStatus } from '@/features/editor/components/DocStatusBar';
 import { normalizePath, getBasename } from '@/shared/utils/pathUtils';
 import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
@@ -201,17 +201,14 @@ function buildDayGroups(events: RawEvent[], t: any): DayGroup[] {
 // Snapshot Preview Modal
 // ─────────────────────────────────────────
 
-function SnapshotPreviewModal({ snap, onClose, t, docStatus, canRevert, vaultPath, notePath, onRevertSuccess }: {
+function SnapshotPreviewModal({ snap, onClose, t, vaultPath, isLatestSnapshot }: {
     snap: SnapshotInfo; onClose: () => void; t: any;
-    docStatus: DocStatus; canRevert: boolean;
+    isLatestSnapshot: boolean;
     vaultPath?: string | null;
-    notePath?: string | null;
-    onRevertSuccess?: () => void;
 }) {
     const [content, setContent] = useState<SnapshotContent | null>(null);
     const [loading, setLoading] = useState(true);
     const [stale, setStale] = useState(false);
-    const [reverting, setReverting] = useState(false);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -229,42 +226,7 @@ function SnapshotPreviewModal({ snap, onClose, t, docStatus, canRevert, vaultPat
     const noteName = getBasename(snap.file_path)?.replace(/\.md$/, '') ?? snap.file_path;
     const typeStr = snap.snapshot_type === 'create' ? t('activity.type_create', '创建') : t('activity.type_edit', '修改');
 
-    // Solo + Editor(canRevert) → 恢复
-    const showRevert = docStatus === 'solo' && canRevert;
-    // Collab → 所有参与者可另存为
-    const showSaveAs = docStatus === 'collab';
-
-    const handleRevert = async () => {
-        const confirmed = await confirm(
-            t('versions.confirm_revert', '确定要将此文件回退到该版本吗？\n当前的更改将会被覆盖（并在历史中生成一条自动保存记录）。'),
-            { title: 'Slash', kind: 'warning' }
-        );
-        if (!confirmed) return;
-        setReverting(true);
-        try {
-            await snapshotService.revertToSnapshot(snap.id);
-            // 将快照内容写入本地文件
-            if (content?.content && notePath && !notePath.startsWith('__team__/')) {
-                const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-                await writeTextFile(notePath, content.content);
-            }
-            // 触发编辑器全量重载
-            window.dispatchEvent(new CustomEvent('slash:reload-note'));
-            await message(t('versions.revert_success', '回退成功！'), { title: 'Slash', kind: 'info' });
-            // 触发后台同步，让 server 状态与本地一致并生成最新快照
-            if (vaultPath && syncService.isConfigured()) {
-                syncService.syncVault(vaultPath).then(() => {
-                    window.dispatchEvent(new CustomEvent('sync:completed'));
-                }).catch(() => {});
-            }
-            onRevertSuccess?.();
-            onClose();
-        } catch (e) {
-            await message(String(e), { title: 'Slash', kind: 'error' });
-        } finally {
-            setReverting(false);
-        }
-    };
+    const showSaveAs = !isLatestSnapshot;
 
     const handleSaveAs = async () => {
         if (!content?.content || !vaultPath) return;
@@ -331,13 +293,12 @@ function SnapshotPreviewModal({ snap, onClose, t, docStatus, canRevert, vaultPat
                                 {saving ? t('versions.saving_btn', '保存中...') : t('versions.save_as_btn', '另存为副本')}
                             </button>
                         )}
-                        {showRevert && (
+                        {isLatestSnapshot && (
                             <button
-                                onClick={handleRevert}
-                                disabled={reverting || loading || !content}
-                                className="px-3 py-1 text-xs font-medium rounded-md bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white transition-colors disabled:opacity-50"
+                                disabled
+                                className="px-3 py-1 text-xs font-medium rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed"
                             >
-                                {reverting ? t('versions.reverting', '回退中...') : t('versions.revert_btn', '一键回退')}
+                                {t('versions.current_badge', '当前版本')}
                             </button>
                         )}
                         <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-700 mx-1" />
@@ -769,14 +730,13 @@ function GroupRow({ item, onPreview, clickedTs, onItemClick, activeUnreadTsSet, 
 // Main Component
 // ─────────────────────────────────────────
 
-export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, readOnly = false }: { notePath: string | null; docStatus?: DocStatus; vaultPath?: string | null; readOnly?: boolean }) {
+export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vaultPath, readOnly = false }: { notePath: string | null; docStatus?: DocStatus; vaultPath?: string | null; readOnly?: boolean }) {
     const { t } = useTranslation();
     const { setLastRead, markRead, clearAllUnread, getUnreadEntry } = useCollabNotifyStore();
     const globalUnreadFiles = useCollabNotifyStore(s => s.unreadFiles);
     const globalUnreadFolders = useCollabNotifyStore(s => s.unreadFolders);
     const hasAnyUnread = globalUnreadFiles.size > 0 || globalUnreadFolders.size > 0;
     const [snapshots,   setSnapshots]   = useState<SnapshotInfo[]>([]);
-    const [canRevert,   setCanRevert]   = useState(false);
     const [annotations, setAnnotations] = useState<AnnotationInfo[]>([]);
     const [comments,    setComments]    = useState<CommentInfo[]>([]);
     const [statusEvents,setStatusEvents]= useState<StatusEventInfo[]>([]);
@@ -883,6 +843,13 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
         });
     }, [snapshots, statusEvents]);
 
+    const latestVisibleSnapshotId = useMemo(() => {
+        return filteredSnapshots.reduce<SnapshotInfo | null>((latest, snap) => {
+            if (!latest) return snap;
+            return new Date(snap.created_at).getTime() > new Date(latest.created_at).getTime() ? snap : latest;
+        }, null)?.id ?? null;
+    }, [filteredSnapshots]);
+
     const rawEvents: RawEvent[] = [
         ...filteredSnapshots.map(s => ({ kind: 'version' as const, ts: new Date(s.created_at).getTime(), data: s })),
         ...annotations.map(a => ({ kind: 'annotation' as const, ts: new Date(a.created_at).getTime(), data: a })),
@@ -978,7 +945,6 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
             ]);
             if (sRes.status === 'fulfilled') {
                 setSnapshots(await keepSnapshotsVisibleFromLocalState(sRes.value.snapshots, notePath));
-                setCanRevert(sRes.value.can_revert);
             }
             if (aRes.status === 'fulfilled') setAnnotations(aRes.value);
             if (cRes.status === 'fulfilled') setComments(cRes.value);
@@ -1155,7 +1121,7 @@ export function ActivityTimeline({ notePath, docStatus = 'solo', vaultPath, read
             </div>
 
             {/* Preview Modal */}
-            {!readOnly && previewSnap && <SnapshotPreviewModal snap={previewSnap} onClose={() => setPreviewSnap(null)} t={t} docStatus={docStatus} canRevert={canRevert} vaultPath={vaultPath} notePath={notePath} onRevertSuccess={loadAll} />}
+            {!readOnly && previewSnap && <SnapshotPreviewModal snap={previewSnap} onClose={() => setPreviewSnap(null)} t={t} vaultPath={vaultPath} isLatestSnapshot={previewSnap.id === latestVisibleSnapshotId} />}
         </div>
     );
 }

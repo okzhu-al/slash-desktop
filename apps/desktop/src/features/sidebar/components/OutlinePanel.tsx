@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useOutlineStore } from '@/stores/useOutlineStore';
-import { useTabsStore } from '@/core/tabs/TabsStore';
 import { useTranslation } from 'react-i18next';
 import { List, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -49,7 +48,6 @@ export const OutlinePanel = () => {
     const { t } = useTranslation();
     const headings = useOutlineStore(state => state.headings);
     const activeIndex = useOutlineStore(state => state.activeIndex);
-    const activeNoteId = useTabsStore(state => state.activeTabId);
     // 折叠状态：存储被折叠的 heading 原始索引
     const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
@@ -124,7 +122,7 @@ export const OutlinePanel = () => {
                             }}
                             onClick={() => {
                                 window.dispatchEvent(new CustomEvent('slash:scroll-to-pos', { 
-                                    detail: { pos: h.pos, noteId: activeNoteId } 
+                                    detail: { pos: h.pos, noteId: h.noteId } 
                                 }));
                             }}
                         >

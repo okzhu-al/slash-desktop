@@ -35,6 +35,11 @@ fn get_sidecar_url(state: tauri::State<'_, SidecarState>) -> String {
 }
 
 #[tauri::command]
+fn shutdown_sidecar_for_update(state: tauri::State<'_, SidecarState>) {
+    state.0.shutdown_for_update();
+}
+
+#[tauri::command]
 fn relaunch_app(app_handle: tauri::AppHandle) {
     app_handle.restart();
 }
@@ -178,6 +183,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_sidecar_url,
+            shutdown_sidecar_for_update,
             write_clipboard_text,
             // Auth (New)
             commands::auth::secure_store_tokens,

@@ -54,6 +54,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     const tableRef = useRef<HTMLTableElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
+    const isEditable = editor?.isEditable !== false;
 
     // 🔍 获取当前 zoom 级别（从最近的祖先 style.zoom 读取）
     const getZoomLevel = useCallback((): number => {
@@ -209,7 +210,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     }, []);
 
     const selectColumn = useCallback((colIndex: number) => {
-        if (!editor || typeof getPos !== 'function') return;
+        if (!isEditable || !editor || typeof getPos !== 'function') return;
         const startPos = getPos();
         if (startPos === undefined) return;
         const { state, view } = editor;
@@ -236,10 +237,10 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
         } catch (e) {
             console.error('[TableNodeView] Failed to create CellSelection for column:', e);
         }
-    }, [editor, getPos, node, getSafeCellPos]);
+    }, [editor, getPos, isEditable, node, getSafeCellPos]);
 
     const selectRow = useCallback((rowIndex: number) => {
-        if (!editor || typeof getPos !== 'function') return;
+        if (!isEditable || !editor || typeof getPos !== 'function') return;
         const startPos = getPos();
         if (startPos === undefined) return;
         const { state, view } = editor;
@@ -266,27 +267,30 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
         } catch (e) {
             console.error('[TableNodeView] Failed to create CellSelection for row:', e);
         }
-    }, [editor, getPos, node, getSafeCellPos]);
+    }, [editor, getPos, isEditable, node, getSafeCellPos]);
 
     const handleColumnClick = useCallback((colIndex: number, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!isEditable) return;
         selectColumn(colIndex);
-    }, [selectColumn]);
+    }, [isEditable, selectColumn]);
 
     const handleRowClick = useCallback((rowIndex: number, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!isEditable) return;
         selectRow(rowIndex);
-    }, [selectRow]);
+    }, [isEditable, selectRow]);
 
     const handleContextMenu = useCallback((e: React.MouseEvent, context: 'row' | 'column' | 'cell', index?: number) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!isEditable) return;
         if (context === 'column' && typeof index === 'number') selectColumn(index);
         if (context === 'row' && typeof index === 'number') selectRow(index);
         setMenu({ isOpen: true, position: { x: e.clientX, y: e.clientY }, context, index });
-    }, [selectColumn, selectRow]);
+    }, [isEditable, selectColumn, selectRow]);
 
     const closeMenu = useCallback(() => {
         setMenu(prev => ({ ...prev, isOpen: false }));
@@ -296,6 +300,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     //  PURE MOUSE DRAG LOGIC (Bypass HTML5 Curses)
     // =========================================================
     const handleHandleMouseDown = useCallback((e: React.MouseEvent, type: 'row' | 'column', index: number) => {
+        if (!isEditable) return;
         if (e.button !== 0) return; // Only left-click
         e.preventDefault();
         e.stopPropagation();
@@ -396,11 +401,11 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
 
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
-    }, [editor, getPos]);
+    }, [editor, getPos, getZoomLevel, isEditable, selectColumn, selectRow]);
 
     // ✅ 核心修复：强制光标移到最后再执行添加
     const triggerCommand = useCallback((command: 'addColumnAfter' | 'addRowAfter') => {
-        if (!editor || typeof getPos !== 'function') return;
+        if (!isEditable || !editor || typeof getPos !== 'function') return;
         const startPos = getPos();
         if (startPos === undefined) return;
 
@@ -427,7 +432,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
 
         // 动态调用 addColumnAfter 或 addRowAfter
         (chain[command] as () => typeof chain)().run();
-    }, [editor, getPos, node]);
+    }, [editor, getPos, isEditable, node]);
 
     // 使用新的触发器
     const addColumnAfter = useCallback(() => triggerCommand('addColumnAfter'), [triggerCommand]);
@@ -445,11 +450,11 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
         <NodeViewWrapper
             ref={wrapperRef}
             className={cn(
-                "relative my-6 group select-none block"  // Ensure block to capture sizing
+                "relative my-6 group block"  // Ensure block to capture sizing
             )}
         >
             {/* ====== 1. 列手柄区域 (Top) ====== */}
-            <div
+            {isEditable && <div
                 className={cn(
                     "absolute z-10 flex",
                     "opacity-0 group-hover:opacity-100 transition-opacity duration-200",
@@ -497,10 +502,10 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                         );
                     })}
                 </div>
-            </div>
+            </div>}
 
             {/* ====== 2. 行手柄区域 (Left) ====== */}
-            <div
+            {isEditable && <div
                 className={cn(
                     "absolute z-10",
                     "opacity-0 group-hover:opacity-100 transition-opacity duration-200",
@@ -547,10 +552,10 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                         </div>
                     );
                 })}
-            </div>
+            </div>}
 
             {/* ====== Unified Selection & Drop Indicator Overlay ====== */}
-            {overlayType && overlayIndex !== null && overlayIndex !== undefined && (
+            {isEditable && overlayType && overlayIndex !== null && overlayIndex !== undefined && (
                 <div
                     className="absolute z-20 pointer-events-none bg-blue-100/30 dark:bg-blue-900/20 rounded-sm transition-all duration-100 box-border"
                     style={
@@ -589,7 +594,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
             </div>
 
             {/* ====== 底部添加行条 (Ghost Row) ====== */}
-            <div
+            {isEditable && <div
                 className={cn(
                     "absolute flex items-center justify-center cursor-pointer",
                     "box-border border-2 border-transparent rounded-md my-px mx-px",
@@ -610,10 +615,10 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                 title={t('editor.table.clickToAddRow') || '点击添加一行'}
             >
                 <Plus size={12} />
-            </div>
+            </div>}
 
             {/* ====== 5. 右侧添加列条 (Ghost Column) ====== */}
-            <div
+            {isEditable && <div
                 className={cn(
                     "absolute flex items-center justify-center cursor-pointer",
                     "box-border border-2 border-transparent rounded-md mx-px my-px",
@@ -634,9 +639,9 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                 title={t('editor.table.clickToAddColumn') || '点击添加一列'}
             >
                 <Plus size={12} />
-            </div>
+            </div>}
 
-            {editor && (
+            {editor && isEditable && (
                 <TableMenu
                     editor={editor}
                     isOpen={menu.isOpen}

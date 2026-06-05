@@ -71,6 +71,8 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
             let downloadedBytesValue = 0;
             let totalBytesValue = 0;
 
+            await invoke('shutdown_sidecar_for_update');
+
             await updateInstance.downloadAndInstall((event: any) => {
                 switch (event.event) {
                     case 'Started':

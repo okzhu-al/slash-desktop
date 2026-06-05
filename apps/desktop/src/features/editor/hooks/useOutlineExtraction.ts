@@ -16,7 +16,8 @@ export function useOutlineExtraction(editor: Editor | null, activeNoteId: string
                         id: `heading-${pos}`,
                         level: node.attrs.level,
                         text: node.textContent, // Extracts all text inside the heading
-                        pos: pos
+                        pos,
+                        noteId: activeNoteId,
                     });
                 }
             });
