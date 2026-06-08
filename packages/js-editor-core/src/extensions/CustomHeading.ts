@@ -36,7 +36,20 @@ export const headingCompositionState: {
     _savedScroll: number;
     _headingPos: number;        // heading node 的文档位置
     _headingContentSize: number; // composition 前 heading 的内容长度
-} = { fixData: null, _inHeading: false, _scrollEl: null, _savedScroll: 0, _headingPos: 0, _headingContentSize: 0 };
+    _scrollLockActive: boolean;
+    _scrollLockUntil: number;
+    _scrollLockRaf: number;
+} = {
+    fixData: null,
+    _inHeading: false,
+    _scrollEl: null,
+    _savedScroll: 0,
+    _headingPos: 0,
+    _headingContentSize: 0,
+    _scrollLockActive: false,
+    _scrollLockUntil: 0,
+    _scrollLockRaf: 0,
+};
 
 export const CustomHeading = Heading.extend({
     addInputRules() {

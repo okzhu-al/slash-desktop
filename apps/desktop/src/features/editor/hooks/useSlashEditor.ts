@@ -141,6 +141,40 @@ function extractTaskSnapshotFromDoc(doc: any, notePath: string): EditorTaskSnaps
     return tasks;
 }
 
+function keepHeadingScrollLocked(scrollEl: HTMLElement | null, savedScroll: number, trailingMs = 0) {
+    if (!scrollEl) return;
+    headingCompositionState._scrollEl = scrollEl;
+    headingCompositionState._savedScroll = savedScroll;
+    headingCompositionState._scrollLockUntil = Math.max(
+        headingCompositionState._scrollLockUntil,
+        performance.now() + trailingMs,
+    );
+
+    if (headingCompositionState._scrollLockRaf) {
+        scrollEl.scrollTop = savedScroll;
+        return;
+    }
+
+    const tick = () => {
+        const active = headingCompositionState._scrollLockActive
+            || performance.now() < headingCompositionState._scrollLockUntil;
+        const currentScrollEl = headingCompositionState._scrollEl;
+        if (active && currentScrollEl) {
+            currentScrollEl.scrollTop = headingCompositionState._savedScroll;
+            headingCompositionState._scrollLockRaf = requestAnimationFrame(tick);
+            return;
+        }
+
+        if (currentScrollEl) {
+            currentScrollEl.scrollTop = headingCompositionState._savedScroll;
+        }
+        headingCompositionState._scrollLockRaf = 0;
+    };
+
+    scrollEl.scrollTop = savedScroll;
+    headingCompositionState._scrollLockRaf = requestAnimationFrame(tick);
+}
+
 export function useSlashEditor({
     noteId,
     isLoadingContentRef,
@@ -219,6 +253,8 @@ export function useSlashEditor({
                         }
                         headingCompositionState._scrollEl = scrollEl;
                         headingCompositionState._savedScroll = scrollEl?.scrollTop ?? 0;
+                        headingCompositionState._scrollLockActive = true;
+                        keepHeadingScrollLocked(scrollEl, headingCompositionState._savedScroll);
                     }
                     return false;
                 },
@@ -249,6 +285,7 @@ export function useSlashEditor({
                     });
                     if (!headingCompositionState._inHeading) return false;
                     headingCompositionState._inHeading = false;
+                    headingCompositionState._scrollLockActive = false;
                     const composedText = (event as CompositionEvent).data;
 
                     // IME 被退格取消：compositionend data 为空
@@ -263,6 +300,7 @@ export function useSlashEditor({
                         // 立即锁定滚动位置：防止 ProseMirror reconciliation 导致可见跳动
                         const scrollLock = () => { if (scrollEl) scrollEl.scrollTop = savedScroll; };
                         scrollEl?.addEventListener('scroll', scrollLock);
+                        keepHeadingScrollLocked(scrollEl, savedScroll, 180);
 
                         setTimeout(() => {
                             try {
@@ -330,6 +368,7 @@ export function useSlashEditor({
                     // 立即锁定滚动位置：防止 ProseMirror reconciliation 导致可见跳动
                     const scrollLock = () => { if (scrollEl) scrollEl.scrollTop = savedScroll; };
                     scrollEl?.addEventListener('scroll', scrollLock);
+                    keepHeadingScrollLocked(scrollEl, savedScroll, 220);
 
                     setTimeout(() => {
                         try {

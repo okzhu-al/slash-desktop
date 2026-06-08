@@ -77,13 +77,22 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
     const setAdminManageMode = useSessionStore(s => s.setAdminManageMode);
 
     // ── 加载 ──
+    const applyMembers = useCallback((nextMembers: TeamMemberInfo[]) => {
+        setMembers(nextMembers);
+        (window as any).__slashTeamMembers = nextMembers.map(m => ({
+            user_id: m.user_id,
+            username: m.username,
+            display_name: m.display_name,
+        }));
+    }, []);
+
     const loadData = useCallback(async () => {
         const config = syncService.getConfig();
         if (!config || !teamVaultId) return;
         setLoading(true);
         try {
             const result = await teamService.listMembers(config.serverUrl, config.accessToken, teamVaultId);
-            setMembers(result.members);
+            applyMembers(result.members);
 
 
             try {
@@ -97,7 +106,7 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
         } finally {
             setLoading(false);
         }
-    }, [teamVaultId]);
+    }, [applyMembers, currentUserId, teamVaultId]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -143,8 +152,10 @@ export function TeamManagePage({ onClose: _onClose }: TeamManagePageProps) {
         setTogglingRoleId(userId);
         try {
             await teamService.updateMemberRole(config.serverUrl, config.accessToken, teamVaultId, userId, newRole);
+            applyMembers(members.map(m => (
+                m.user_id === userId ? { ...m, global_role: newRole } : m
+            )));
             toast.success(newRole === 'Admin' ? t('team.grant_admin') : t('team.revoke_admin'));
-            loadData();
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             toast.error(
