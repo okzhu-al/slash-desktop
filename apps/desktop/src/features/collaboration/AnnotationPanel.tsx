@@ -128,7 +128,7 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
             const result = await annotationService.listAnnotations(resolved.vaultId, resolved.filePath, resolved.fileId);
             setAnnotations(result);
             // 通知编辑器重新施加高亮 mark（重启后恢复）
-            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { annotations: result } }));
+            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { noteId: notePath, annotations: result } }));
         } catch (err) {
             setError(String(err));
         } finally {

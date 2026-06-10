@@ -243,8 +243,8 @@ export const EditorView = (props: EditorContainerState) => {
 
             <div
                 className="relative min-h-[500px] editor-content-area mb-8"
-                onClick={() => {
-                    handleEditorClick();
+                onClick={(event) => {
+                    handleEditorClick(event);
                     forceCaretRepaint(editor);
                 }}
                 onDragOver={(e) => e.preventDefault()}

@@ -29,6 +29,18 @@ interface TableRect {
     height: number;
 }
 
+interface CellCoords {
+    rowIndex: number;
+    colIndex: number;
+}
+
+interface SelectionRegion {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+}
+
 
 
 // TBody 组件用于 NodeViewContent
@@ -67,6 +79,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     const [rowHandles, setRowHandles] = useState<HandlePosition[]>([]);
     const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
     const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+    const [selectionRegion, setSelectionRegion] = useState<SelectionRegion | null>(null);
     const [menu, setMenu] = useState<MenuState>({
         isOpen: false,
         position: { x: 0, y: 0 },
@@ -82,6 +95,11 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     // Refs to store latest coordinates for mouse events
     const columnHandlesRef = useRef<HandlePosition[]>([]);
     const rowHandlesRef = useRef<HandlePosition[]>([]);
+    const cellDragStateRef = useRef<{
+        start: CellCoords;
+        current: CellCoords;
+        selecting: boolean;
+    } | null>(null);
 
     // Sync state with refs for Native DOM listeners
     const updateDraggingContext = (val: { type: 'row' | 'column', index: number } | null) => {
@@ -209,6 +227,97 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
         return $pos;
     }, []);
 
+    const getCellCoordsFromElement = useCallback((target: EventTarget | Element | null): CellCoords | null => {
+        const table = tableRef.current;
+        if (!table || !(target instanceof Element)) return null;
+
+        const cell = target.closest('td,th') as HTMLTableCellElement | null;
+        if (!cell || !table.contains(cell)) return null;
+
+        const row = cell.parentElement as HTMLTableRowElement | null;
+        if (!row) return null;
+
+        const rows = Array.from(table.querySelectorAll('tr'));
+        const rowIndex = rows.indexOf(row);
+        const colIndex = Array.from(row.children).indexOf(cell);
+        if (rowIndex < 0 || colIndex < 0) return null;
+
+        return { rowIndex, colIndex };
+    }, []);
+
+    const applyCellSelection = useCallback((anchor: CellCoords, head: CellCoords) => {
+        if (!isEditable || !editor || typeof getPos !== 'function') return false;
+        const startPos = getPos();
+        if (startPos === undefined) return false;
+
+        const { state, view } = editor;
+        const { doc } = state;
+        const currentTableNode = doc.nodeAt(startPos);
+        const table = currentTableNode && currentTableNode.type.name === 'table' ? currentTableNode : node;
+        const map = TableMap.get(table);
+
+        const anchorRow = Math.max(0, Math.min(anchor.rowIndex, map.height - 1));
+        const anchorCol = Math.max(0, Math.min(anchor.colIndex, map.width - 1));
+        const headRow = Math.max(0, Math.min(head.rowIndex, map.height - 1));
+        const headCol = Math.max(0, Math.min(head.colIndex, map.width - 1));
+
+        try {
+            const anchorCellPos = map.positionAt(anchorRow, anchorCol, table);
+            const headCellPos = map.positionAt(headRow, headCol, table);
+            const $anchor = getSafeCellPos(doc, startPos, anchorCellPos);
+            const $head = getSafeCellPos(doc, startPos, headCellPos);
+            const selection = new CellSelection($anchor, $head);
+            view.dispatch(view.state.tr.setSelection(selection));
+            view.focus();
+            return true;
+        } catch (e) {
+            console.error('[TableNodeView] Failed to apply dragged CellSelection:', e);
+            return false;
+        }
+    }, [editor, getPos, getSafeCellPos, isEditable, node]);
+
+    const updateSelectionRegion = useCallback(() => {
+        if (!editor || typeof getPos !== 'function') {
+            setSelectionRegion(null);
+            return;
+        }
+
+        const startPos = getPos();
+        if (startPos === undefined) {
+            setSelectionRegion(null);
+            return;
+        }
+
+        const { selection, doc } = editor.state;
+        if (!(selection instanceof CellSelection)) {
+            setSelectionRegion(null);
+            return;
+        }
+
+        const currentTableNode = doc.nodeAt(startPos);
+        const table = currentTableNode && currentTableNode.type.name === 'table' ? currentTableNode : node;
+        const tablePos = startPos;
+
+        if (selection.$anchorCell.start(-1) - 1 !== tablePos) {
+            setSelectionRegion(null);
+            return;
+        }
+
+        const tableStart = selection.$anchorCell.start(-1);
+        const map = TableMap.get(table);
+        const rect = map.rectBetween(
+            selection.$anchorCell.pos - tableStart,
+            selection.$headCell.pos - tableStart
+        );
+
+        setSelectionRegion({
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+        });
+    }, [editor, getPos, node]);
+
     const selectColumn = useCallback((colIndex: number) => {
         if (!isEditable || !editor || typeof getPos !== 'function') return;
         const startPos = getPos();
@@ -295,6 +404,62 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     const closeMenu = useCallback(() => {
         setMenu(prev => ({ ...prev, isOpen: false }));
     }, []);
+
+    const handleTableMouseDownCapture = useCallback((e: React.MouseEvent<HTMLTableElement>) => {
+        if (!isEditable || e.button !== 0) return;
+        const coords = getCellCoordsFromElement(e.target);
+        if (!coords) return;
+        cellDragStateRef.current = {
+            start: coords,
+            current: coords,
+            selecting: false,
+        };
+    }, [getCellCoordsFromElement, isEditable]);
+
+    useEffect(() => {
+        if (!isEditable) return;
+
+        const handleMouseMove = (event: MouseEvent) => {
+            const dragState = cellDragStateRef.current;
+            if (!dragState) return;
+
+            const target = document.elementFromPoint(event.clientX, event.clientY);
+            const coords = getCellCoordsFromElement(target);
+            if (!coords) return;
+
+            const movedAcrossCells = coords.rowIndex !== dragState.start.rowIndex || coords.colIndex !== dragState.start.colIndex;
+            if (!movedAcrossCells) return;
+
+            dragState.current = coords;
+            dragState.selecting = true;
+            window.getSelection()?.removeAllRanges();
+            event.preventDefault();
+            applyCellSelection(dragState.start, coords);
+        };
+
+        const handleMouseUp = () => {
+            cellDragStateRef.current = null;
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [applyCellSelection, getCellCoordsFromElement, isEditable]);
+
+    useEffect(() => {
+        if (!editor) return;
+
+        updateSelectionRegion();
+        editor.on('selectionUpdate', updateSelectionRegion);
+        editor.on('transaction', updateSelectionRegion);
+        return () => {
+            editor.off('selectionUpdate', updateSelectionRegion);
+            editor.off('transaction', updateSelectionRegion);
+        };
+    }, [editor, updateSelectionRegion]);
 
     // =========================================================
     //  PURE MOUSE DRAG LOGIC (Bypass HTML5 Curses)
@@ -445,6 +610,24 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
     // 计算当前需要渲染覆盖层（边框）的目标上下文
     const overlayType = draggingContext ? draggingContext.type : (menu.isOpen ? menu.context : null);
     const overlayIndex = draggingContext ? dropTargetIndex : (menu.isOpen ? menu.index : null);
+    const selectionOverlayStyle = selectionRegion
+        ? {
+              left: tableRect.left + (columnHandles[selectionRegion.left]?.offset ?? 0),
+              top: tableRect.top + (rowHandles[selectionRegion.top]?.offset ?? 0),
+              width:
+                  selectionRegion.right > selectionRegion.left
+                      ? (columnHandles
+                            .slice(selectionRegion.left, selectionRegion.right)
+                            .reduce((sum, col) => sum + col.size, 0) ?? 0)
+                      : 0,
+              height:
+                  selectionRegion.bottom > selectionRegion.top
+                      ? (rowHandles
+                            .slice(selectionRegion.top, selectionRegion.bottom)
+                            .reduce((sum, row) => sum + row.size, 0) ?? 0)
+                      : 0,
+          }
+        : null;
 
     return (
         <NodeViewWrapper
@@ -578,6 +761,18 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                 />
             )}
 
+            {isEditable && selectionOverlayStyle && selectionOverlayStyle.width > 0 && selectionOverlayStyle.height > 0 && (
+                <div
+                    className="absolute pointer-events-none rounded-sm box-border"
+                    style={{
+                        ...selectionOverlayStyle,
+                        zIndex: 15,
+                        background: 'rgba(59, 130, 246, 0.14)',
+                        border: '2px solid #3b82f6',
+                    }}
+                />
+            )}
+
             {/* ====== 3. 真实表格渲染 ====== */}
             <div ref={scrollContainerRef} className="overflow-x-auto pb-1 tiptap-scroll-container">
                 {/* Removed overly-verbose full-screen ghost indicators that caused stray white lines */}
@@ -585,6 +780,7 @@ export const TableNodeView: React.FC<NodeViewProps> = ({
                 <table
                     ref={tableRef}
                     className="tiptap-table-wrapper"
+                    onMouseDownCapture={handleTableMouseDownCapture}
                     style={{
                         borderCollapse: 'collapse',
                     }}

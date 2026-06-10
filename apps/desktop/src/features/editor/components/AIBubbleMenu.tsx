@@ -34,6 +34,16 @@ function extractSlashId(raw: string): string | null {
     return frontmatter.match(/^slash_id:\s*['"]?([0-9a-fA-F-]{36})['"]?\s*$/m)?.[1] ?? null;
 }
 
+function parseRangeAnchor(anchorId?: string | null): { from: number; to: number } | null {
+    if (!anchorId) return null;
+    const match = anchorId.match(/^range:(\d+):(\d+)$/);
+    if (!match) return null;
+    const from = Number(match[1]);
+    const to = Number(match[2]);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) return null;
+    return { from, to };
+}
+
 export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _notePath = '', isTeamNote = false }: AIBubbleMenuProps) {
     const { t } = useTranslation();
     const noteCtx = useNoteContextOptional();
@@ -127,19 +137,61 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
     useEffect(() => {
         if (!editor) return;
 
+        const clearAnnotationMarks = () => {
+            const annotationMark = editor.schema.marks.annotation;
+            if (!annotationMark) return;
+            const { doc } = editor.state;
+            const tr = editor.state.tr;
+            let cleared = 0;
+            doc.descendants((node, pos) => {
+                if (!node.isText) return;
+                node.marks.forEach(mark => {
+                    if (mark.type === annotationMark) {
+                        tr.removeMark(pos, pos + node.nodeSize, annotationMark);
+                        cleared++;
+                    }
+                });
+            });
+            if (cleared > 0) {
+                tr.setMeta('addToHistory', false);
+                editor.view.dispatch(tr);
+                console.log(`[Annotation] Cleared ${cleared} mark(s)`);
+            }
+        };
+
         const handleRestore = (e: Event) => {
-            const { annotations } = (e as CustomEvent).detail as { annotations: Array<{ id: string; anchor_preview?: string }> };
+            const { annotations, noteId } = (e as CustomEvent).detail as {
+                noteId?: string;
+                annotations: Array<{ id: string; anchor_id?: string; anchor_preview?: string }>;
+            };
+            const currentNoteId = noteCtx?.noteIdRef.current;
+            if (noteId && currentNoteId && noteId !== currentNoteId) return;
             if (!annotations?.length) return;
 
             const annotationMark = editor.schema.marks.annotation;
             if (!annotationMark) return;
 
             requestAnimationFrame(() => {
+                clearAnnotationMarks();
+
                 const { doc } = editor.state;
                 const tr = editor.state.tr;
                 let applied = 0;
 
                 for (const ann of annotations) {
+                    const rangeAnchor = parseRangeAnchor(ann.anchor_id);
+                    if (rangeAnchor) {
+                        const maxPos = doc.content.size;
+                        const from = Math.max(0, Math.min(rangeAnchor.from, maxPos));
+                        const to = Math.max(0, Math.min(rangeAnchor.to, maxPos));
+                        if (to > from) {
+                            tr.addMark(from, to, annotationMark.create({ annotationId: ann.id }));
+                            tr.setMeta('addToHistory', false);
+                            applied++;
+                            continue;
+                        }
+                    }
+
                     const preview = ann.anchor_preview;
                     if (!preview) continue;
                     let found = false;
@@ -166,35 +218,16 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
         };
 
         window.addEventListener('annotation:marks:restore', handleRestore);
+        window.addEventListener('slash:editor-content-loaded', clearAnnotationMarks);
 
-        const handleClear = () => {
-            const annotationMark = editor.schema.marks.annotation;
-            if (!annotationMark) return;
-            const { doc } = editor.state;
-            const tr = editor.state.tr;
-            let cleared = 0;
-            doc.descendants((node, pos) => {
-                if (!node.isText) return;
-                node.marks.forEach(mark => {
-                    if (mark.type === annotationMark) {
-                        tr.removeMark(pos, pos + node.nodeSize, annotationMark);
-                        cleared++;
-                    }
-                });
-            });
-            if (cleared > 0) {
-                tr.setMeta('addToHistory', false);
-                editor.view.dispatch(tr);
-                console.log(`[Annotation] Cleared ${cleared} mark(s)`);
-            }
-        };
-        window.addEventListener('annotation:marks:clear', handleClear);
+        window.addEventListener('annotation:marks:clear', clearAnnotationMarks);
 
         return () => {
             window.removeEventListener('annotation:marks:restore', handleRestore);
-            window.removeEventListener('annotation:marks:clear', handleClear);
+            window.removeEventListener('slash:editor-content-loaded', clearAnnotationMarks);
+            window.removeEventListener('annotation:marks:clear', clearAnnotationMarks);
         };
-    }, [editor]);
+    }, [editor, noteCtx]);
 
     // 添加批注
     const handleAddAnnotation = async () => {
@@ -211,7 +244,7 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
         const config = syncService.getConfig();
         if (!config) { console.warn('[Annotation] syncService not configured'); return; }
 
-        const anchorId = btoa(encodeURIComponent(selectedText.slice(0, 50))).replace(/=/g, '');
+        const anchorId = `range:${from}:${to}`;
         const teamVaultId = useSessionStore.getState().teamVaultId;
         const vaultId = teamVaultId || config.vaultId;
 

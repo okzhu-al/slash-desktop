@@ -4,7 +4,7 @@ import { Note } from '@/core/storage/types';
 import { FileSystemNoteRepository } from '@/core/storage/FileSystemNoteRepository';
 import { useFileSystemStore } from '@/core/fs/store';
 import { useTabsStore } from '@/core/tabs/TabsStore';
-import { isTeamNoteId } from '@/shared/utils/teamNoteIdentity';
+import { getTeamNoteDisplayPath, isTeamNoteId } from '@/shared/utils/teamNoteIdentity';
 import { isDeletedTeamNote } from '@/shared/utils/deletedTeamNoteGuard';
 
 /**
@@ -48,6 +48,30 @@ export interface UseNoteNavigationOptions {
 /** Media file extensions that should open in preview mode */
 const MEDIA_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'mp4', 'webm', 'mov', 'mkv'];
 
+function basenameWithoutExtension(pathLike?: string | null): string {
+    if (!pathLike) return '';
+    const normalized = pathLike.replace(/\\/g, '/');
+    const base = normalized.split('/').pop() || normalized;
+    return base.replace(/\.[^/.]+$/, '');
+}
+
+function resolveNoteTabTitle(note: Note): string {
+    const directTitle = typeof note.title === 'string' ? note.title.trim() : '';
+    if (directTitle) return directTitle;
+
+    const metadataTitle = typeof note.metadata?.title === 'string' ? note.metadata.title.trim() : '';
+    if (metadataTitle) return metadataTitle;
+
+    const teamPath = typeof note.metadata?.team_path === 'string' ? note.metadata.team_path : null;
+    const derivedTeamTitle = basenameWithoutExtension(getTeamNoteDisplayPath(note.id, teamPath));
+    if (derivedTeamTitle) return derivedTeamTitle;
+
+    const notePathTitle = basenameWithoutExtension(note.path);
+    if (notePathTitle) return notePathTitle;
+
+    return basenameWithoutExtension(note.id) || note.id;
+}
+
 /**
  * Hook for managing note navigation state and actions.
  * Extracted from App.tsx to improve modularity.
@@ -77,9 +101,7 @@ export function useNoteNavigation(
         if (!repo) return;
         if (isDeletedTeamNote(note)) return;
 
-        // Extract title for tab display (filename without extension)
-        const fileName = note.id.split(/[/\\]/).pop() || note.id;
-        const tabTitle = fileName.replace(/\.[^/.]+$/, '');
+        const tabTitle = resolveNoteTabTitle(note);
 
         // Open/activate tab
         openTab(
@@ -184,6 +206,7 @@ export function useNoteNavigation(
         try {
             const note = await repo.getNote(tabId);
             if (note && !isDeletedTeamNote(note)) {
+                useTabsStore.getState().updateTabTitle(tabId, resolveNoteTabTitle(note));
                 const ext = tabId.split('.').pop()?.toLowerCase() || '';
 
                 if (MEDIA_EXTENSIONS.includes(ext)) {

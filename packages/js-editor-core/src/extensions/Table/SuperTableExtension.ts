@@ -33,6 +33,126 @@ export const SuperTableExtension = Table.extend({
     // ✅ 智能退格键：选中行/列时，有内容先清空，空了再删除
     // ✅ Tab/Shift+Tab: 单元格导航
     addKeyboardShortcuts() {
+        const findCellInfo = ($pos: any) => {
+            for (let depth = $pos.depth; depth > 0; depth--) {
+                const node = $pos.node(depth);
+                if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+                    let tableDepth = depth - 1;
+                    while (tableDepth > 0 && $pos.node(tableDepth).type.name !== 'table') {
+                        tableDepth--;
+                    }
+                    if (tableDepth <= 0 || $pos.node(tableDepth).type.name !== 'table') {
+                        return null;
+                    }
+                    return {
+                        cellDepth: depth,
+                        tableDepth,
+                        cellPos: $pos.before(depth),
+                        tableNode: $pos.node(tableDepth),
+                        tablePos: $pos.before(tableDepth),
+                    };
+                }
+            }
+            return null;
+        };
+
+        const normalizeToCellSelection = (selection: any) => {
+            if (selection instanceof CellSelection) {
+                return selection;
+            }
+
+            if (selection.empty) {
+                return null;
+            }
+
+            const anchorInfo = findCellInfo(selection.$from);
+            const headInfo = findCellInfo(selection.$to);
+            if (!anchorInfo || !headInfo) {
+                return null;
+            }
+
+            if (anchorInfo.tablePos !== headInfo.tablePos || anchorInfo.cellPos === headInfo.cellPos) {
+                return null;
+            }
+
+            try {
+                const $anchor = this.editor.state.doc.resolve(anchorInfo.cellPos);
+                const $head = this.editor.state.doc.resolve(headInfo.cellPos);
+                return new CellSelection($anchor, $head);
+            } catch {
+                return null;
+            }
+        };
+
+        const handleStructuredCellDeletion = () => {
+            const { state, view } = this.editor;
+            const cellSelection = normalizeToCellSelection(state.selection);
+            if (!cellSelection) {
+                return false;
+            }
+            const table = cellSelection.$anchorCell.node(-1);
+            const tableStart = cellSelection.$anchorCell.start(-1);
+            const tablePos = tableStart - 1;
+            const map = TableMap.get(table);
+            const rect = map.rectBetween(
+                cellSelection.$anchorCell.pos - tableStart,
+                cellSelection.$headCell.pos - tableStart
+            );
+
+            const rowSpan = rect.bottom - rect.top;
+            const colSpan = rect.right - rect.left;
+            const isFullRowSelection = rect.left === 0 && rect.right === map.width;
+            const isFullColumnSelection = rect.top === 0 && rect.bottom === map.height;
+            const isFullTableSelection = isFullRowSelection && isFullColumnSelection;
+
+            const deleteEntireTable = () => {
+                const tr = state.tr.delete(tablePos, tablePos + table.nodeSize);
+                view.dispatch(tr);
+                return true;
+            };
+
+            // 结构删除优先：只要选中的是完整行/列/表格，就删除结构，而不是清空单元格内容。
+            if (isFullTableSelection) {
+                return deleteEntireTable();
+            }
+
+            if (isFullRowSelection && rowSpan >= 1) {
+                if (rowSpan >= map.height) {
+                    return deleteEntireTable();
+                }
+                return this.editor.commands.deleteRow();
+            }
+
+            if (isFullColumnSelection && colSpan >= 1) {
+                if (colSpan >= map.width) {
+                    return deleteEntireTable();
+                }
+                return this.editor.commands.deleteColumn();
+            }
+
+            // 其余矩形选区保留“清空单元格内容”的行为。
+            const ranges: { from: number; to: number }[] = [];
+            cellSelection.forEachCell((cell, pos) => {
+                const cellStart = pos + 1;
+                const cellEnd = pos + cell.nodeSize - 1;
+                if (cellEnd > cellStart) {
+                    ranges.push({ from: cellStart, to: cellEnd });
+                }
+            });
+
+            if (ranges.length === 0) {
+                return false;
+            }
+
+            ranges.sort((a, b) => b.from - a.from);
+            const tr = state.tr;
+            for (const range of ranges) {
+                tr.delete(range.from, range.to);
+            }
+            view.dispatch(tr);
+            return true;
+        };
+
         return {
             // Tab: 移动到下一个单元格
             Tab: () => {
@@ -59,98 +179,10 @@ export const SuperTableExtension = Table.extend({
             },
 
             Backspace: () => {
-                const { state, view } = this.editor;
-                const { selection } = state;
-
-                // 只处理 CellSelection（选中多个单元格）
-                if (!(selection instanceof CellSelection)) {
-                    return false;
-                }
-
-                const cellSelection = selection as CellSelection;
-
-                // 检查是否所有选中单元格都为空
-                let allEmpty = true;
-                cellSelection.forEachCell((cell) => {
-                    if (cell.textContent.trim() !== '') {
-                        allEmpty = false;
-                    }
-                });
-
-                if (!allEmpty) {
-                    // 有内容：清空选中单元格的内容
-                    // 先收集所有要删除的范围，然后从后向前删除以避免位置偏移
-                    const ranges: { from: number; to: number }[] = [];
-                    cellSelection.forEachCell((cell, pos) => {
-                        const cellStart = pos + 1; // 进入单元格
-                        const cellEnd = pos + cell.nodeSize - 1;
-                        if (cellEnd > cellStart) {
-                            ranges.push({ from: cellStart, to: cellEnd });
-                        }
-                    });
-
-                    // 按位置从后向前排序
-                    ranges.sort((a, b) => b.from - a.from);
-
-                    // 从后向前删除
-                    const { tr } = state;
-                    for (const range of ranges) {
-                        tr.delete(range.from, range.to);
-                    }
-                    view.dispatch(tr);
-                    return true;
-                }
-
-                // 所有单元格都为空：检测是整行还是整列选中
-                const table = cellSelection.$anchorCell.node(-1);
-                const tableStart = cellSelection.$anchorCell.start(-1);
-                const tablePos = tableStart - 1; // Position of the table node itself
-                const map = TableMap.get(table);
-
-                // 获取选中的行和列范围
-                const rect = map.rectBetween(
-                    cellSelection.$anchorCell.pos - tableStart,
-                    cellSelection.$headCell.pos - tableStart
-                );
-
-                const isFullRow = rect.left === 0 && rect.right === map.width;
-                const isFullColumn = rect.top === 0 && rect.bottom === map.height;
-                const isFullTable = isFullRow && isFullColumn;
-
-                // Helper function to delete entire table using direct transaction
-                const deleteEntireTable = () => {
-                    const tr = state.tr;
-                    tr.delete(tablePos, tablePos + table.nodeSize);
-                    view.dispatch(tr);
-                    return true;
-                };
-
-                // 如果选中了整个表格且内容为空，删除整个表格
-                if (isFullTable) {
-                    return deleteEntireTable();
-                }
-
-                if (isFullRow && rect.bottom - rect.top === 1) {
-                    // 选中了完整的一行
-                    // 如果只剩一行，删除整个表格
-                    if (map.height <= 1) {
-                        return deleteEntireTable();
-                    }
-                    return this.editor.commands.deleteRow();
-                }
-
-                if (isFullColumn && rect.right - rect.left === 1) {
-                    // 选中了完整的一列
-                    // 如果只剩一列，删除整个表格
-                    if (map.width <= 1) {
-                        return deleteEntireTable();
-                    }
-                    return this.editor.commands.deleteColumn();
-                }
-
-                // 选中的不是完整行或列，不做特殊处理
-                return false;
+                return handleStructuredCellDeletion();
             },
+
+            Delete: () => handleStructuredCellDeletion(),
         };
     },
 

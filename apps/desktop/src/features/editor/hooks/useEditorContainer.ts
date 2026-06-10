@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import matter from 'gray-matter';
+import { TextSelection } from '@tiptap/pm/state';
 
 import { useKeybindingContext } from '@/modules/keybindings/KeybindingProvider';
 import { metadataService } from '@/core/metadata/MetadataService';
@@ -425,11 +427,41 @@ export const useEditorContainer = ({
         }
     };
 
-    const handleEditorClick = useCallback(() => {
+    const handleEditorClick = useCallback((event?: ReactMouseEvent<HTMLDivElement>) => {
         if (!editor || editor.isDestroyed) return;
-        if (editor.isEmpty) {
+        const doc = editor.state.doc;
+        const hasOnlyEmptyParagraph = doc.childCount === 1
+            && doc.firstChild?.type.name === 'paragraph'
+            && doc.firstChild.content.size === 0;
+
+        if (hasOnlyEmptyParagraph) {
             editor.commands.focus('start', { scrollIntoView: false });
+            return;
         }
+
+        const target = event?.target as HTMLElement | null;
+        if (!target || target.closest('table')) return;
+
+        const { state, view } = editor;
+        const { selection, schema } = state;
+        const paragraphType = schema.nodes.paragraph;
+        if (!paragraphType) return;
+
+        let isInsideTable = false;
+        for (let depth = selection.$from.depth; depth > 0; depth--) {
+            if (selection.$from.node(depth).type.name === 'table') {
+                isInsideTable = true;
+                break;
+            }
+        }
+
+        if (!isInsideTable || state.doc.lastChild?.type.name !== 'table') return;
+
+        const insertPos = state.doc.content.size;
+        const tr = state.tr.insert(insertPos, paragraphType.create());
+        tr.setSelection(TextSelection.near(tr.doc.resolve(insertPos + 1)));
+        view.dispatch(tr);
+        view.focus();
     }, [editor]);
 
     return {

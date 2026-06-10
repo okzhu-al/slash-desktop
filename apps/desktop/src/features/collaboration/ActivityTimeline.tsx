@@ -952,7 +952,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
             if (sysRes.status === 'fulfilled') setSystemEvents(sysRes.value);
             setEverLoaded(true);
             const anns = aRes.status === 'fulfilled' ? aRes.value : [];
-            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { annotations: anns } }));
+            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { noteId: notePath, annotations: anns } }));
         } finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [notePath, currentFileId]);
