@@ -23,6 +23,16 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
     const [tempValue, setTempValue] = useState(latex);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    const stopEditorMouseEvent = (e: React.SyntheticEvent) => {
+        e.stopPropagation();
+    };
+
+    useEffect(() => {
+        if (selected && !latex.trim()) {
+            setIsEditing(true);
+        }
+    }, [selected, latex]);
+
     // Focus textarea when editing starts
     useEffect(() => {
         if (isEditing) {
@@ -65,6 +75,8 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
         try {
             return katex.renderToString(text, {
                 throwOnError: false,
+                strict: false,
+                trust: false,
                 displayMode: !inline,
             });
         } catch (e) {
@@ -73,7 +85,7 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
     };
 
     return (
-        <NodeViewWrapper className="my-6 w-full select-none block">
+        <NodeViewWrapper className="my-6 w-full select-none block" contentEditable={false}>
             {isEditing ? (
                 <div 
                     className={cn(
@@ -82,7 +94,9 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
                         "border-zinc-200 dark:border-zinc-800",
                         "shadow-lg shadow-zinc-200/50 dark:shadow-none"
                     )}
-                    onMouseDown={(e) => e.stopPropagation()}
+                    contentEditable={false}
+                    onPointerDownCapture={stopEditorMouseEvent}
+                    onMouseDownCapture={stopEditorMouseEvent}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-3">
@@ -121,9 +135,12 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
                         value={tempValue}
                         onChange={(e) => setTempValue(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        onPointerDownCapture={stopEditorMouseEvent}
+                        onMouseDownCapture={stopEditorMouseEvent}
+                        contentEditable={false}
                         placeholder={t('editor.math.placeholder') || '输入 LaTeX 公式，例如: \\sum_{i=1}^n i = \\frac{n(n+1)}{2}'}
                         className={cn(
-                            "w-full min-h-[80px] p-3 rounded-lg border font-mono text-sm resize-y outline-none transition-all duration-200",
+                            "w-full min-h-[80px] max-h-[180px] p-3 rounded-lg border font-mono text-sm resize-none outline-none transition-all duration-200",
                             "bg-white dark:bg-zinc-950",
                             "border-zinc-200 dark:border-zinc-850",
                             "text-zinc-800 dark:text-zinc-200",
@@ -138,7 +155,7 @@ export const MathBlockNodeView: React.FC<NodeViewProps> = ({ node, updateAttribu
                                 {t('editor.math.preview') || '实时预览'}
                             </div>
                             <div 
-                                className="w-full overflow-x-auto py-2 flex justify-center tiptap-math-render"
+                                className="w-full max-h-[220px] overflow-auto py-2 flex justify-center tiptap-math-render"
                                 dangerouslySetInnerHTML={{ __html: renderMath(tempValue) }}
                             />
                         </div>

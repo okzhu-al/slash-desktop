@@ -60,7 +60,7 @@ const CommandItems: CommandItemProps[] = [
                 .run();
         }
     },
-    { id: 'math', category: 'block', title: 'Math Block', i18nKey: 'slashCommands.math', iconType: 'Sigma', shortcut: '$$', command: ({ editor, range }) => editor.chain().focus().deleteRange(range).insertContent({ type: 'mathBlock', attrs: { latex: '' } }).run() },
+    { id: 'math', category: 'block', title: 'Math Block', i18nKey: 'slashCommands.math', iconType: 'Sigma', shortcut: '$$', command: ({ editor, range }) => editor.chain().focus().deleteRange(range).insertMathBlock().run() },
     { id: 'drawing', category: 'block', title: 'Drawing', i18nKey: 'slashCommands.drawing', iconType: 'PenTool', command: ({ editor, range }) => editor.chain().focus().deleteRange(range).insertDrawing().run() },
 
     // --- 组件 (Components) ---

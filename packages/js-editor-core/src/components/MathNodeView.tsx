@@ -21,6 +21,8 @@ export const MathNodeView: React.FC<NodeViewProps> = ({ node, selected }) => {
         try {
             return katex.renderToString(latex, {
                 throwOnError: false,
+                strict: false,
+                trust: false,
                 displayMode: false,
             });
         } catch (e) {

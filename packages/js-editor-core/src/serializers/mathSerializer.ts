@@ -6,6 +6,12 @@
 import type { NodeSerializer, MarkdownSerializerState } from './types';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 
+const escapeHtmlAttr = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
 /**
  * Serialize math node to $latex$ format
  */
@@ -62,7 +68,7 @@ function setupParser(markdownit: any): void {
     markdownit.renderer.rules.math_inline = (tokens: any[], idx: number) => {
         const token = tokens[idx];
         const latex = token.content;
-        return `<span data-type="math" data-latex="${latex}"></span>`;
+        return `<span data-type="math" data-latex="${escapeHtmlAttr(latex)}"></span>`;
     };
 }
 

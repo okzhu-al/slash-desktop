@@ -1003,13 +1003,7 @@ export const MixedTaskItem = TaskItem.extend({
     },
 
     addProseMirrorPlugins() {
-        let compositionStartPos: number | null = null;
-        let compositionTextblockStart: number | null = null;
-        let compositionSnapshot: {
-            textblockStart: number;
-            prefix: string;
-            suffix: string;
-        } | null = null;
+        let compositionTaskItemStart: number | null = null;
 
         const isInsideTaskItem = ($pos: any) => {
             for (let depth = $pos.depth; depth >= 0; depth--) {
@@ -1028,98 +1022,28 @@ export const MixedTaskItem = TaskItem.extend({
                     handleDOMEvents: {
                         compositionstart: (view) => {
                             const { selection } = view.state;
-                            compositionStartPos = selection.from;
-                            compositionTextblockStart = selection.$from.start(selection.$from.depth);
-                            compositionSnapshot = null;
-                            if (
-                                selection.empty
-                                && isInsideTaskItem(selection.$from) >= 0
-                                && selection.$from.parent.isTextblock
-                            ) {
-                                const text = selection.$from.parent.textContent;
-                                const offset = selection.$from.parentOffset;
-                                compositionSnapshot = {
-                                    textblockStart: selection.$from.start(selection.$from.depth),
-                                    prefix: text.slice(0, offset),
-                                    suffix: text.slice(offset),
-                                };
-                            }
+                            const taskItemDepth = isInsideTaskItem(selection.$from);
+                            compositionTaskItemStart = taskItemDepth >= 0
+                                ? selection.$from.before(taskItemDepth)
+                                : null;
                             return false;
                         },
-                        beforeinput: (view, event) => {
-                            const inputEvent = event as InputEvent;
-                            if (inputEvent.inputType !== 'deleteCompositionText') return false;
-                            if (compositionStartPos === null) return false;
-
-                            const { state } = view;
-                            const { selection } = state;
-                            const taskItemDepth = isInsideTaskItem(selection.$from);
-                            if (taskItemDepth < 0) return false;
-                            if (compositionTextblockStart !== selection.$from.start(selection.$from.depth)) {
-                                event.preventDefault();
-                                return true;
-                            }
-
-                            const from = Math.max(selection.$from.start(selection.$from.depth), compositionStartPos);
-                            const to = Math.min(
-                                selection.$from.end(selection.$from.depth),
-                                Math.max(compositionStartPos, selection.from, selection.to)
-                            );
-
-                            if (from >= to) {
-                                event.preventDefault();
-                                return true;
-                            }
-
-                            event.preventDefault();
-                            const tr = state.tr.delete(from, to);
-                            tr.setSelection(TextSelection.create(tr.doc, from));
-                            tr.setMeta('composition', true);
-                            view.dispatch(tr);
-                            return true;
-                        },
-                        compositionend: (view, event) => {
-                            const snapshot = compositionSnapshot;
-                            const composedText = (event as CompositionEvent).data || '';
-                            compositionStartPos = null;
-                            compositionTextblockStart = null;
-                            compositionSnapshot = null;
-                            if (!snapshot || (!snapshot.prefix && !snapshot.suffix) || !composedText) {
-                                return false;
-                            }
-
-                            queueMicrotask(() => {
-                                const { state } = view;
-                                const { selection } = state;
-                                if (isInsideTaskItem(selection.$from) < 0) return;
-                                if (!selection.$from.parent.isTextblock) return;
-
-                                const textblockStart = selection.$from.start(selection.$from.depth);
-                                if (textblockStart !== snapshot.textblockStart) return;
-
-                                const currentText = selection.$from.parent.textContent;
-                                const lostPrefix = snapshot.prefix && !currentText.startsWith(snapshot.prefix);
-                                const lostSuffix = snapshot.suffix && !currentText.endsWith(snapshot.suffix);
-                                if (!lostPrefix && !lostSuffix) return;
-
-                                let tr = state.tr;
-                                const textblockEnd = selection.$from.end(selection.$from.depth);
-                                if (lostSuffix) {
-                                    tr = tr.insertText(snapshot.suffix, textblockEnd, textblockEnd);
-                                }
-                                if (lostPrefix) {
-                                    tr = tr.insertText(snapshot.prefix, textblockStart, textblockStart);
-                                }
-                                const cursorPos = textblockStart
-                                    + (lostPrefix ? snapshot.prefix.length : 0)
-                                    + currentText.length;
-                                tr.setSelection(TextSelection.create(tr.doc, Math.min(cursorPos, tr.doc.content.size)));
-                                tr.setMeta('composition', true);
-                                view.dispatch(tr);
-                            });
+                        compositionend: () => {
+                            compositionTaskItemStart = null;
                             return false;
                         },
                     },
+                },
+                filterTransaction: (tr) => {
+                    if (!tr.docChanged || compositionTaskItemStart === null) return true;
+                    if (tr.getMeta('composition')) return true;
+
+                    const mappedTaskPos = tr.mapping.map(compositionTaskItemStart, -1);
+                    const mappedNode = mappedTaskPos >= 0 && mappedTaskPos < tr.doc.content.size
+                        ? tr.doc.nodeAt(mappedTaskPos)
+                        : null;
+
+                    return mappedNode?.type.name === this.name;
                 },
             }),
         ];

@@ -120,13 +120,6 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
         const teamRelLower = teamRelPath.toLowerCase();
 
         if (!isFolder) {
-            // [DEBUG] 追踪遗失的红点匹配过程
-            if (item.name.includes('b2') || item.name.includes("A'note")) {
-                console.log(`[DEBUG-REDDOT] 正在渲染: ${item.name}`);
-                console.log(`[DEBUG-REDDOT]   -> 计算出的 teamRelPath: "${teamRelPath}"`);
-                console.log(`[DEBUG-REDDOT]   -> 当前内存中的 unreadFiles:`, unreadEntries.map(entry => entry.filePath));
-            }
-
             // 文件级节点：强化匹配
             if (unreadFiles.has(teamRelPath)) return true;
             if (teamFileId && unreadEntries.some(entry => entry.fileId === teamFileId)) return true;

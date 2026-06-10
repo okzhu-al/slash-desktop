@@ -3,6 +3,12 @@ import { ReactNodeViewRenderer } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
 import { MathNodeView } from '../components/MathNodeView';
 
+const escapeHtmlAttr = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
 export const MathExtension = Node.create({
     name: 'math',
 
@@ -110,7 +116,7 @@ export const MathExtension = Node.create({
                         markdownit.renderer.rules.math_inline = (tokens: any, idx: any) => {
                             const token = tokens[idx];
                             const latex = token.content;
-                            return `<span data-type="math" data-latex="${latex}"></span>`;
+                            return `<span data-type="math" data-latex="${escapeHtmlAttr(latex)}"></span>`;
                         };
                     },
                 },

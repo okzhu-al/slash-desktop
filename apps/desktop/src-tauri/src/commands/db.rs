@@ -234,10 +234,27 @@ pub fn get_dirty_notes(db_state: State<DbStateWrapper>) -> Result<Vec<Note>, Str
 #[tauri::command]
 pub fn check_note_exists(
     note_name: String,
+    exclude_path: Option<String>,
     db_state: State<DbStateWrapper>,
 ) -> Result<bool, String> {
     db_state.0.with_connection(|conn| {
-        crate::core::db::repository::check_note_exists_by_name(conn, &note_name)
+        let exclude_relative = exclude_path.as_ref().map(|path| {
+            let vault_path = db_state.0.vault_path.lock().unwrap().clone();
+            if let Some(vault_path) = vault_path {
+                Path::new(path)
+                    .strip_prefix(&vault_path)
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|_| path.replace('\\', "/"))
+            } else {
+                path.replace('\\', "/")
+            }
+        });
+
+        crate::core::db::repository::check_note_exists_by_name(
+            conn,
+            &note_name,
+            exclude_relative.as_deref(),
+        )
     })
 }
 

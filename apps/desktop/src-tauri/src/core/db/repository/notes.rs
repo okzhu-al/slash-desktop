@@ -377,13 +377,26 @@ pub fn get_all_notes(conn: &Connection) -> SqliteResult<Vec<Note>> {
 }
 
 /// Check if a note exists by name (title without extension)
-/// Searches for notes where title matches (case-insensitive)
-pub fn check_note_exists_by_name(conn: &Connection, note_name: &str) -> SqliteResult<bool> {
-    let count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM notes WHERE LOWER(title) = LOWER(?1)",
-        params![note_name],
-        |row| row.get(0),
-    )?;
+/// Searches for notes where title matches (case-insensitive), optionally excluding
+/// the current note path to avoid self-collisions during rename.
+pub fn check_note_exists_by_name(
+    conn: &Connection,
+    note_name: &str,
+    exclude_path: Option<&str>,
+) -> SqliteResult<bool> {
+    let count: i32 = if let Some(path) = exclude_path {
+        conn.query_row(
+            "SELECT COUNT(*) FROM notes WHERE LOWER(title) = LOWER(?1) AND path <> ?2",
+            params![note_name, path],
+            |row| row.get(0),
+        )?
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM notes WHERE LOWER(title) = LOWER(?1)",
+            params![note_name],
+            |row| row.get(0),
+        )?
+    };
     Ok(count > 0)
 }
 

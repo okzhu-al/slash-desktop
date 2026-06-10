@@ -474,8 +474,15 @@ class SyncServiceImpl {
         return resp.text();
     }
 
-    /** 通过稳定 file_id 获取团队文件内容与当前路径（只读） */
-    async getVaultFileById(vaultId: string, fileId: string): Promise<{ content: string; filePath: string; fileId: string }> {
+    /** 通过稳定 file_id 获取团队文件内容、当前路径与服务端文件元数据（只读） */
+    async getVaultFileById(vaultId: string, fileId: string): Promise<{
+        content: string;
+        filePath: string;
+        fileId: string;
+        docStatus?: string;
+        editorId?: string;
+        editorName?: string;
+    }> {
         const config = this.getConfig();
         if (!config) throw new Error('Sync not configured');
 
@@ -495,6 +502,9 @@ class SyncServiceImpl {
             content,
             filePath: resp.headers.get('X-Slash-File-Path') || '',
             fileId: resp.headers.get('X-Slash-File-Id') || fileId,
+            docStatus: resp.headers.get('X-Slash-Doc-Status') || undefined,
+            editorId: resp.headers.get('X-Slash-Editor-Id') || undefined,
+            editorName: resp.headers.get('X-Slash-Editor-Name') || undefined,
         };
     }
 }

@@ -65,7 +65,7 @@ interface CollabNotifyState {
     /** 登录后从 GET /api/collab/unread 全量重建红点 */
     refreshUnread: (vaultId: string) => Promise<void>;
     /** 用户打开协作历史 Tab → 消红 + 写服务端已读游标 */
-    markRead: (path: string, vaultId: string) => void;
+    markRead: (path: string, vaultId: string) => Promise<void>;
     /** 用户主动点开带有 NEW 徽章的目录 → 消红胶囊 + 并行清理该层级下所有散户小红点 */
     markFolderRead: (path: string, vaultId: string) => Promise<void>;
     /** 用户主动点开/展开新入队的团队目录 → 仅消除 NEW 蓝圈徽章，严格保留内部独立触发的小红点 */
@@ -137,7 +137,7 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
         } catch { /* 静默忽略，红点为空态 */ }
     },
 
-    markRead: (path, vaultId) => {
+    markRead: async (path, vaultId) => {
         const found = findEntryByPath(get().unreadFiles, path);
         if (!found) return;
 
@@ -155,12 +155,16 @@ export const useCollabNotifyStore = create<CollabNotifyState>((set, get) => ({
 
         // 异步通知服务端更新已读游标（非阻塞）
         if (latestSeq > 0) {
-            import('@/services/CollabService').then(({ collabService }) => {
-                collabService.markFileRead(vaultId, entry.filePath, latestSeq, false, {
+            try {
+                const { collabService } = await import('@/services/CollabService');
+                await collabService.markFileRead(vaultId, entry.filePath, latestSeq, false, {
                     fileId: entry.fileId,
                     directoryId: entry.directoryId,
                 });
-            });
+                await get().refreshUnread(vaultId);
+            } catch {
+                // 下次 refreshUnread 会按服务端事实恢复红点；这里保留乐观清除，避免点击后立即闪回。
+            }
         }
     },
 

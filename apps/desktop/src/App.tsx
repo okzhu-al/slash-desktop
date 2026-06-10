@@ -413,6 +413,71 @@ function App() {
     autoSyncManager.setEditingPath(selectedNote?.path ?? null);
   }, [selectedNote?.path]);
 
+  // UUID-first metadata hydration:
+  // 本地文件树打开团队目录内文件时，只能读到磁盘 YAML；如果 YAML 缺 editor/doc_status，
+  // 必须用 file_id 从 Server file_states 回填内存 metadata，避免误判为 solo_missing_editor。
+  useEffect(() => {
+    if (!selectedNote || !isTeamNote) return;
+
+    const currentMetadata = selectedNote.metadata || {};
+    if (currentMetadata.editor && currentMetadata.doc_status) return;
+
+    const parsedTeamNote = parseTeamNoteId(selectedNote.id);
+    const fileId = (currentMetadata.slash_id as string | undefined) || parsedTeamNote.fileId;
+    const teamVaultId =
+      (currentMetadata.team_vault_id as string | undefined)
+      || parsedTeamNote.teamVaultId
+      || useSessionStore.getState().teamVaultId;
+
+    if (!fileId || !teamVaultId) return;
+
+    let cancelled = false;
+
+    syncService.getVaultFileById(teamVaultId, fileId)
+      .then(({ filePath, docStatus, editorId, editorName }) => {
+        if (cancelled) return;
+        setSelectedNote(prev => {
+          if (!prev || prev.id !== selectedNote.id) return prev;
+
+          const metadata = { ...(prev.metadata || {}) };
+          let changed = false;
+
+          if (docStatus && !metadata.doc_status) {
+            metadata.doc_status = docStatus;
+            changed = true;
+          }
+          if (editorId && !metadata.editor_id) {
+            metadata.editor_id = editorId;
+            changed = true;
+          }
+          if (editorName && !metadata.editor) {
+            metadata.editor = editorName;
+            changed = true;
+          }
+          if (filePath && !metadata.team_path) {
+            metadata.team_path = filePath;
+            changed = true;
+          }
+          if (teamVaultId && !metadata.team_vault_id) {
+            metadata.team_vault_id = teamVaultId;
+            changed = true;
+          }
+
+          return changed ? { ...prev, metadata } : prev;
+        });
+      })
+      .catch(err => console.warn('[App] Failed to hydrate team note metadata:', err));
+
+    return () => { cancelled = true; };
+  }, [
+    selectedNote?.id,
+    selectedNote?.metadata?.slash_id,
+    selectedNote?.metadata?.editor,
+    selectedNote?.metadata?.doc_status,
+    isTeamNote,
+    setSelectedNote,
+  ]);
+
   // Listen for sync:pulled event to refresh selected note's metadata
   useEffect(() => {
     const handleSyncPulled = async (e: Event) => {
@@ -537,12 +602,18 @@ function App() {
               content,
               filePath: parsedTeamNote.filePath || '',
               fileId: '',
+              docStatus: undefined,
+              editorId: undefined,
+              editorName: undefined,
             }));
         loader
-          .then(({ content, filePath, fileId }) => {
+          .then(({ content, filePath, fileId, docStatus, editorId, editorName }) => {
             const fileName = getBasename(filePath).replace(/\.md$/, '') || filePath;
             const { metadata, content: parsedContent } = metadataService.parse(filePath, content);
             if (fileId && !metadata.slash_id) metadata.slash_id = fileId;
+            if (docStatus && !metadata.doc_status) metadata.doc_status = docStatus;
+            if (editorId && !metadata.editor_id) metadata.editor_id = editorId;
+            if (editorName && !metadata.editor) metadata.editor = editorName;
             metadata.team_path = filePath;
             metadata.team_vault_id = teamVaultId;
             const noteId = fileId
@@ -883,7 +954,7 @@ function App() {
           {/* Main Editor / Preview Area */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Editor Content */}
-            <div ref={editorContainerRef} className={`slash-editor-zoom-area flex-1 overflow-y-auto overflow-x-auto ${selectedNote?.id?.startsWith('__team__/') ? 'bg-[#E6A23C]/10 dark:bg-[#002FA7]/15' : ''}`}>
+            <div ref={editorContainerRef} className={`slash-editor-zoom-area flex-1 overflow-y-scroll overflow-x-auto ${selectedNote?.id?.startsWith('__team__/') ? 'bg-[#E6A23C]/10 dark:bg-[#002FA7]/15' : ''}`}>
               {/* Team Manage View */}
               {showTeamManage ? (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center text-zinc-400">{t("common.loading", "Loading...")}</div>}>

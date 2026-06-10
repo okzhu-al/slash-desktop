@@ -925,7 +925,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
             // "!hasUnread" as read would optimistically clear unrelated red dots until the
             // next server refresh brings them back.
             if (allClicked && clickedTs.size > 0) {
-                markRead(matchedPath, teamVaultId);
+                void markRead(matchedPath, teamVaultId);
                 setLastRead(matchedPath, Date.now());
                 if (matchedPath !== relPath) setLastRead(relPath, Date.now());
             }
@@ -1018,7 +1018,39 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
             tsList.forEach(ts => next.add(ts));
             return next;
         });
-    }, []);
+        if (!tsList.some(ts => activeUnreadTsSet.has(ts))) return;
+
+        const teamVaultId = useSessionStore.getState().teamVaultId ?? '';
+        if (!teamVaultId || !relPath) return;
+
+        const st = useCollabNotifyStore.getState();
+        let matchedPath = relPath;
+        let matchedEntry = st.getUnreadEntry(relPath);
+        if (!matchedEntry && currentFileId) {
+            for (const entry of st.unreadFiles.values()) {
+                if (entry.fileId === currentFileId) {
+                    matchedEntry = entry;
+                    matchedPath = entry.filePath;
+                    break;
+                }
+            }
+        }
+        if (!matchedEntry && basename) {
+            for (const entry of st.unreadFiles.values()) {
+                if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
+                    matchedEntry = entry;
+                    matchedPath = entry.filePath;
+                    break;
+                }
+            }
+        }
+
+        if (matchedEntry) {
+            void markRead(matchedPath, teamVaultId);
+            setLastRead(matchedPath, Date.now());
+            if (matchedPath !== relPath) setLastRead(relPath, Date.now());
+        }
+    }, [activeUnreadTsSet, basename, currentFileId, markRead, relPath, setLastRead]);
 
     return (
         <div className="flex flex-col h-full">

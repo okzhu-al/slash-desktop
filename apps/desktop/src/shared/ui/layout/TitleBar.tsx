@@ -65,6 +65,30 @@ export const TitleBar = ({
     const isTeamNote = useIsTeamNote(currentNotePath);
 
     useEffect(() => {
+        const container = tabsContainerRef.current;
+        if (!container || !activeTabId) return;
+
+        const activeTab = container.querySelector<HTMLElement>('[data-active-tab="true"]');
+        if (!activeTab) return;
+
+        const frame = window.requestAnimationFrame(() => {
+            const containerRect = container.getBoundingClientRect();
+            const tabRect = activeTab.getBoundingClientRect();
+            const edgePadding = 24;
+            const leftOverflow = tabRect.left - (containerRect.left + edgePadding);
+            const rightOverflow = tabRect.right - (containerRect.right - edgePadding);
+
+            if (leftOverflow < 0) {
+                container.scrollBy({ left: leftOverflow, behavior: 'smooth' });
+            } else if (rightOverflow > 0) {
+                container.scrollBy({ left: rightOverflow, behavior: 'smooth' });
+            }
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [activeTabId, tabs.length]);
+
+    useEffect(() => {
 
     }, []);
 
@@ -328,6 +352,7 @@ export const TitleBar = ({
                     <div
                         key={tab.id}
                         onClick={() => handleTabClick(tab.id)}
+                        data-active-tab={tab.id === activeTabId ? 'true' : undefined}
                         className={cn(
                             "group flex items-center gap-1.5 px-3 h-6 rounded-md cursor-pointer transition-all duration-150 shrink-0 max-w-[160px]",
                             tab.id === activeTabId

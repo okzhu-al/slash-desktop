@@ -67,15 +67,17 @@ export function useContentPersistence({
     const pendingContentProviderRef = useRef<(() => string) | null>(null);
     const pendingFmRef = useRef<string | null>(null);
 
-    // CRITICAL: Use ref to track latest title to avoid closure capture issues
-    // This prevents saves with stale titles after smart_rename
-    const titleRef = useRef(title);
-    titleRef.current = title;
-
     // CRITICAL: Track isTeamNote using ref because it is populated asynchronously
     // Using it directly inside saveContent closure causes it to be locked to initial `false`
     const isTeamNoteRef = useRef(isTeamNote);
     isTeamNoteRef.current = isTeamNote;
+
+    const getConfirmedTitle = useCallback((safeMeta: Record<string, any>) => {
+        if (typeof safeMeta.title === 'string' && safeMeta.title.trim()) {
+            return safeMeta.title;
+        }
+        return initialTitle;
+    }, [initialTitle]);
 
     /**
      * Core save function with frontmatter parsing
@@ -107,11 +109,10 @@ export function useContentPersistence({
 
         const safeMeta = (currentMeta && typeof currentMeta === 'object') ? currentMeta : {};
 
-        // Build metadata (relations extraction handled by backend)
-        // CRITICAL: Use titleRef.current to get the LATEST title, avoiding stale closure value
+        // Keep autosave on the last confirmed title. The live input value may still be unconfirmed.
         const mergedMeta = {
             ...safeMeta,
-            title: titleRef.current,
+            title: getConfirmedTitle(safeMeta),
         };
 
         // 🛡️ contributor 写入门控：仅用户真正编辑时才加入（防止 B 打开笔记即改变 frontmatter hash）
@@ -174,7 +175,7 @@ export function useContentPersistence({
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editorRef, frontmatterRef, isMountedRef, isSavingRef, isRenamingRef, noteIdRef, onSave]); // titleRef is stable
+    }, [editorRef, frontmatterRef, getConfirmedTitle, isMountedRef, isSavingRef, isRenamingRef, noteIdRef, onSave]);
 
     /**
      * Schedule a debounced save (500ms delay)
@@ -229,7 +230,7 @@ export function useContentPersistence({
             } catch { }
 
             const safeMeta = (currentMeta && typeof currentMeta === 'object') ? currentMeta : {};
-            const mergedMeta = { ...safeMeta, title: titleRef.current };
+            const mergedMeta = { ...safeMeta, title: getConfirmedTitle(safeMeta) };
 
             // 使用 metadataService 序列化：直接 import stringify 构建文件内容
             // 为避免引入额外依赖，用 gray-matter stringify
@@ -256,7 +257,7 @@ export function useContentPersistence({
         } catch (e) {
             console.warn('[flushPendingSave] Failed:', e);
         }
-    }, [frontmatterRef]); // titleRef is stable
+    }, [frontmatterRef, getConfirmedTitle]);
 
     /**
      * Cancel any pending debounced save
@@ -280,7 +281,10 @@ export function useContentPersistence({
         if (cleanTitle !== initialTitle && cleanTitle !== "") {
             // Check for duplicate title across entire vault
             try {
-                const exists = await invoke<boolean>('check_note_exists', { noteName: cleanTitle });
+                const exists = await invoke<boolean>('check_note_exists', {
+                    noteName: cleanTitle,
+                    excludePath: noteIdRef.current,
+                });
                 if (exists) {
                     // Show prominent warning using Tauri dialog
                     const { message } = await import('@tauri-apps/plugin-dialog');
@@ -325,4 +329,3 @@ export function useContentPersistence({
         flushPendingSave,
     };
 }
-

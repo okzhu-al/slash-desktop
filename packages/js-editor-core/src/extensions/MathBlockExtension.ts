@@ -1,7 +1,21 @@
 import { Node, mergeAttributes, InputRule } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import { TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { MathBlockNodeView } from '../components/MathBlockNodeView';
+
+const escapeHtmlAttr = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+declare module '@tiptap/core' {
+    interface Commands<ReturnType> {
+        mathBlock: {
+            insertMathBlock: () => ReturnType;
+        };
+    }
+}
 
 export const MathBlockExtension = Node.create({
     name: 'mathBlock',
@@ -34,6 +48,39 @@ export const MathBlockExtension = Node.create({
         return ReactNodeViewRenderer(MathBlockNodeView);
     },
 
+    addCommands() {
+        return {
+            insertMathBlock: () => ({ state, tr, dispatch }) => {
+                const node = state.schema.nodes.mathBlock.create({ latex: '' });
+                const insertFrom = tr.selection.from;
+                tr.replaceSelectionWith(node);
+
+                let nodePos: number | null = null;
+                const searchFrom = Math.max(0, insertFrom - 4);
+                const searchTo = Math.min(tr.doc.content.size, insertFrom + node.nodeSize + 4);
+
+                tr.doc.nodesBetween(searchFrom, searchTo, (candidate, pos) => {
+                    if (candidate.type.name === node.type.name) {
+                        nodePos = pos;
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (nodePos !== null) {
+                    tr.setSelection(NodeSelection.create(tr.doc, nodePos));
+                }
+                tr.scrollIntoView();
+
+                if (dispatch) {
+                    dispatch(tr);
+                }
+
+                return true;
+            },
+        };
+    },
+
     addInputRules() {
         return [
             // Match $$ followed by a space at the start of a block
@@ -42,7 +89,7 @@ export const MathBlockExtension = Node.create({
                 handler: ({ range, chain }) => {
                     chain()
                         .deleteRange(range)
-                        .insertContent({ type: 'mathBlock', attrs: { latex: '' } })
+                        .insertMathBlock()
                         .run();
                 },
             }),
@@ -52,7 +99,7 @@ export const MathBlockExtension = Node.create({
                 handler: ({ range, chain }) => {
                     chain()
                         .deleteRange(range)
-                        .insertContent({ type: 'mathBlock', attrs: { latex: '' } })
+                        .insertMathBlock()
                         .run();
                 },
             }),
@@ -133,7 +180,7 @@ export const MathBlockExtension = Node.create({
                         markdownit.renderer.rules.math_block = (tokens: any[], idx: number) => {
                             const token = tokens[idx];
                             const latex = token.content;
-                            return `<div data-type="mathBlock" data-latex="${latex}"></div>`;
+                            return `<div data-type="mathBlock" data-latex="${escapeHtmlAttr(latex)}"></div>`;
                         };
                     },
                 },

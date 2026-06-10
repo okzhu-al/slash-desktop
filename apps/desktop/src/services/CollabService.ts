@@ -134,7 +134,7 @@ class CollabServiceImpl {
         if (!auth) return;
 
         try {
-            await fetch(`${auth.base}/api/collab/read`, {
+            const resp = await fetch(`${auth.base}/api/collab/read`, {
                 method: 'PUT',
                 headers: { ...auth.headers, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -146,7 +146,13 @@ class CollabServiceImpl {
                     clear_children: clearChildren,
                 }),
             });
-        } catch { /* 静默忽略 */ }
+            if (!resp.ok) {
+                throw new Error(`mark read failed: ${resp.status}`);
+            }
+        } catch (err) {
+            console.warn('[CollabService] markFileRead failed', err);
+            throw err;
+        }
     }
 
     /** 查询所有未读文件（登录后重建红点状态用） */
