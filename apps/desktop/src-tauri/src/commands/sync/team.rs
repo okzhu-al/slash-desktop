@@ -2077,19 +2077,25 @@ fn resolve_team_pull_local_path(
         return (default_local_path, default_local_rel);
     }
 
-    let owner_display_name = owner_display_name_for_team_path(scope, &manifest.relative_path);
+    let fallback_owner_display_name = owner_display_name_for_team_path(scope, &manifest.relative_path);
+    let file_display_name = manifest
+        .editor_display_name
+        .as_deref()
+        .or(manifest.pushed_by_display_name.as_deref())
+        .or(fallback_owner_display_name);
     let desired_local_rel =
-        choose_team_file_local_path(root, &default_local_rel, file_id, owner_display_name);
+        choose_team_file_local_path(root, &default_local_rel, file_id, file_display_name);
 
     let local_rel = if let Some(existing) = file_mappings.get(file_id) {
-        if existing.remote_path == manifest.relative_path {
-            existing.local_path.clone()
-        } else {
-            let previous_local = existing.local_path.clone();
-            if previous_local != desired_local_rel {
-                move_team_file_local_path(root, &previous_local, &desired_local_rel, file_id);
+        let previous_local = existing.local_path.clone();
+        if previous_local != desired_local_rel {
+            if move_team_file_local_path(root, &previous_local, &desired_local_rel, file_id) {
                 moved_team_file_paths.push((previous_local, desired_local_rel.clone()));
+                desired_local_rel
+            } else {
+                previous_local
             }
+        } else {
             desired_local_rel
         }
     } else {
@@ -2135,17 +2141,18 @@ fn move_team_file_local_path(
     previous_local: &str,
     next_local: &str,
     file_id: &str,
-) {
+) -> bool {
     let previous_path = root.join(previous_local);
     let next_path = root.join(next_local);
     if !previous_path.exists() || previous_local == next_local {
-        return;
+        return true;
     }
     if next_path.exists() {
         if file_has_id(&next_path, file_id) {
             let _ = std::fs::remove_file(&previous_path);
+            return true;
         }
-        return;
+        return false;
     }
     if let Some(parent) = next_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -2157,7 +2164,9 @@ fn move_team_file_local_path(
             next_local,
             e
         );
+        return false;
     }
+    true
 }
 
 fn choose_team_file_local_path(

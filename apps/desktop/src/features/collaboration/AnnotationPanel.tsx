@@ -3,7 +3,7 @@
  * Phase 3.2③: 显示/添加/回复/解决批注
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MessageCircle, Trash2, RefreshCw, CornerDownRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { annotationService, AnnotationInfo } from '@/services/AnnotationService';
@@ -80,8 +80,14 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
     const [replyContent, setReplyContent] = useState('');
     const [sending, setSending] = useState(false);
     const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+    const loadRequestIdRef = useRef(0);
+    const notePathRef = useRef(notePath);
 
     const currentUser = useSessionStore.getState().displayName || '';
+
+    useEffect(() => {
+        notePathRef.current = notePath;
+    }, [notePath]);
 
     const resolveFilePath = useCallback((): { vaultId: string; filePath: string; fileId: string | null } | null => {
         if (!notePath) return null;
@@ -121,23 +127,38 @@ export const AnnotationPanel = ({ notePath, disabled = false }: AnnotationPanelP
     const loadAnnotations = useCallback(async () => {
         const resolved = resolveFilePath();
         if (!resolved) return;
+        const requestId = ++loadRequestIdRef.current;
+        const targetNotePath = notePath;
         console.log('[Annotation] Loading:', resolved);
         setLoading(true);
         setError(null);
         try {
             const result = await annotationService.listAnnotations(resolved.vaultId, resolved.filePath, resolved.fileId);
+            if (requestId !== loadRequestIdRef.current || notePathRef.current !== targetNotePath) {
+                return;
+            }
             setAnnotations(result);
             // 通知编辑器重新施加高亮 mark（重启后恢复）
-            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { noteId: notePath, annotations: result } }));
+            window.dispatchEvent(new CustomEvent('annotation:marks:restore', { detail: { noteId: targetNotePath, annotations: result } }));
         } catch (err) {
+            if (requestId !== loadRequestIdRef.current || notePathRef.current !== targetNotePath) {
+                return;
+            }
             setError(String(err));
         } finally {
-            setLoading(false);
+            if (requestId === loadRequestIdRef.current && notePathRef.current === targetNotePath) {
+                setLoading(false);
+            }
         }
-    }, [resolveFilePath]);
+    }, [notePath, resolveFilePath]);
 
     useEffect(() => { loadAnnotations(); }, [loadAnnotations]);
-    useEffect(() => { setAnnotations([]); setReplyingTo(null); }, [notePath]);
+    useEffect(() => {
+        loadRequestIdRef.current += 1;
+        setAnnotations([]);
+        setReplyingTo(null);
+        window.dispatchEvent(new CustomEvent('annotation:marks:clear'));
+    }, [notePath]);
 
     // 监听来自 AIBubbleMenu 的刷新事件以及编辑器的内容重载
     useEffect(() => {

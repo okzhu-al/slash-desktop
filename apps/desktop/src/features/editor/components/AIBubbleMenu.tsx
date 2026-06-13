@@ -44,7 +44,7 @@ function parseRangeAnchor(anchorId?: string | null): { from: number; to: number 
     return { from, to };
 }
 
-export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _notePath = '', isTeamNote = false }: AIBubbleMenuProps) {
+export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath = '', isTeamNote = false }: AIBubbleMenuProps) {
     const { t } = useTranslation();
     const noteCtx = useNoteContextOptional();
     const [visible, setVisible] = useState(false);
@@ -136,8 +136,10 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
     // ========== 重启后恢复批注高亮 ==========
     useEffect(() => {
         if (!editor) return;
+        let restoreGeneration = 0;
 
         const clearAnnotationMarks = () => {
+            restoreGeneration += 1;
             const annotationMark = editor.schema.marks.annotation;
             if (!annotationMark) return;
             const { doc } = editor.state;
@@ -166,13 +168,20 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
             };
             const currentNoteId = noteCtx?.noteIdRef.current;
             if (noteId && currentNoteId && noteId !== currentNoteId) return;
-            if (!annotations?.length) return;
+            const restoreNoteId = noteId || currentNoteId || notePath;
+            const generation = ++restoreGeneration;
 
             const annotationMark = editor.schema.marks.annotation;
             if (!annotationMark) return;
 
             requestAnimationFrame(() => {
+                if (editor.isDestroyed) return;
+                if (generation !== restoreGeneration) return;
+                const latestNoteId = noteCtx?.noteIdRef.current;
+                if (restoreNoteId && latestNoteId && restoreNoteId !== latestNoteId) return;
+
                 clearAnnotationMarks();
+                if (!annotations?.length) return;
 
                 const { doc } = editor.state;
                 const tr = editor.state.tr;
@@ -227,7 +236,11 @@ export function AIBubbleMenu({ editor, canEdit: _canEdit = true, notePath: _note
             window.removeEventListener('slash:editor-content-loaded', clearAnnotationMarks);
             window.removeEventListener('annotation:marks:clear', clearAnnotationMarks);
         };
-    }, [editor, noteCtx]);
+    }, [editor, noteCtx, notePath]);
+
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent('annotation:marks:clear'));
+    }, [notePath]);
 
     // 添加批注
     const handleAddAnnotation = async () => {

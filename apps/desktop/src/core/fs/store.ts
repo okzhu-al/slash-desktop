@@ -7,6 +7,7 @@ import { SortConfig, SortField, SortDirection, sortFileTree } from './sortUtils'
 import { getBasename, getParentPath, getRelativePath, normalizePath } from '@/shared/utils/pathUtils';
 // Storage key for persisted expansion state
 const EXPANDED_PATHS_KEY = 'sidebar:expandedPaths';
+const COLLAPSED_PARA_PATHS_KEY = 'sidebar:collapsedParaPaths';
 const SORT_CONFIG_KEY = 'sidebar:sortConfig';
 
 // PARA folder prefixes that should always be expanded
@@ -21,6 +22,7 @@ const DEFAULT_SORT_CONFIG: SortConfig = {
 interface FileSystemState {
     root: FileSystemItem | null;
     expandedPaths: Set<string>;
+    collapsedParaPaths: Set<string>;
     sortConfig: SortConfig;
 
     clearRoot: () => void;
@@ -75,6 +77,26 @@ const saveExpandedPaths = (paths: Set<string>) => {
     }
 };
 
+const loadCollapsedParaPaths = (): Set<string> => {
+    try {
+        const stored = localStorage.getItem(COLLAPSED_PARA_PATHS_KEY);
+        if (stored) {
+            return new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        console.warn('[FileSystemStore] Failed to load collapsed PARA paths:', e);
+    }
+    return new Set();
+};
+
+const saveCollapsedParaPaths = (paths: Set<string>) => {
+    try {
+        localStorage.setItem(COLLAPSED_PARA_PATHS_KEY, JSON.stringify([...paths]));
+    } catch (e) {
+        console.warn('[FileSystemStore] Failed to save collapsed PARA paths:', e);
+    }
+};
+
 // Load sort config from localStorage
 const loadSortConfig = (): SortConfig => {
     try {
@@ -102,6 +124,15 @@ const isPARAFolder = (folderName: string): boolean => {
     return PARA_PREFIXES.some(prefix => folderName.startsWith(prefix));
 };
 
+const isRootLevelPARAPath = (path: string, rootPath: string): boolean => {
+    const normalizedRoot = normalizePath(rootPath);
+    const normalizedPath = normalizePath(path);
+    if (!normalizedPath.startsWith(normalizedRoot + '/')) return false;
+    const parentPath = normalizePath(getParentPath(normalizedPath) || '');
+    if (parentPath !== normalizedRoot) return false;
+    return isPARAFolder(getBasename(normalizedPath) || '');
+};
+
 const persistTreeSnapshot = (root: FileSystemItem) => {
     fileTreeSnapshotService.save(root.path, root).catch(console.error);
 };
@@ -110,11 +141,15 @@ const persistTreeSnapshot = (root: FileSystemItem) => {
 const processFolder = async (
     folder: FileSystemItem,
     expandedPaths: Set<string>,
+    collapsedParaPaths: Set<string>,
     isRootLevel: boolean = false
 ): Promise<FileSystemItem> => {
     const folderName = folder.name;
-    // PARA folders (at root level) always expanded, others check persisted state
-    const shouldBeOpen = (isRootLevel && isPARAFolder(folderName)) || expandedPaths.has(folder.path);
+    const isRootLevelPara = isRootLevel && isPARAFolder(folderName);
+    // Root-level PARA folders default to open, but manual collapse must win across refreshes.
+    const shouldBeOpen = isRootLevelPara
+        ? !collapsedParaPaths.has(folder.path)
+        : expandedPaths.has(folder.path);
 
     if (!shouldBeOpen) {
         return { ...folder, isOpen: false };
@@ -126,7 +161,7 @@ const processFolder = async (
         const processedChildren = await Promise.all(
             children.map(async (child) => {
                 if (child.type === 'folder') {
-                    return processFolder(child, expandedPaths, false);
+                    return processFolder(child, expandedPaths, collapsedParaPaths, false);
                 }
                 return child;
             })
@@ -139,6 +174,7 @@ const processFolder = async (
 export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     root: null,
     expandedPaths: loadExpandedPaths(),
+    collapsedParaPaths: loadCollapsedParaPaths(),
     sortConfig: loadSortConfig(),
 
     // Clear root immediately - used during vault switching to prevent stale data
@@ -150,7 +186,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
         // Initialize cache
         await cacheService.initialize(path);
 
-        const { expandedPaths } = get();
+        const { expandedPaths, collapsedParaPaths } = get();
         const cachedTree = await fileTreeSnapshotService.load(path);
         if (cachedTree) {
             const { sortConfig } = get();
@@ -164,7 +200,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             const expandedChildren = await Promise.all(
                 children.map(async (child) => {
                     if (child.type === 'folder') {
-                        return processFolder(child, expandedPaths, true); // isRootLevel = true
+                        return processFolder(child, expandedPaths, collapsedParaPaths, true); // isRootLevel = true
                     }
                     return child;
                 })
@@ -190,18 +226,27 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     },
 
     toggleFolder: async (path: string, isOpen: boolean) => {
-        const { root, expandedPaths, sortConfig } = get();
+        const { root, expandedPaths, collapsedParaPaths, sortConfig } = get();
         if (!root) return;
 
         // Update persisted state for all folders so manual toggle is respected
         const newExpandedPaths = new Set(expandedPaths);
+        const newCollapsedParaPaths = new Set(collapsedParaPaths);
+        const isRootParaPath = isRootLevelPARAPath(path, root.path);
         if (isOpen) {
             newExpandedPaths.add(path);
+            if (isRootParaPath) {
+                newCollapsedParaPaths.delete(path);
+            }
         } else {
             newExpandedPaths.delete(path);
+            if (isRootParaPath) {
+                newCollapsedParaPaths.add(path);
+            }
         }
-        set({ expandedPaths: newExpandedPaths });
+        set({ expandedPaths: newExpandedPaths, collapsedParaPaths: newCollapsedParaPaths });
         saveExpandedPaths(newExpandedPaths);
+        saveCollapsedParaPaths(newCollapsedParaPaths);
 
         if (!isOpen) {
             const newRoot = updateTree(root, path, (node) => ({ ...node, isOpen: false }));
@@ -218,7 +263,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
                 children.map(async (child) => {
                     if (child.type === 'folder') {
                         // Recursively process subfolder if it should be expanded
-                        return processFolder(child, expandedPaths, false);
+                        return processFolder(child, expandedPaths, collapsedParaPaths, false);
                     }
                     return child;
                 })
@@ -246,7 +291,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     },
 
     refreshNode: async (path: string) => {
-        const { root, expandedPaths, sortConfig } = get();
+        const { root, expandedPaths, collapsedParaPaths, sortConfig } = get();
         if (!root) return;
 
         try {
@@ -259,7 +304,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
                 children.map(async (child) => {
                     if (child.type === 'folder') {
                         // Use processFolder to recursively restore nested expanded folders
-                        return processFolder(child, expandedPaths, isRefreshingRoot);
+                        return processFolder(child, expandedPaths, collapsedParaPaths, isRefreshingRoot);
                     }
                     return child;
                 })
@@ -303,7 +348,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     },
 
     removeNode: (path: string) => {
-        const { root, expandedPaths } = get();
+        const { root, expandedPaths, collapsedParaPaths } = get();
         if (!root) {
 
             return;
@@ -362,6 +407,13 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
             set({ expandedPaths: newExpandedPaths });
             saveExpandedPaths(newExpandedPaths);
         }
+        const matchingCollapsedParaPath = Array.from(collapsedParaPaths).find(p => p.toLowerCase() === pathLower);
+        if (matchingCollapsedParaPath) {
+            const newCollapsedParaPaths = new Set(collapsedParaPaths);
+            newCollapsedParaPaths.delete(matchingCollapsedParaPath);
+            set({ collapsedParaPaths: newCollapsedParaPaths });
+            saveCollapsedParaPaths(newCollapsedParaPaths);
+        }
 
         // Notify graph to refresh (SQLite backend needs time to process the mv event)
         setTimeout(() => {
@@ -415,7 +467,7 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
     },
 
     renameNode: (oldPath: string, newPath: string) => {
-        const { root, expandedPaths, sortConfig } = get();
+        const { root, expandedPaths, collapsedParaPaths, sortConfig } = get();
         if (!root) return;
 
         const newName = getBasename(newPath) || '';
@@ -444,6 +496,13 @@ export const useFileSystemStore = create<FileSystemState>((set, get) => ({
                 newExpandedPaths.add(newPath);
                 set({ expandedPaths: newExpandedPaths });
                 saveExpandedPaths(newExpandedPaths);
+            }
+            if (collapsedParaPaths.has(oldPath)) {
+                const newCollapsedParaPaths = new Set(collapsedParaPaths);
+                newCollapsedParaPaths.delete(oldPath);
+                newCollapsedParaPaths.add(newPath);
+                set({ collapsedParaPaths: newCollapsedParaPaths });
+                saveCollapsedParaPaths(newCollapsedParaPaths);
             }
             
             if (typeof window !== 'undefined') {

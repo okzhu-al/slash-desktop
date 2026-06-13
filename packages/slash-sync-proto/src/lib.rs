@@ -26,6 +26,12 @@ pub struct FileManifest {
     /// 文件当前所属团队目录身份。Personal 同步或旧服务端可为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directory_id: Option<String>,
+    /// 文件 Editor 的展示名。仅 Server -> Desktop pull 需要；用于本地同名文件避让。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor_display_name: Option<String>,
+    /// 最近推送者展示名。用于 editor_display_name 缺失时的本地避让 fallback。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pushed_by_display_name: Option<String>,
     /// 用户开始编辑此文件的时间（Unix timestamp, seconds）
     /// 客户端记录编辑生命周期开始时间，服务端保存为历史版本的 session_started_at
     /// None = 未知，服务端使用 push 到达时间
@@ -795,6 +801,8 @@ mod tests {
             logical_clock: 42,
             file_id: None,
             directory_id: None,
+            editor_display_name: None,
+            pushed_by_display_name: None,
             edit_started_at: None,
             edit_session_id: None,
             is_user_edit: false,
