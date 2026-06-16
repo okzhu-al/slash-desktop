@@ -673,6 +673,119 @@ export const MixedTaskItem = TaskItem.extend({
     addNodeView() {
         return undefined as any;
     },
+
+    addProseMirrorPlugins() {
+        let compositionStartPos: number | null = null;
+        let compositionTextblockStart: number | null = null;
+        let compositionTaskItemStart: number | null = null;
+        let recentCompositionTaskItemStart: number | null = null;
+        let recentCompositionEndedAt = 0;
+        const compositionGuardAfterEndMs = 600;
+        const maxCompositionTextLength = 64;
+
+        const isInsideTaskItem = ($pos: any) => {
+            for (let depth = $pos.depth; depth >= 0; depth--) {
+                if ($pos.node(depth).type.name === this.name) {
+                    return depth;
+                }
+            }
+            return -1;
+        };
+
+        const isDirectTaskParagraph = ($pos: any) => {
+            const taskItemDepth = isInsideTaskItem($pos);
+            return taskItemDepth >= 0
+                && $pos.depth === taskItemDepth + 1
+                && $pos.parent.isTextblock;
+        };
+
+        const getGuardedTaskItemStart = () => {
+            if (compositionTaskItemStart !== null) return compositionTaskItemStart;
+            if (
+                recentCompositionTaskItemStart !== null
+                && Date.now() - recentCompositionEndedAt <= compositionGuardAfterEndMs
+            ) {
+                return recentCompositionTaskItemStart;
+            }
+            recentCompositionTaskItemStart = null;
+            return null;
+        };
+
+        const hasTaskItemShell = (doc: any, pos: number) => {
+            if (pos < 0 || pos > doc.content.size) return false;
+
+            const directNode = pos < doc.content.size ? doc.nodeAt(pos) : null;
+            if (directNode?.type.name === this.name) return true;
+
+            const $pos = doc.resolve(Math.min(pos, doc.content.size));
+            return isInsideTaskItem($pos) >= 0;
+        };
+
+        return [
+            ...(this.parent?.() ?? []),
+            new Plugin({
+                key: new PluginKey('taskItemImeCompositionGuard'),
+                props: {
+                    handleDOMEvents: {
+                        compositionstart: (view) => {
+                            const { selection } = view.state;
+                            compositionStartPos = selection.from;
+                            compositionTextblockStart = selection.$from.parent.isTextblock
+                                ? selection.$from.start(selection.$from.depth)
+                                : null;
+                            const taskItemDepth = isInsideTaskItem(selection.$from);
+                            compositionTaskItemStart = taskItemDepth >= 0
+                                ? selection.$from.before(taskItemDepth)
+                                : null;
+                            recentCompositionTaskItemStart = null;
+                            return false;
+                        },
+                        beforeinput: (view, event) => {
+                            const inputEvent = event as InputEvent;
+                            if (inputEvent.inputType !== 'deleteCompositionText') return false;
+                            if (compositionStartPos === null || compositionTextblockStart === null) return false;
+
+                            const { state } = view;
+                            const { selection } = state;
+                            if (!selection.empty || !isDirectTaskParagraph(selection.$from)) return false;
+                            if (selection.$from.start(selection.$from.depth) !== compositionTextblockStart) return false;
+
+                            const from = Math.max(compositionTextblockStart, compositionStartPos);
+                            const to = Math.min(selection.from, selection.$from.end(selection.$from.depth));
+                            if (to <= from || to - from > maxCompositionTextLength) return false;
+
+                            const deleting = state.doc.textBetween(from, to, '', '\0');
+                            if (!/^[A-Za-z0-9\s']+$/.test(deleting)) return false;
+
+                            event.preventDefault();
+                            const tr = state.tr.delete(from, to);
+                            tr.setSelection(TextSelection.create(tr.doc, from));
+                            tr.setMeta('composition', true);
+                            view.dispatch(tr);
+                            return true;
+                        },
+                        compositionend: () => {
+                            recentCompositionTaskItemStart = compositionTaskItemStart;
+                            recentCompositionEndedAt = Date.now();
+                            compositionStartPos = null;
+                            compositionTextblockStart = null;
+                            compositionTaskItemStart = null;
+                            return false;
+                        },
+                    },
+                },
+                filterTransaction: (tr) => {
+                    if (!tr.docChanged) return true;
+
+                    const guardedTaskPos = getGuardedTaskItemStart();
+                    if (guardedTaskPos === null) return true;
+
+                    const mappedTaskPos = tr.mapping.map(guardedTaskPos, -1);
+                    return hasTaskItemShell(tr.doc, mappedTaskPos);
+                },
+            }),
+        ];
+    },
 });
 
 /** 列表类型名称集合 */

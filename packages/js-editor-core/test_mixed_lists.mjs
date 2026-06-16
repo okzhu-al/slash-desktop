@@ -19,6 +19,8 @@ global.KeyboardEvent = dom.window.KeyboardEvent;
 global.MouseEvent = dom.window.MouseEvent;
 global.FocusEvent = dom.window.FocusEvent;
 global.Event = dom.window.Event;
+global.InputEvent = dom.window.InputEvent;
+global.CompositionEvent = dom.window.CompositionEvent;
 global.CustomEvent = dom.window.CustomEvent;
 
 // Mock requestAnimationFrame for Tiptap focus command in Node/JSDOM
@@ -262,6 +264,111 @@ try {
   });
 } catch (e) {
   logTestResult("场景 5 (二级空有序退格提升 -> 一级任务)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 6：中文 IME 选词完成后不能把第二行任务项替换成普通段落
+// =========================================================================
+try {
+  const md6 = `- [ ] 第一行\n- [ ] 第二行\n- [ ] 第三行`;
+  editor.commands.setContent(md6);
+
+  const secondTextPos = findTextPosition(editor, '第二行');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, secondTextPos + 1));
+    return true;
+  });
+
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'zhongwen' }));
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '中文' }));
+
+  let secondTaskPos = -1;
+  let secondTaskNode = null;
+  let taskIndex = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'taskItem') return true;
+    taskIndex += 1;
+    if (taskIndex === 2) {
+      secondTaskPos = pos;
+      secondTaskNode = node;
+      return false;
+    }
+    return true;
+  });
+
+  const badParagraph = editor.schema.nodes.paragraph.create(null, editor.schema.text('中文输入'));
+  const badTr = editor.state.tr.replaceWith(
+    secondTaskPos,
+    secondTaskPos + secondTaskNode.nodeSize,
+    badParagraph
+  );
+  badTr.setMeta('composition', true);
+  editor.view.dispatch(badTr);
+
+  const serialized6 = editor.storage.markdown.getMarkdown().trim();
+  const taskItemCount = [];
+  editor.state.doc.descendants(node => {
+    if (node.type.name === 'taskItem') taskItemCount.push(node);
+  });
+
+  const secondTaskPreserved = serialized6.includes('* [ ] 第二行') && taskItemCount.length === 3;
+
+  logTestResult("场景 6 (IME 选词后不得删除第二行任务 checkbox)", secondTaskPreserved, {
+    "Second Task Preserved": secondTaskPreserved ? 'OK' : 'FAIL',
+    "Task Item Count": taskItemCount.length,
+    "Serialized Markdown": serialized6
+  });
+} catch (e) {
+  logTestResult("场景 6 (IME 选词后不得删除第二行任务 checkbox)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 7：第二行行首中文 IME 临时拼音必须在选词提交时清除
+// =========================================================================
+try {
+  const md7 = `- [ ] 第一行\n- [ ] \n- [ ] 第三行`;
+  editor.commands.setContent(md7);
+
+  let secondTaskPos = -1;
+  let taskIndex = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'taskItem') return true;
+    taskIndex += 1;
+    if (taskIndex === 2) {
+      secondTaskPos = pos;
+      return false;
+    }
+    return true;
+  });
+
+  const secondParagraphTextStart = secondTaskPos + 2;
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, secondParagraphTextStart));
+    return true;
+  });
+
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'di er hang' }));
+  editor.commands.insertContent('di er hang ');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'deleteCompositionText',
+    data: null,
+  }));
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '第二行' }));
+
+  const serialized7 = editor.storage.markdown.getMarkdown().trim();
+  const pinyinCleared = serialized7.includes('* [ ] 第二行')
+    && !serialized7.includes('di er hang')
+    && !serialized7.includes('第二行第二行')
+    && serialized7.includes('* [ ] 第三行');
+
+  logTestResult("场景 7 (第二行行首 IME 临时拼音会被清除)", pinyinCleared, {
+    "Pinyin Cleared": pinyinCleared ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized7
+  });
+} catch (e) {
+  logTestResult("场景 7 (第二行行首 IME 临时拼音会被清除)", false, { error: e.stack });
 }
 
 console.log("\n🏁 E2E Regression Tests Completed.");
