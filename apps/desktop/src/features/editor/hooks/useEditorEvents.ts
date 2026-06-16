@@ -17,6 +17,7 @@ import { syncService } from '@/services/SyncService';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { TextSelection } from '@tiptap/pm/state';
 import { parseTeamNoteId } from '@/shared/utils/teamNoteIdentity';
+import { getScrollContainer } from './useSlashEditor';
 
 interface EditorEventsProps {
     editorRef: React.MutableRefObject<any>;
@@ -541,13 +542,13 @@ export function useEditorEvents({
                     try {
                         const coords = editor.view.coordsAtPos(clampedPos);
                         const editorDom = editor.view.dom;
-                        const scrollContainer = editorDom.closest('.overflow-y-auto')
-                            || editorDom.closest('[style*="overflow"]')
-                            || editorDom.parentElement;
+                        const scrollContainer = getScrollContainer(editorDom);
                         if (scrollContainer) {
                             const containerRect = scrollContainer.getBoundingClientRect();
                             const targetScrollTop = scrollContainer.scrollTop + (coords.top - containerRect.top) - 20;
                             scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+                        } else {
+                            editor.commands.scrollIntoView();
                         }
                     } catch(e) {
                         editor.commands.scrollIntoView();

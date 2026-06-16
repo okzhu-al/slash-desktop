@@ -359,18 +359,25 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
                             )}
                         </div>
 
-                        {/* Icon — 个人=灰, 团队=淡靛蓝 */}
-                        <div className="w-4 flex items-center justify-center shrink-0">
+                        {/* Icon — 普通目录/文件=灰色线框，团队目录=蓝色实心底 */}
+                        <div
+                            className={cn(
+                                'flex items-center justify-center shrink-0 rounded-md transition-colors',
+                                isTeamItem
+                                    ? 'w-5 h-5 bg-[#002FA7] shadow-[0_1px_2px_rgba(0,47,167,0.28),inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-blue-500 dark:shadow-[0_1px_2px_rgba(59,130,246,0.3),inset_0_1px_0_rgba(255,255,255,0.14)]'
+                                    : 'w-4 h-4'
+                            )}
+                        >
                             {isFolder ? (
-                                <Folder size={16} strokeWidth={1} className={cn(
+                                <Folder size={isTeamItem ? 13 : 16} strokeWidth={isTeamItem ? 1.7 : 1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7]/70 dark:text-blue-400/80'
+                                        ? 'text-white'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             ) : (
-                                <FileText size={16} strokeWidth={1} className={cn(
+                                <FileText size={isTeamItem ? 13 : 16} strokeWidth={isTeamItem ? 1.7 : 1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7]/70 dark:text-blue-400/80'
+                                        ? 'text-white'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             )}
@@ -396,8 +403,8 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
 
                         {/* 团队根徽章 — 仅限非顶层根目录显示（避免跟 PARA 根目录混淆） */}
                         {isTeamRoot && !isProtectedParaFolder && (
-                            <div className="ml-auto shrink-0 opacity-0 group-hover:opacity-60 transition-opacity duration-200">
-                                <Users size={13} strokeWidth={1} className="text-zinc-500 dark:text-zinc-400" />
+                            <div className="ml-auto shrink-0 opacity-75 transition-opacity duration-200 group-hover:opacity-100">
+                                <Users size={13} strokeWidth={1.6} className="text-[#002FA7]/75 dark:text-blue-400/85" />
                             </div>
                         )}
 

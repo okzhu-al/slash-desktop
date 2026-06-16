@@ -110,7 +110,10 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity duration-300">
+        <div
+            className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+            data-update-modal-state={state}
+        >
             <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/20 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl shadow-2xl p-6 transition-all duration-300 transform scale-100 flex flex-col gap-4 text-center">
                 
                 {/* Close Button */}

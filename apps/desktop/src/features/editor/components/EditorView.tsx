@@ -139,6 +139,7 @@ export const EditorView = (props: EditorContainerState) => {
     const canSwitchDocStatus = !effectiveReadOnly && (isNoteEditor || isVaultOwner);
     // 是否展示协作锁胶囊（仅 collab 模式）
     const showCollabBadge = isTeamNote && noteDocStatus === 'collab';
+    const statusPillSurfaceClass = 'border border-white/45 dark:border-white/10 shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]';
     const readOnlyMessage = (() => {
         if (!effectiveReadOnly) return null;
         switch (readOnlyReason) {
@@ -195,7 +196,10 @@ export const EditorView = (props: EditorContainerState) => {
                     )}
                     {effectiveReadOnly && (
                         <div 
-                            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/20 shadow-sm select-none shrink-0 transition-colors" 
+                            className={cn(
+                                'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border-amber-500/20 select-none shrink-0 transition-colors',
+                                statusPillSurfaceClass
+                            )}
                             title={readOnlyMessage || t('editor.readonly_mode', '团队空间为只读模式')}
                         >
                             <Lock size={12} className="text-amber-600 dark:text-amber-500" />

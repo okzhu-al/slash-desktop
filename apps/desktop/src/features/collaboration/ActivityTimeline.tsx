@@ -732,10 +732,7 @@ function GroupRow({ item, onPreview, clickedTs, onItemClick, activeUnreadTsSet, 
 
 export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vaultPath, readOnly = false }: { notePath: string | null; docStatus?: DocStatus; vaultPath?: string | null; readOnly?: boolean }) {
     const { t } = useTranslation();
-    const { setLastRead, markRead, clearAllUnread, getUnreadEntry } = useCollabNotifyStore();
-    const globalUnreadFiles = useCollabNotifyStore(s => s.unreadFiles);
-    const globalUnreadFolders = useCollabNotifyStore(s => s.unreadFolders);
-    const hasAnyUnread = globalUnreadFiles.size > 0 || globalUnreadFolders.size > 0;
+    const { setLastRead, markRead, getUnreadEntry } = useCollabNotifyStore();
     const [snapshots,   setSnapshots]   = useState<SnapshotInfo[]>([]);
     const [annotations, setAnnotations] = useState<AnnotationInfo[]>([]);
     const [comments,    setComments]    = useState<CommentInfo[]>([]);
@@ -782,6 +779,36 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
             }
         }
         return entry?.unreadSince || 0;
+    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId]);
+
+    const currentUnreadTarget = useMemo(() => {
+        if (!relPath) return null;
+
+        let matchedPath = relPath;
+        let matchedEntry = getUnreadEntry(relPath);
+
+        if (!matchedEntry && currentFileId) {
+            for (const entry of unreadFiles.values()) {
+                if (entry.fileId === currentFileId) {
+                    matchedEntry = entry;
+                    matchedPath = entry.filePath;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedEntry && basename) {
+            for (const entry of unreadFiles.values()) {
+                if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
+                    matchedEntry = entry;
+                    matchedPath = entry.filePath;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedEntry) return null;
+        return { path: matchedPath, entry: matchedEntry };
     }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId]);
 
     // 冻结当前会话的界定游标，防止 markRead 后界面 NEW 瞬间蒸发
@@ -900,24 +927,8 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
         const allClicked = hasUnread && activeUnreadEvents.every((ev: RawEvent) => clickedTs.has(ev.ts));
 
         const teamVaultId = useSessionStore.getState().teamVaultId ?? '';
-        const st = useCollabNotifyStore.getState();
-
-        let hasGlobalRedDot = false;
-        let matchedPath = relPath;
-        const directEntry = st.getUnreadEntry(relPath);
-        let matchedEntry = directEntry;
-        if (!matchedEntry && currentFileId) {
-            for (const entry of st.unreadFiles.values()) {
-                if (entry.fileId === currentFileId) {
-                    matchedEntry = entry;
-                    break;
-                }
-            }
-        }
-        if (matchedEntry) {
-            hasGlobalRedDot = true;
-            matchedPath = matchedEntry.filePath;
-        }
+        const hasGlobalRedDot = Boolean(currentUnreadTarget);
+        const matchedPath = currentUnreadTarget?.path ?? relPath;
 
         if (hasGlobalRedDot) {
             // Only explicit user consumption should clear a file red dot.
@@ -930,7 +941,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
                 if (matchedPath !== relPath) setLastRead(relPath, Date.now());
             }
         }
-    }, [everLoaded, notePath, clickedTs, activeUnreadEvents, markRead, setLastRead, unreadFiles, currentFileId]); // eslint-disable-line
+    }, [everLoaded, notePath, clickedTs, activeUnreadEvents, markRead, setLastRead, relPath, currentUnreadTarget]); // eslint-disable-line
 
     const loadAll = useCallback(async () => {
         if (!resolved) return;
@@ -1023,34 +1034,12 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
         const teamVaultId = useSessionStore.getState().teamVaultId ?? '';
         if (!teamVaultId || !relPath) return;
 
-        const st = useCollabNotifyStore.getState();
-        let matchedPath = relPath;
-        let matchedEntry = st.getUnreadEntry(relPath);
-        if (!matchedEntry && currentFileId) {
-            for (const entry of st.unreadFiles.values()) {
-                if (entry.fileId === currentFileId) {
-                    matchedEntry = entry;
-                    matchedPath = entry.filePath;
-                    break;
-                }
-            }
+        if (currentUnreadTarget) {
+            void markRead(currentUnreadTarget.path, teamVaultId);
+            setLastRead(currentUnreadTarget.path, Date.now());
+            if (currentUnreadTarget.path !== relPath) setLastRead(relPath, Date.now());
         }
-        if (!matchedEntry && basename) {
-            for (const entry of st.unreadFiles.values()) {
-                if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
-                    matchedEntry = entry;
-                    matchedPath = entry.filePath;
-                    break;
-                }
-            }
-        }
-
-        if (matchedEntry) {
-            void markRead(matchedPath, teamVaultId);
-            setLastRead(matchedPath, Date.now());
-            if (matchedPath !== relPath) setLastRead(relPath, Date.now());
-        }
-    }, [activeUnreadTsSet, basename, currentFileId, markRead, relPath, setLastRead]);
+    }, [activeUnreadTsSet, markRead, relPath, setLastRead, currentUnreadTarget]);
 
     return (
         <div className="flex flex-col h-full">
@@ -1061,11 +1050,16 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
                     <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">{t('activity.panel_title', '协作历史')}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    {hasAnyUnread && (
+                    {currentUnreadTarget && (
                         <button
                             onClick={() => {
                                 const vaultId = useSessionStore.getState().teamVaultId ?? '';
-                                if (vaultId) clearAllUnread(vaultId);
+                                if (!vaultId) return;
+                                void markRead(currentUnreadTarget.path, vaultId);
+                                setLastRead(currentUnreadTarget.path, Date.now());
+                                if (currentUnreadTarget.path !== relPath) {
+                                    setLastRead(relPath, Date.now());
+                                }
                             }}
                             title={t('activity.clear_all_unread', '全部标为已读')}
                             className="p-1 rounded-md transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 text-indigo-500 dark:text-blue-400"

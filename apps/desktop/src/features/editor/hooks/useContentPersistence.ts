@@ -79,6 +79,18 @@ export function useContentPersistence({
         return initialTitle;
     }, [initialTitle]);
 
+    const claimPersonalMetadata = useCallback((metadata: Record<string, any>, displayName: string) => {
+        const claimed = { ...metadata };
+        claimed.editor = displayName;
+        claimed.contributors = [displayName];
+        claimed.doc_status = 'solo';
+        delete claimed.editor_id;
+        delete claimed.team_path;
+        delete claimed.team_vault_id;
+        delete claimed.directory_id;
+        return claimed;
+    }, []);
+
     /**
      * Core save function with frontmatter parsing
      * Note: AttributeLink relations extraction is now handled by Rust backend
@@ -110,7 +122,7 @@ export function useContentPersistence({
         const safeMeta = (currentMeta && typeof currentMeta === 'object') ? currentMeta : {};
 
         // Keep autosave on the last confirmed title. The live input value may still be unconfirmed.
-        const mergedMeta = {
+        let mergedMeta: Record<string, any> = {
             ...safeMeta,
             title: getConfirmedTitle(safeMeta),
         };
@@ -118,12 +130,11 @@ export function useContentPersistence({
         // 🛡️ contributor 写入门控：仅用户真正编辑时才加入（防止 B 打开笔记即改变 frontmatter hash）
         const displayName = useSessionStore.getState().displayName;
         if (displayName && hasUserEditedRef.current) {
-            // 🛡️ BUG21-v2: 双重信号判定 — 异步 isTeamNote + 同步 doc_status 兜底
-            // doc_status 仅存在于团队文件（solo/collab），个人文件无此字段
-            const effectiveIsTeamNote = isTeamNoteRef.current || !!mergedMeta.doc_status;
-            if (!effectiveIsTeamNote) {
-                // Personal Space Note: Automatically claim ownership to avoid lockout
-                mergedMeta.editor = displayName;
+            // Team identity must come from path/mapping, not from imported frontmatter.
+            // External Slash markdown copied into a personal folder may carry doc_status/editor
+            // from another vault; first real edit adopts it as the current user's personal note.
+            if (!isTeamNoteRef.current) {
+                mergedMeta = claimPersonalMetadata(mergedMeta, displayName);
             } else {
                 // Team Note: Only add to contributors for collab mode
                 // 🛡️ Solo mode: NEVER overwrite editor — Solo lock is enforced server-side
@@ -175,7 +186,7 @@ export function useContentPersistence({
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editorRef, frontmatterRef, getConfirmedTitle, isMountedRef, isSavingRef, isRenamingRef, noteIdRef, onSave]);
+    }, [claimPersonalMetadata, editorRef, frontmatterRef, getConfirmedTitle, isMountedRef, isSavingRef, isRenamingRef, noteIdRef, onSave]);
 
     /**
      * Schedule a debounced save (500ms delay)
@@ -230,7 +241,11 @@ export function useContentPersistence({
             } catch { }
 
             const safeMeta = (currentMeta && typeof currentMeta === 'object') ? currentMeta : {};
-            const mergedMeta = { ...safeMeta, title: getConfirmedTitle(safeMeta) };
+            let mergedMeta: Record<string, any> = { ...safeMeta, title: getConfirmedTitle(safeMeta) };
+            const displayName = useSessionStore.getState().displayName;
+            if (displayName && hasUserEditedRef.current && !isTeamNoteRef.current) {
+                mergedMeta = claimPersonalMetadata(mergedMeta, displayName);
+            }
 
             // 使用 metadataService 序列化：直接 import stringify 构建文件内容
             // 为避免引入额外依赖，用 gray-matter stringify
@@ -257,7 +272,7 @@ export function useContentPersistence({
         } catch (e) {
             console.warn('[flushPendingSave] Failed:', e);
         }
-    }, [frontmatterRef, getConfirmedTitle]);
+    }, [claimPersonalMetadata, frontmatterRef, getConfirmedTitle]);
 
     /**
      * Cancel any pending debounced save

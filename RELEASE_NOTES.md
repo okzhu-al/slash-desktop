@@ -1,15 +1,29 @@
-## v0.1.3-beta.12
+## v0.1.3-beta.13
 
 #### 中文
 
 ##### Bug 修复
 
-- 修复新建笔记、创建文件夹或保存内容后，手动折叠的 PARA 根目录会被重新展开的问题。现在根目录会记住用户的折叠状态，不再在刷新后自动打断侧边栏视图。
-- 修复团队批注高亮在文档切换后偶发残留到另一篇笔记上的问题。批注恢复现在会在切换笔记时立即清理旧高亮，并丢弃已经过期的异步恢复结果。
+- 修复右侧“笔记大纲”点击标题后，光标已定位但编辑区没有同步滚动的问题。
+- 修复协作历史“全部标为已读”会误清其他团队笔记未读红点的问题。
+- 修复 Windows 更新下载遮罩未覆盖窗口控制按钮的问题。
+- 修复个人目录拷入带旧 Slash 元数据的外部 Markdown 后，首次编辑不会被当前用户接管的问题。
+
+##### 体验优化
+
+- 优化团队笔记顶部状态胶囊的视觉一致性。
+- 增强个人空间侧边栏中团队目录的识别度。
 
 #### English
 
 ##### Bug Fixes
 
-- Fixed manually collapsed PARA root folders reopening after creating notes, creating folders, or saving content. The sidebar now remembers the user's collapsed root state across refreshes.
-- Fixed team annotation highlights occasionally lingering on the next note after switching documents. Annotation restore now clears stale marks on note switch and ignores outdated async restore results.
+- Fixed outline navigation moving the cursor without scrolling the editor viewport.
+- Fixed "mark all as read" in collaboration history clearing unread dots from other team notes.
+- Fixed the Windows update download overlay not covering window control buttons.
+- Fixed imported Markdown files with stale Slash metadata in Personal space not being claimed by the current user on first edit.
+
+##### Improvements
+
+- Improved visual consistency for team-note status pills.
+- Made team directories easier to distinguish in the Personal-space sidebar.

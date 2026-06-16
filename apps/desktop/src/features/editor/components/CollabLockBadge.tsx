@@ -27,6 +27,7 @@ export function CollabLockBadge({ lockState, lockedByName, localUser }: CollabLo
     let icon: React.ReactNode;
     let label: string;
     let pillClass: string;
+    const pillSurfaceClass = 'border border-white/45 dark:border-white/10 shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]';
 
     switch (lockState) {
         case 'acquired':
@@ -62,6 +63,7 @@ export function CollabLockBadge({ lockState, lockedByName, localUser }: CollabLo
             className={[
                 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
                 'ring-1 transition-all duration-200 select-none',
+                pillSurfaceClass,
                 pillClass,
             ].join(' ')}
         >

@@ -1,14 +1,13 @@
 // FolderPage — 统一的双空间目录管理页面
-// 负责解析跨空间映射，并呈现：任务统计 + AI配置 + 团队目录面板
+// 负责解析跨空间映射，并呈现：目录任务概览 + AI配置 + 团队目录面板
 
 import { useState, useEffect, useCallback } from 'react';
-import { Bot, ChevronRight, Loader2, CheckSquare, Square } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, CheckSquare, FileText, Loader2, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/shared/utils/cn';
-import { ProjectKanban } from '@/features/kanban/ProjectKanban';
 import { TeamDirPanel } from '@/features/team/TeamDirPanel';
-import { taskService } from '@/features/kanban/taskService';
+import { taskService, type Task } from '@/features/kanban/taskService';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { PARA_TEAM_TO_PERSONAL } from '@/features/sidebar/hooks/useTeamDirectoryMapping';
 
@@ -50,6 +49,98 @@ type ProviderChoice = 'local' | 'online';
 
 const normalizeRelPath = (path: string): string => path.replace(/\\/g, '/').replace(/\/+$/, '');
 
+interface ChildTaskSummary {
+    path: string;
+    name: string;
+    todo: number;
+    done: number;
+    total: number;
+}
+
+function getTaskTitle(rawText: string): string {
+    return rawText
+        .replace(/📅\s*\d{4}-\d{2}-\d{2}/g, '')
+        .replace(/👤\s*\S+/g, '')
+        .replace(/@[\S]+/g, '')
+        .replace(/[🚩#](High|Medium|Low|Med|高|中|低)/gi, '')
+        .trim();
+}
+
+function getTaskNoteName(notePath: string): string {
+    return notePath.split('/').pop()?.replace(/\.md$/, '') || notePath;
+}
+
+function sortTasks(tasks: Task[]): Task[] {
+    return [...tasks].sort((a, b) => {
+        if (a.is_completed !== b.is_completed) {
+            return a.is_completed ? 1 : -1;
+        }
+        if (a.due_date && b.due_date && a.due_date !== b.due_date) {
+            return a.due_date.localeCompare(b.due_date);
+        }
+        if (a.due_date && !b.due_date) return -1;
+        if (!a.due_date && b.due_date) return 1;
+        return (b.updated_at || 0) - (a.updated_at || 0);
+    });
+}
+
+function buildFolderTaskSections(allTasks: Task[], relPath: string): {
+    currentDirTasks: Task[];
+    childSummaries: ChildTaskSummary[];
+    childTasksByPath: Record<string, Task[]>;
+} {
+    const directTasks: Task[] = [];
+    const childSummaryMap = new Map<string, ChildTaskSummary>();
+    const childTasksMap = new Map<string, Task[]>();
+
+    for (const task of allTasks) {
+        const taskPath = normalizeRelPath(task.note_path);
+        if (!taskPath.startsWith(`${relPath}/`)) continue;
+
+        const suffix = taskPath.slice(relPath.length + 1);
+        if (!suffix) continue;
+
+        const segments = suffix.split('/');
+        if (segments.length === 1) {
+            directTasks.push(task);
+            continue;
+        }
+
+        const childName = segments[0];
+        const childPath = `${relPath}/${childName}`;
+        const summary = childSummaryMap.get(childPath) || {
+            path: childPath,
+            name: childName,
+            todo: 0,
+            done: 0,
+            total: 0,
+        };
+        summary.total += 1;
+        if (task.is_completed) {
+            summary.done += 1;
+        } else {
+            summary.todo += 1;
+        }
+        childSummaryMap.set(childPath, summary);
+
+        const childTasks = childTasksMap.get(childPath) || [];
+        childTasks.push(task);
+        childTasksMap.set(childPath, childTasks);
+    }
+
+    return {
+        currentDirTasks: sortTasks(directTasks),
+        childSummaries: Array.from(childSummaryMap.values()).sort((a, b) => {
+            if (b.todo !== a.todo) return b.todo - a.todo;
+            if (b.total !== a.total) return b.total - a.total;
+            return a.name.localeCompare(b.name);
+        }),
+        childTasksByPath: Object.fromEntries(
+            Array.from(childTasksMap.entries()).map(([path, tasks]) => [path, sortTasks(tasks)])
+        ),
+    };
+}
+
 export function FolderPage({
     folderPath,
     folderName,
@@ -82,9 +173,12 @@ export function FolderPage({
     // 是否加入了团队（具有 Team Vault ID）
     const hasTeamVault = !!useSessionStore.getState().teamVaultId;
 
-    // ── 任务统计 ──
-    const [taskStats, setTaskStats] = useState<{ todo: number; done: number; total: number }>({ todo: 0, done: 0, total: 0 });
-    const [kanbanExpanded, setKanbanExpanded] = useState(true);
+    // ── 目录任务概览 ──
+    const [taskBoardLoading, setTaskBoardLoading] = useState(false);
+    const [currentDirTasks, setCurrentDirTasks] = useState<Task[]>([]);
+    const [childSummaries, setChildSummaries] = useState<ChildTaskSummary[]>([]);
+    const [childTasksByPath, setChildTasksByPath] = useState<Record<string, Task[]>>({});
+    const [expandedChildPath, setExpandedChildPath] = useState<string | null>(null);
 
     // 使目录空间映射能够响应 Promote 后立即重新解析
     const [refreshKey, setRefreshKey] = useState(0);
@@ -251,25 +345,80 @@ export function FolderPage({
         return () => { isMounted = false; };
     }, [initialRelativePath, mode, vaultPath, refreshKey]);
 
-    const isProjectFolder = localRelPath ? (localRelPath === '01_Projects' || localRelPath.startsWith('01_Projects/')) : false;
     const resolvedLocalAbsPath = localRelPath ? `${vaultPath}/${localRelPath}` : folderPath;
 
-    // ── 加载任务统计 ──
+    // ── 加载目录任务概览 ──
     useEffect(() => {
-        if (!isProjectFolder || !localRelPath) return;
-        const relPath = localRelPath;
+        if (!localRelPath) {
+            setCurrentDirTasks([]);
+            setChildSummaries([]);
+            setChildTasksByPath({});
+            setExpandedChildPath(null);
+            return;
+        }
+        const relPath = normalizeRelPath(localRelPath);
+        let isMounted = true;
+        setTaskBoardLoading(true);
         (async () => {
             try {
                 const allTasks = await taskService.getTasks();
-                const projectTasks = allTasks.filter(task => task.note_path.startsWith(relPath));
-                const todo = projectTasks.filter(t => !t.is_completed).length;
-                const done = projectTasks.filter(t => t.is_completed).length;
-                setTaskStats({ todo, done, total: projectTasks.length });
+                const {
+                    currentDirTasks: nextCurrentDirTasks,
+                    childSummaries: nextChildSummaries,
+                    childTasksByPath: nextChildTasksByPath,
+                } = buildFolderTaskSections(allTasks, relPath);
+
+                if (!isMounted) return;
+                setCurrentDirTasks(nextCurrentDirTasks);
+                setChildSummaries(nextChildSummaries);
+                setChildTasksByPath(nextChildTasksByPath);
+                setExpandedChildPath(prev => (prev && nextChildTasksByPath[prev] ? prev : null));
             } catch (e) {
-                console.error('[FolderPage] Failed to load task stats:', e);
+                console.error('[FolderPage] Failed to load folder tasks:', e);
+                if (!isMounted) return;
+                setCurrentDirTasks([]);
+                setChildSummaries([]);
+                setChildTasksByPath({});
+                setExpandedChildPath(null);
+            } finally {
+                if (isMounted) setTaskBoardLoading(false);
             }
         })();
-    }, [isProjectFolder, localRelPath]);
+        const handleRefresh = () => {
+            setTaskBoardLoading(true);
+            taskService.getTasks()
+                .then(allTasks => {
+                    const {
+                        currentDirTasks: nextCurrentDirTasks,
+                        childSummaries: nextChildSummaries,
+                        childTasksByPath: nextChildTasksByPath,
+                    } = buildFolderTaskSections(allTasks, relPath);
+
+                    if (!isMounted) return;
+                    setCurrentDirTasks(nextCurrentDirTasks);
+                    setChildSummaries(nextChildSummaries);
+                    setChildTasksByPath(nextChildTasksByPath);
+                    setExpandedChildPath(prev => (prev && nextChildTasksByPath[prev] ? prev : null));
+                })
+                .catch(e => {
+                    console.error('[FolderPage] Failed to refresh folder tasks:', e);
+                    if (!isMounted) return;
+                    setCurrentDirTasks([]);
+                    setChildSummaries([]);
+                    setChildTasksByPath({});
+                    setExpandedChildPath(null);
+                })
+                .finally(() => {
+                    if (isMounted) setTaskBoardLoading(false);
+                });
+        };
+
+        window.addEventListener('sync:completed', handleRefresh);
+        return () => {
+            isMounted = false;
+            window.removeEventListener('sync:completed', handleRefresh);
+        };
+    }, [localRelPath]);
 
     // Load current folder config
     const loadConfig = useCallback(async () => {
@@ -302,7 +451,9 @@ export function FolderPage({
         }
     };
 
-    const donePercent = taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0;
+    const hasCurrentDirTasks = currentDirTasks.length > 0;
+    const hasChildSummary = childSummaries.length > 0;
+    const showTaskBoard = !!localRelPath && (taskBoardLoading || hasCurrentDirTasks || hasChildSummary);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-zinc-900">
@@ -352,60 +503,146 @@ export function FolderPage({
                     </div>
                 ) : (
                     <div className="flex flex-col">
-                        {/* 1. Task Stats Card (可折叠，点击展开看板) */}
-                        {isProjectFolder && localRelPath && (
+                        {/* 1. Folder Task Board */}
+                        {showTaskBoard && (
                             <div className="border-b border-zinc-200 dark:border-zinc-700">
-                                <button
-                                    onClick={() => setKanbanExpanded(v => !v)}
-                                    className="w-full px-6 py-4 flex items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
-                                >
-                                    <ChevronRight size={14} className={cn('shrink-0 transition-transform text-zinc-400', kanbanExpanded && 'rotate-90')} />
-                                    
-                                    {/* 统计数据 */}
-                                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5">
-                                            <Square size={14} className="text-zinc-500" />
-                                            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                                {t('kanban.todo')}
-                                            </span>
-                                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                                {taskStats.todo}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <CheckSquare size={14} className="text-green-500" />
-                                            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                                {t('kanban.done')}
-                                            </span>
-                                            <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                                                {taskStats.done}
-                                            </span>
-                                        </div>
+                                <div className="px-6 py-5 space-y-5">
+                                    <div className="flex items-center gap-2">
+                                        <CheckSquare size={16} className="text-zinc-500 dark:text-zinc-400" />
+                                        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                            {t('folder.task_board_title', '目录任务看板')}
+                                        </h2>
                                     </div>
 
-                                    {/* 进度条 */}
-                                    {taskStats.total > 0 && (
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <div className="w-24 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
-                                                    style={{ width: `${donePercent}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-xs text-zinc-400 w-8 text-right">{donePercent}%</span>
+                                    {taskBoardLoading && (
+                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                            <Loader2 size={16} className="animate-spin" />
+                                            {t('common.loading', 'Loading...')}
                                         </div>
                                     )}
-                                </button>
 
-                                {/* 展开的看板 */}
-                                {kanbanExpanded && (
-                                    <ProjectKanban
-                                        projectPath={`${vaultPath}/${localRelPath}`}
-                                        projectName={folderName}
-                                        vaultPath={vaultPath}
-                                        onNavigateToNote={onNavigateToNote}
-                                    />
-                                )}
+                                    {!taskBoardLoading && hasChildSummary && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                                                <ChevronRight size={12} />
+                                                <span>{t('folder.child_task_summary', '子目录任务清单')}</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {childSummaries.map(summary => {
+                                                    const expanded = expandedChildPath === summary.path;
+                                                    const childTasks = childTasksByPath[summary.path] || [];
+                                                    return (
+                                                        <div key={summary.path} className="rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden bg-white dark:bg-zinc-900">
+                                                            <button
+                                                                onClick={() => setExpandedChildPath(prev => prev === summary.path ? null : summary.path)}
+                                                                className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                                                            >
+                                                                {expanded ? (
+                                                                    <ChevronDown size={14} className="shrink-0 text-zinc-400" />
+                                                                ) : (
+                                                                    <ChevronRight size={14} className="shrink-0 text-zinc-400" />
+                                                                )}
+                                                                <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100 text-left flex-1 min-w-0 truncate">
+                                                                    {summary.name}
+                                                                </span>
+                                                                <div className="flex items-center gap-3 shrink-0 text-xs">
+                                                                    <span className="inline-flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                                                                        <Square size={12} />
+                                                                        {summary.todo}
+                                                                    </span>
+                                                                    <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                                                                        <CheckSquare size={12} />
+                                                                        {summary.done}
+                                                                    </span>
+                                                                </div>
+                                                            </button>
+
+                                                            {expanded && (
+                                                                <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 py-3 bg-zinc-50/70 dark:bg-zinc-800/30 space-y-2">
+                                                                    {childTasks.length > 0 ? childTasks.map(task => (
+                                                                        <button
+                                                                            key={`${task.note_path}:${task.line_number}:${task.raw_text}`}
+                                                                            onClick={() => onNavigateToNote?.(task.note_path)}
+                                                                            className="w-full text-left rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+                                                                        >
+                                                                            <div className="flex items-start gap-2">
+                                                                                {task.is_completed ? (
+                                                                                    <CheckSquare size={14} className="mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
+                                                                                ) : (
+                                                                                    <Square size={14} className="mt-0.5 shrink-0 text-zinc-400" />
+                                                                                )}
+                                                                                <div className="min-w-0 flex-1">
+                                                                                    <div className={cn(
+                                                                                        "text-sm",
+                                                                                        task.is_completed
+                                                                                            ? "text-zinc-400 dark:text-zinc-500 line-through"
+                                                                                            : "text-zinc-800 dark:text-zinc-100"
+                                                                                    )}>
+                                                                                        {getTaskTitle(task.raw_text) || task.raw_text}
+                                                                                    </div>
+                                                                                    <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
+                                                                                        <FileText size={12} />
+                                                                                        <span className="truncate">{getTaskNoteName(task.note_path)}</span>
+                                                                                        {task.due_date && <span>· {task.due_date}</span>}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </button>
+                                                                    )) : (
+                                                                        <div className="text-sm text-zinc-400 py-2">
+                                                                            {t('folder.no_tasks_in_child', '该子目录下暂无任务')}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!taskBoardLoading && hasCurrentDirTasks && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
+                                                <FileText size={12} />
+                                                <span>{t('folder.current_dir_tasks', '当前目录任务清单')}</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {currentDirTasks.map(task => (
+                                                    <button
+                                                        key={`${task.note_path}:${task.line_number}:${task.raw_text}`}
+                                                        onClick={() => onNavigateToNote?.(task.note_path)}
+                                                        className="w-full text-left rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+                                                    >
+                                                        <div className="flex items-start gap-2">
+                                                            {task.is_completed ? (
+                                                                <CheckSquare size={14} className="mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
+                                                            ) : (
+                                                                <Square size={14} className="mt-0.5 shrink-0 text-zinc-400" />
+                                                            )}
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className={cn(
+                                                                    "text-sm",
+                                                                    task.is_completed
+                                                                        ? "text-zinc-400 dark:text-zinc-500 line-through"
+                                                                        : "text-zinc-800 dark:text-zinc-100"
+                                                                )}>
+                                                                    {getTaskTitle(task.raw_text) || task.raw_text}
+                                                                </div>
+                                                                <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
+                                                                    <FileText size={12} />
+                                                                    <span className="truncate">{getTaskNoteName(task.note_path)}</span>
+                                                                    {task.due_date && <span>· {task.due_date}</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
