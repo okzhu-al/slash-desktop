@@ -359,25 +359,23 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
                             )}
                         </div>
 
-                        {/* Icon — 普通目录/文件=灰色线框，团队目录=蓝色实心底 */}
+                        {/* Icon — 普通目录/文件=灰色线框，团队目录=品牌色实心图标 */}
                         <div
                             className={cn(
                                 'flex items-center justify-center shrink-0 rounded-md transition-colors',
-                                isTeamItem
-                                    ? 'w-5 h-5 bg-[#002FA7] shadow-[0_1px_2px_rgba(0,47,167,0.28),inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-blue-500 dark:shadow-[0_1px_2px_rgba(59,130,246,0.3),inset_0_1px_0_rgba(255,255,255,0.14)]'
-                                    : 'w-4 h-4'
+                                'w-4 h-4'
                             )}
                         >
                             {isFolder ? (
-                                <Folder size={isTeamItem ? 13 : 16} strokeWidth={isTeamItem ? 1.7 : 1} className={cn(
+                                <Folder size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-white'
+                                        ? 'text-[#002FA7] dark:text-blue-300 fill-current'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             ) : (
-                                <FileText size={isTeamItem ? 13 : 16} strokeWidth={isTeamItem ? 1.7 : 1} className={cn(
+                                <FileText size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-white'
+                                        ? 'text-[#002FA7] dark:text-blue-300 fill-current'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             )}

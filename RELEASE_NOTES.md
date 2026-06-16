@@ -1,13 +1,13 @@
-## v0.1.3-beta.15
+## v0.1.3-beta.16
 
 #### 中文
 
-##### Bug 修复
+##### 体验优化
 
-- 修复任务列表中使用中文输入法连续输入、行首插入、中间插入或取消未完成拼音时，可能吃掉前后文字、删除整行或丢失多级缩进的问题。
+- 优化个人空间文件树中的团队目录和团队笔记图标样式。团队项目现在与普通项目保持相同尺寸和布局，只通过蓝色实心图标表达团队身份，减少视觉干扰。
 
 #### English
 
-##### Bug Fixes
+##### Improvements
 
-- Fixed task-list Chinese IME input when typing multiple words, inserting at the beginning or middle of a task, or cancelling unfinished pinyin, which could remove surrounding text, delete the whole task line, or lose nested indentation.
+- Refined team directory and team note icons in the Personal-space file tree. Team items now keep the same size and layout as regular items, using only a solid blue icon to indicate team identity with less visual noise.
