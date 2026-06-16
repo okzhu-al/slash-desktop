@@ -1006,10 +1006,18 @@ export const MixedTaskItem = TaskItem.extend({
         let compositionStartPos: number | null = null;
         let compositionTextblockStart: number | null = null;
         let compositionTaskItemStart: number | null = null;
+        let compositionPrefixText = '';
+        let compositionSuffixText = '';
+        let compositionStructureSignature: string | null = null;
+        let recentCompositionTextblockStart: number | null = null;
         let recentCompositionTaskItemStart: number | null = null;
+        let recentCompositionPrefixText = '';
+        let recentCompositionSuffixText = '';
+        let recentCompositionStructureSignature: string | null = null;
         let recentCompositionEndedAt = 0;
         const compositionGuardAfterEndMs = 600;
         const maxCompositionTextLength = 64;
+        const compositionPreeditPattern = /[A-Za-z0-9][A-Za-z0-9\s']{0,63}$/;
 
         const isInsideTaskItem = ($pos: any) => {
             for (let depth = $pos.depth; depth >= 0; depth--) {
@@ -1020,6 +1028,14 @@ export const MixedTaskItem = TaskItem.extend({
             return -1;
         };
 
+        const resetRecentComposition = () => {
+            recentCompositionTextblockStart = null;
+            recentCompositionTaskItemStart = null;
+            recentCompositionPrefixText = '';
+            recentCompositionSuffixText = '';
+            recentCompositionStructureSignature = null;
+        };
+
         const isDirectTaskParagraph = ($pos: any) => {
             const taskItemDepth = isInsideTaskItem($pos);
             return taskItemDepth >= 0
@@ -1027,16 +1043,53 @@ export const MixedTaskItem = TaskItem.extend({
                 && $pos.parent.isTextblock;
         };
 
-        const getGuardedTaskItemStart = () => {
-            if (compositionTaskItemStart !== null) return compositionTaskItemStart;
+        const getGuardedTaskContext = () => {
+            if (compositionTaskItemStart !== null) {
+                return {
+                    taskItemStart: compositionTaskItemStart,
+                    textblockStart: compositionTextblockStart,
+                    prefixText: compositionPrefixText,
+                    suffixText: compositionSuffixText,
+                    structureSignature: compositionStructureSignature,
+                };
+            }
             if (
                 recentCompositionTaskItemStart !== null
                 && Date.now() - recentCompositionEndedAt <= compositionGuardAfterEndMs
             ) {
-                return recentCompositionTaskItemStart;
+                return {
+                    taskItemStart: recentCompositionTaskItemStart,
+                    textblockStart: recentCompositionTextblockStart,
+                    prefixText: recentCompositionPrefixText,
+                    suffixText: recentCompositionSuffixText,
+                    structureSignature: recentCompositionStructureSignature,
+                };
             }
-            recentCompositionTaskItemStart = null;
+            resetRecentComposition();
             return null;
+        };
+
+        const getTaskStructureSignature = ($pos: any) => {
+            const taskItemDepth = isInsideTaskItem($pos);
+            if (taskItemDepth < 0) return null;
+
+            const parts: string[] = [];
+            for (let depth = 0; depth <= taskItemDepth; depth++) {
+                const name = $pos.node(depth).type.name;
+                if (name === 'taskList' || name === 'bulletList' || name === 'orderedList' || name === 'taskItem' || name === 'listItem') {
+                    parts.push(name);
+                }
+            }
+            return parts.join('/');
+        };
+
+        const getTaskStructureSignatureAt = (doc: any, pos: number | null) => {
+            if (pos === null || pos < 0 || pos > doc.content.size) return null;
+            try {
+                return getTaskStructureSignature(doc.resolve(Math.min(pos, doc.content.size)));
+            } catch {
+                return null;
+            }
         };
 
         const hasTaskItemShell = (doc: any, pos: number) => {
@@ -1049,67 +1102,299 @@ export const MixedTaskItem = TaskItem.extend({
             return isInsideTaskItem($pos) >= 0;
         };
 
+        const getTextblockTextAt = (doc: any, pos: number | null) => {
+            if (pos === null || pos < 0 || pos > doc.content.size) return null;
+            try {
+                const $pos = doc.resolve(Math.min(pos, doc.content.size));
+                if ($pos.parent?.isTextblock) return $pos.parent.textContent ?? '';
+            } catch { /* guarded by null return */ }
+            return null;
+        };
+
+        const getTaskImeSnapshot = (view: any, label: string, extra: Record<string, any> = {}) => {
+            const { state } = view;
+            const { selection } = state;
+            const taskItemDepth = isInsideTaskItem(selection.$from);
+            const paragraphText = selection.$from.parent?.textContent ?? '';
+            const textblockStart = selection.$from.parent?.isTextblock
+                ? selection.$from.start(selection.$from.depth)
+                : null;
+            const taskItemStart = taskItemDepth >= 0 ? selection.$from.before(taskItemDepth) : null;
+            const taskNode = typeof taskItemStart === 'number' ? state.doc.nodeAt(taskItemStart) : null;
+            const textBeforeCursor = textblockStart !== null
+                ? state.doc.textBetween(textblockStart, selection.from, '', '\0')
+                : '';
+            let domText = '';
+            try {
+                const domAtPos = view.domAtPos(selection.from);
+                const node = domAtPos.node instanceof Element
+                    ? domAtPos.node
+                    : domAtPos.node.parentElement;
+                domText = node?.closest?.('li[data-type="taskItem"]')?.textContent ?? '';
+            } catch { /* diagnostics only */ }
+
+            return {
+                label,
+                selectionFrom: selection.from,
+                selectionTo: selection.to,
+                selectionEmpty: selection.empty,
+                taskItemDepth,
+                taskItemStart,
+                compositionStartPos,
+                compositionTextblockStart,
+                compositionTaskItemStart,
+                recentCompositionTaskItemStart,
+                paragraphText,
+                taskText: taskNode?.textContent ?? null,
+                textBeforeCursor,
+                domText,
+                ...extra,
+            };
+        };
+
+        const shouldLogTaskIme = () => {
+            try {
+                if (typeof window === 'undefined') return false;
+                return window.localStorage?.getItem('slash_debug_task_ime') === '1'
+                    || (window as any).__slashTaskImeDebug === true;
+            } catch {
+                return false;
+            }
+        };
+
+        const logTaskIme = (label: string, view: any, extra: Record<string, any> = {}) => {
+            if (!shouldLogTaskIme()) return;
+            try {
+                console.warn('[TaskIME]', getTaskImeSnapshot(view, label, extra));
+            } catch (error) {
+                console.warn('[TaskIME]', label, { error, ...extra });
+            }
+        };
+
+        const findTrailingPreeditRange = (state: any, selection: any) => {
+            if (!selection.empty || !isDirectTaskParagraph(selection.$from)) return null;
+            if (compositionTextblockStart === null) return null;
+            if (selection.$from.start(selection.$from.depth) !== compositionTextblockStart) return null;
+
+            const to = Math.min(selection.from, selection.$from.end(selection.$from.depth));
+            const textBeforeCursor = state.doc.textBetween(compositionTextblockStart, to, '', '\0');
+            const match = textBeforeCursor.match(compositionPreeditPattern);
+            if (!match || match.index === undefined) return null;
+
+            const from = compositionTextblockStart + match.index;
+            if (to <= from || to - from > maxCompositionTextLength) return null;
+
+            const text = state.doc.textBetween(from, to, '', '\0');
+            if (!/^[A-Za-z0-9\s']+$/.test(text)) return null;
+
+            return { from, to };
+        };
+
         return [
             ...(this.parent?.() ?? []),
             new Plugin({
                 key: new PluginKey('taskItemImeCompositionGuard'),
                 props: {
                     handleDOMEvents: {
-                        compositionstart: (view) => {
+                        compositionstart: (view, event) => {
                             const { selection } = view.state;
                             compositionStartPos = selection.from;
                             compositionTextblockStart = selection.$from.parent.isTextblock
                                 ? selection.$from.start(selection.$from.depth)
                                 : null;
+                            compositionPrefixText = compositionTextblockStart !== null
+                                ? view.state.doc.textBetween(compositionTextblockStart, selection.from, '', '\0')
+                                : '';
+                            compositionSuffixText = selection.$from.parent.isTextblock
+                                ? selection.$from.parent.textBetween(selection.$from.parentOffset, selection.$from.parent.content.size, '', '\0')
+                                : '';
                             const taskItemDepth = isInsideTaskItem(selection.$from);
                             compositionTaskItemStart = taskItemDepth >= 0
                                 ? selection.$from.before(taskItemDepth)
                                 : null;
-                            recentCompositionTaskItemStart = null;
+                            compositionStructureSignature = getTaskStructureSignature(selection.$from);
+                            resetRecentComposition();
+                            if (compositionTaskItemStart !== null) {
+                                logTaskIme('compositionstart', view, {
+                                    eventData: (event as CompositionEvent).data || '',
+                                    compositionPrefixText,
+                                    compositionSuffixText,
+                                    compositionStructureSignature,
+                                });
+                            }
                             return false;
                         },
                         beforeinput: (view, event) => {
                             const inputEvent = event as InputEvent;
-                            if (inputEvent.inputType !== 'deleteCompositionText') return false;
+                            if (
+                                inputEvent.inputType !== 'deleteCompositionText'
+                                && inputEvent.inputType !== 'insertFromComposition'
+                            ) {
+                                return false;
+                            }
+                            logTaskIme('beforeinput:seen', view, {
+                                inputType: inputEvent.inputType,
+                                data: inputEvent.data,
+                            });
                             if (compositionStartPos === null || compositionTextblockStart === null) return false;
 
                             const { state } = view;
                             const { selection } = state;
-                            if (!selection.empty || !isDirectTaskParagraph(selection.$from)) return false;
-                            if (selection.$from.start(selection.$from.depth) !== compositionTextblockStart) return false;
-
-                            const from = Math.max(compositionTextblockStart, compositionStartPos);
-                            const to = Math.min(selection.from, selection.$from.end(selection.$from.depth));
-                            if (to <= from || to - from > maxCompositionTextLength) return false;
-
-                            const deleting = state.doc.textBetween(from, to, '', '\0');
-                            if (!/^[A-Za-z0-9\s']+$/.test(deleting)) return false;
+                            const range = findTrailingPreeditRange(state, selection);
+                            if (!range) {
+                                logTaskIme('beforeinput:no-range', view, {
+                                    inputType: inputEvent.inputType,
+                                    data: inputEvent.data,
+                                });
+                                return false;
+                            }
 
                             event.preventDefault();
-                            const tr = state.tr.delete(from, to);
-                            tr.setSelection(TextSelection.create(tr.doc, from));
+                            const finalText = inputEvent.inputType === 'insertFromComposition'
+                                ? inputEvent.data || ''
+                                : '';
+                            let tr = finalText
+                                ? state.tr.insertText(finalText, range.from, range.to)
+                                : state.tr.delete(range.from, range.to);
+                            const cursorPos = range.from + finalText.length;
+                            tr = tr.setSelection(TextSelection.create(tr.doc, cursorPos));
                             tr.setMeta('composition', true);
+                            logTaskIme('beforeinput:handled', view, {
+                                inputType: inputEvent.inputType,
+                                data: inputEvent.data,
+                                range,
+                                finalText,
+                                compositionPrefixText,
+                                compositionSuffixText,
+                                compositionStructureSignature,
+                                nextText: tr.doc.textBetween(compositionTextblockStart, Math.min(cursorPos, tr.doc.content.size), '', '\0'),
+                            });
                             view.dispatch(tr);
                             return true;
                         },
-                        compositionend: () => {
+                        compositionend: (view, event) => {
+                            if (compositionTaskItemStart !== null) {
+                                logTaskIme('compositionend', view, {
+                                    eventData: (event as CompositionEvent).data || '',
+                                    compositionPrefixText,
+                                    compositionSuffixText,
+                                    compositionStructureSignature,
+                                });
+                            }
+                            recentCompositionTextblockStart = compositionTextblockStart;
                             recentCompositionTaskItemStart = compositionTaskItemStart;
+                            recentCompositionPrefixText = compositionPrefixText;
+                            recentCompositionSuffixText = compositionSuffixText;
+                            recentCompositionStructureSignature = compositionStructureSignature;
                             recentCompositionEndedAt = Date.now();
                             compositionStartPos = null;
                             compositionTextblockStart = null;
                             compositionTaskItemStart = null;
+                            compositionPrefixText = '';
+                            compositionSuffixText = '';
+                            compositionStructureSignature = null;
                             return false;
                         },
                     },
                 },
                 filterTransaction: (tr) => {
                     if (!tr.docChanged) return true;
+                    const fullDocReplace = tr.steps.some((step: any) =>
+                        typeof step.from === 'number'
+                        && typeof step.to === 'number'
+                        && step.from === 0
+                        && step.to >= tr.before.content.size
+                    );
+                    if (fullDocReplace) return true;
 
-                    const guardedTaskPos = getGuardedTaskItemStart();
-                    if (guardedTaskPos === null) return true;
+                    const guardedContext = getGuardedTaskContext();
+                    if (guardedContext === null) return true;
 
-                    const mappedTaskPos = tr.mapping.map(guardedTaskPos, -1);
-                    return hasTaskItemShell(tr.doc, mappedTaskPos);
+                    const mappedTaskPos = tr.mapping.map(guardedContext.taskItemStart, -1);
+                    const keep = hasTaskItemShell(tr.doc, mappedTaskPos);
+                    if (!keep) {
+                        if (shouldLogTaskIme()) {
+                            const steps = tr.steps.map((step: any) => ({
+                                from: step.from,
+                                to: step.to,
+                                slice: step.slice?.content?.textBetween?.(0, step.slice.content.size, '', '\0') ?? null,
+                                json: typeof step.toJSON === 'function' ? step.toJSON() : null,
+                            }));
+                            console.warn('[TaskIME]', {
+                                label: 'filterTransaction:blocked',
+                                guardedTaskPos: guardedContext.taskItemStart,
+                                mappedTaskPos,
+                                steps,
+                                beforeText: tr.before.textBetween(0, tr.before.content.size, '\n', '\0'),
+                                afterText: tr.doc.textBetween(0, tr.doc.content.size, '\n', '\0'),
+                            });
+                        }
+                    }
+                    if (!keep) return false;
+
+                    const mappedTextblockStart = guardedContext.textblockStart !== null
+                        ? tr.mapping.map(guardedContext.textblockStart, -1)
+                        : null;
+                    const beforeStructureSignature = guardedContext.structureSignature;
+                    const afterStructureSignature = getTaskStructureSignatureAt(tr.doc, mappedTextblockStart);
+                    if (beforeStructureSignature && afterStructureSignature !== beforeStructureSignature) {
+                        if (shouldLogTaskIme()) {
+                            const steps = tr.steps.map((step: any) => ({
+                                from: step.from,
+                                to: step.to,
+                                slice: step.slice?.content?.textBetween?.(0, step.slice.content.size, '', '\0') ?? null,
+                                json: typeof step.toJSON === 'function' ? step.toJSON() : null,
+                            }));
+                            console.warn('[TaskIME]', {
+                                label: 'filterTransaction:blocked-structure-loss',
+                                beforeStructureSignature,
+                                afterStructureSignature,
+                                guardedTextblockStart: guardedContext.textblockStart,
+                                mappedTextblockStart,
+                                steps,
+                            });
+                        }
+                        return false;
+                    }
+
+                    const prefixText = guardedContext.prefixText;
+                    const suffixText = guardedContext.suffixText;
+                    if (!prefixText && !suffixText) return true;
+
+                    const beforeText = getTextblockTextAt(tr.before, guardedContext.textblockStart);
+                    const afterText = getTextblockTextAt(tr.doc, mappedTextblockStart);
+                    const prefixWasPresent = !prefixText || beforeText === null || beforeText.startsWith(prefixText);
+                    const prefixStillPresent = !prefixText || (afterText !== null && afterText.startsWith(prefixText));
+                    const suffixWasPresent = !suffixText || beforeText === null || beforeText.endsWith(suffixText);
+                    const suffixStillPresent = !suffixText || (afterText !== null && afterText.endsWith(suffixText));
+
+                    if ((prefixWasPresent && !prefixStillPresent) || (suffixWasPresent && !suffixStillPresent)) {
+                        if (shouldLogTaskIme()) {
+                            const steps = tr.steps.map((step: any) => ({
+                                from: step.from,
+                                to: step.to,
+                                slice: step.slice?.content?.textBetween?.(0, step.slice.content.size, '', '\0') ?? null,
+                                json: typeof step.toJSON === 'function' ? step.toJSON() : null,
+                            }));
+                            console.warn('[TaskIME]', {
+                                label: 'filterTransaction:blocked-composition-context-loss',
+                                prefixText,
+                                suffixText,
+                                beforeText,
+                                afterText,
+                                guardedTextblockStart: guardedContext.textblockStart,
+                                mappedTextblockStart,
+                                prefixWasPresent,
+                                prefixStillPresent,
+                                suffixWasPresent,
+                                suffixStillPresent,
+                                steps,
+                            });
+                        }
+                        return false;
+                    }
+
+                    return true;
                 },
             }),
         ];

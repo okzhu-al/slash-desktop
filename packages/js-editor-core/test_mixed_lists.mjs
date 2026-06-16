@@ -326,22 +326,10 @@ try {
 // 场景 7：第二行行首中文 IME 临时拼音必须在选词提交时清除
 // =========================================================================
 try {
-  const md7 = `- [ ] 第一行\n- [ ] \n- [ ] 第三行`;
+  const md7 = `- [ ] 第一行\n- [ ] 尾巴\n- [ ] 第三行`;
   editor.commands.setContent(md7);
 
-  let secondTaskPos = -1;
-  let taskIndex = 0;
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name !== 'taskItem') return true;
-    taskIndex += 1;
-    if (taskIndex === 2) {
-      secondTaskPos = pos;
-      return false;
-    }
-    return true;
-  });
-
-  const secondParagraphTextStart = secondTaskPos + 2;
+  const secondParagraphTextStart = findTextPosition(editor, '尾巴');
   editor.commands.command(({ tr }) => {
     tr.setSelection(TextSelection.create(tr.doc, secondParagraphTextStart));
     return true;
@@ -355,10 +343,11 @@ try {
     inputType: 'deleteCompositionText',
     data: null,
   }));
+  editor.commands.insertContent('第二行');
   editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '第二行' }));
 
   const serialized7 = editor.storage.markdown.getMarkdown().trim();
-  const pinyinCleared = serialized7.includes('* [ ] 第二行')
+  const pinyinCleared = serialized7.includes('* [ ] 第二行尾巴')
     && !serialized7.includes('di er hang')
     && !serialized7.includes('第二行第二行')
     && serialized7.includes('* [ ] 第三行');
@@ -369,6 +358,301 @@ try {
   });
 } catch (e) {
   logTestResult("场景 7 (第二行行首 IME 临时拼音会被清除)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 8：第一行和第二行连续输入中文时，后续词不能吃掉前一个词
+// =========================================================================
+try {
+  const md8 = `- [ ] 中文\n- [ ] 第一词\n- [ ] 第三行`;
+  editor.commands.setContent(md8);
+
+  const appendImeWord = (anchorText, pinyin, finalText) => {
+    const anchorPos = findTextPosition(editor, anchorText);
+    editor.commands.command(({ tr }) => {
+      tr.setSelection(TextSelection.create(tr.doc, anchorPos + anchorText.length));
+      return true;
+    });
+    editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: pinyin }));
+    editor.commands.insertContent(pinyin);
+    editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+      bubbles: true,
+      cancelable: true,
+      inputType: 'deleteCompositionText',
+      data: null,
+    }));
+    editor.commands.insertContent(finalText);
+    editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: finalText }));
+  };
+
+  appendImeWord('中文', 'shuru', '输入');
+  appendImeWord('第一词', 'di er ci', '第二词');
+
+  const serialized8 = editor.storage.markdown.getMarkdown().trim();
+  const continuousInputOK = serialized8.includes('* [ ] 中文输入')
+    && serialized8.includes('* [ ] 第一词第二词')
+    && serialized8.includes('* [ ] 第三行')
+    && !serialized8.includes('shuru')
+    && !serialized8.includes('di er ci');
+
+  logTestResult("场景 8 (连续中文输入不会吃掉前一个词)", continuousInputOK, {
+    "Continuous Input": continuousInputOK ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized8
+  });
+} catch (e) {
+  logTestResult("场景 8 (连续中文输入不会吃掉前一个词)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 9：insertFromComposition 提交候选词时只替换临时拼音
+// =========================================================================
+try {
+  const md9 = `- [ ] 中文`;
+  editor.commands.setContent(md9);
+
+  const anchorPos = findTextPosition(editor, '中文');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos + '中文'.length));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'shuru' }));
+  editor.commands.insertContent('shuru');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromComposition',
+    data: '输入',
+  }));
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '输入' }));
+
+  const serialized9 = editor.storage.markdown.getMarkdown().trim();
+  const insertFromCompositionOK = serialized9.includes('* [ ] 中文输入')
+    && !serialized9.includes('shuru')
+    && !serialized9.includes('* [ ] 输入');
+
+  logTestResult("场景 9 (insertFromComposition 只替换拼音不吃前词)", insertFromCompositionOK, {
+    "Insert From Composition": insertFromCompositionOK ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized9
+  });
+} catch (e) {
+  logTestResult("场景 9 (insertFromComposition 只替换拼音不吃前词)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 10：IME 提交后浏览器补发的段落级替换不能吃掉已存在中文
+// =========================================================================
+try {
+  const md10 = `- [ ] 一`;
+  editor.commands.setContent(md10);
+
+  const anchorPos = findTextPosition(editor, '一');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos + '一'.length));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'er' }));
+  editor.commands.insertContent('er');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromComposition',
+    data: '二',
+  }));
+
+  // WebKit/IME can emit a late DOMObserver transaction at the task paragraph
+  // start. It must not replace the existing committed prefix "一".
+  editor.commands.command(({ state, tr, dispatch }) => {
+    const textblockStart = state.selection.$from.start(state.selection.$from.depth);
+    const textblockEnd = state.selection.$from.end(state.selection.$from.depth);
+    tr.insertText('二', textblockStart, textblockEnd);
+    dispatch?.(tr);
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '二' }));
+
+  const serialized10 = editor.storage.markdown.getMarkdown().trim();
+  const destructiveCommitBlocked = serialized10.includes('* [ ] 一二')
+    && !serialized10.includes('* [ ] 二');
+
+  logTestResult("场景 10 (IME 段落级补发替换不能吃掉前词)", destructiveCommitBlocked, {
+    "Destructive Commit Blocked": destructiveCommitBlocked ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized10
+  });
+} catch (e) {
+  logTestResult("场景 10 (IME 段落级补发替换不能吃掉前词)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 11：未确认拼音退格后补发的清空段落不能删除整行
+// =========================================================================
+try {
+  const md11 = `- [ ] 一`;
+  editor.commands.setContent(md11);
+
+  const anchorPos = findTextPosition(editor, '一');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos + '一'.length));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'c' }));
+  editor.commands.insertContent('c');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'deleteCompositionText',
+    data: null,
+  }));
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '' }));
+
+  // Some IMEs report cancellation by moving selection back to paragraph start
+  // and the observer can try to clear the textblock. The committed prefix must stay.
+  editor.commands.command(({ state, tr, dispatch }) => {
+    const textblockStart = state.selection.$from.start(state.selection.$from.depth);
+    const textblockEnd = state.selection.$from.end(state.selection.$from.depth);
+    tr.delete(textblockStart, textblockEnd);
+    dispatch?.(tr);
+    return true;
+  });
+
+  const serialized11 = editor.storage.markdown.getMarkdown().trim();
+  const backspaceCancellationSafe = serialized11.includes('* [ ] 一')
+    && !serialized11.includes('c')
+    && !serialized11.includes('* [ ] 一c');
+
+  logTestResult("场景 11 (IME 退格取消不能删除整行)", backspaceCancellationSafe, {
+    "Backspace Cancellation Safe": backspaceCancellationSafe ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized11
+  });
+} catch (e) {
+  logTestResult("场景 11 (IME 退格取消不能删除整行)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 12：任务行首插入中文时不能吃掉后面的已有文字
+// =========================================================================
+try {
+  const md12 = `- [ ] 后文`;
+  editor.commands.setContent(md12);
+
+  const anchorPos = findTextPosition(editor, '后文');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'qian' }));
+  editor.commands.insertContent('qian');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromComposition',
+    data: '前',
+  }));
+
+  // Late paragraph-level replacement may contain only the committed candidate.
+  // The original suffix must remain.
+  editor.commands.command(({ state, tr, dispatch }) => {
+    const textblockStart = state.selection.$from.start(state.selection.$from.depth);
+    const textblockEnd = state.selection.$from.end(state.selection.$from.depth);
+    tr.insertText('前', textblockStart, textblockEnd);
+    dispatch?.(tr);
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '前' }));
+
+  const serialized12 = editor.storage.markdown.getMarkdown().trim();
+  const lineStartInsertionSafe = serialized12.includes('* [ ] 前后文')
+    && !serialized12.includes('* [ ] 前\n')
+    && !serialized12.endsWith('* [ ] 前');
+
+  logTestResult("场景 12 (任务行首中文插入不能吃掉后文)", lineStartInsertionSafe, {
+    "Line Start Insertion Safe": lineStartInsertionSafe ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized12
+  });
+} catch (e) {
+  logTestResult("场景 12 (任务行首中文插入不能吃掉后文)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 13：任务行中间插入中文时不能吃掉后缀文字
+// =========================================================================
+try {
+  const md13 = `- [ ] 前后`;
+  editor.commands.setContent(md13);
+
+  const anchorPos = findTextPosition(editor, '前后');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos + '前'.length));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'zhong' }));
+  editor.commands.insertContent('zhong');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromComposition',
+    data: '中',
+  }));
+
+  // Prefix is present in this replacement, but suffix is missing. Guard both.
+  editor.commands.command(({ state, tr, dispatch }) => {
+    const textblockStart = state.selection.$from.start(state.selection.$from.depth);
+    const textblockEnd = state.selection.$from.end(state.selection.$from.depth);
+    tr.insertText('前中', textblockStart, textblockEnd);
+    dispatch?.(tr);
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '中' }));
+
+  const serialized13 = editor.storage.markdown.getMarkdown().trim();
+  const middleInsertionSafe = serialized13.includes('* [ ] 前中后')
+    && !serialized13.includes('* [ ] 前中\n')
+    && !serialized13.endsWith('* [ ] 前中');
+
+  logTestResult("场景 13 (任务行中间中文插入不能吃掉后缀)", middleInsertionSafe, {
+    "Middle Insertion Safe": middleInsertionSafe ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized13
+  });
+} catch (e) {
+  logTestResult("场景 13 (任务行中间中文插入不能吃掉后缀)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 14：多级任务行首中文插入不能丢失当前缩进层级
+// =========================================================================
+try {
+  const md14 = `- [ ] 一级\n  - [ ] 后文`;
+  editor.commands.setContent(md14);
+
+  const anchorPos = findTextPosition(editor, '后文');
+  editor.commands.command(({ tr }) => {
+    tr.setSelection(TextSelection.create(tr.doc, anchorPos));
+    return true;
+  });
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true, data: 'qian' }));
+  editor.commands.insertContent('qian');
+  editor.view.dom.dispatchEvent(new dom.window.InputEvent('beforeinput', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromComposition',
+    data: '前',
+  }));
+
+  // A bad IME/DOMObserver transaction can preserve the text but lift the nested
+  // task item to level 1. Composition guard must reject structure loss too.
+  editor.commands.liftListItem('taskItem');
+  editor.view.dom.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true, data: '前' }));
+
+  const serialized14 = editor.storage.markdown.getMarkdown().trim();
+  const nestedInsertionKeepsLevel = serialized14.includes('* [ ] 一级')
+    && serialized14.includes('  * [ ] 前后文')
+    && !serialized14.includes('* [ ] 一级\n\n* [ ] 前后文');
+
+  logTestResult("场景 14 (多级任务行首中文插入不能丢失缩进)", nestedInsertionKeepsLevel, {
+    "Nested Insertion Keeps Level": nestedInsertionKeepsLevel ? 'OK' : 'FAIL',
+    "Serialized Markdown": serialized14
+  });
+} catch (e) {
+  logTestResult("场景 14 (多级任务行首中文插入不能丢失缩进)", false, { error: e.stack });
 }
 
 console.log("\n🏁 E2E Regression Tests Completed.");

@@ -1,15 +1,15 @@
 {
-  "version": "0.1.3-beta.14",
-  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u4fee\u590d\u4efb\u52a1\u5217\u8868\u7b2c\u4e8c\u884c\u53ca\u540e\u7eed\u4efb\u52a1\u9879\u4f7f\u7528\u4e2d\u6587\u8f93\u5165\u6cd5\u65f6\uff0c\u9009\u8bcd\u540e checkbox \u53ef\u80fd\u6d88\u5931\u3001\u4efb\u52a1\u9879\u53d8\u6210\u666e\u901a\u6587\u672c\u6216\u4e0e\u4e0b\u4e00\u884c\u5408\u5e76\u7684\u95ee\u9898\u3002\n- \u4fee\u590d\u4efb\u52a1\u5217\u8868\u884c\u9996\u4e2d\u6587\u8f93\u5165\u9009\u8bcd\u540e\uff0c\u4e34\u65f6\u62fc\u97f3\u53ef\u80fd\u6b8b\u7559\u5728\u6b63\u6587\u4e2d\u7684\u95ee\u9898\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Fixed task-list IME input on the second and later task items where confirming a Chinese candidate could remove the checkbox, turn the task into plain text, or merge it into the next line.\n- Fixed temporary pinyin preedit text sometimes remaining in task-list content after confirming a Chinese candidate at the beginning of a task item.",
-  "pub_date": "2026-06-16T04:00:15Z",
+  "version": "0.1.3-beta.15",
+  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u4fee\u590d\u4efb\u52a1\u5217\u8868\u4e2d\u4f7f\u7528\u4e2d\u6587\u8f93\u5165\u6cd5\u8fde\u7eed\u8f93\u5165\u3001\u884c\u9996\u63d2\u5165\u3001\u4e2d\u95f4\u63d2\u5165\u6216\u53d6\u6d88\u672a\u5b8c\u6210\u62fc\u97f3\u65f6\uff0c\u53ef\u80fd\u5403\u6389\u524d\u540e\u6587\u5b57\u3001\u5220\u9664\u6574\u884c\u6216\u4e22\u5931\u591a\u7ea7\u7f29\u8fdb\u7684\u95ee\u9898\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Fixed task-list Chinese IME input when typing multiple words, inserting at the beginning or middle of a task, or cancelling unfinished pinyin, which could remove surrounding text, delete the whole task line, or lose nested indentation.",
+  "pub_date": "2026-06-16T05:46:42Z",
   "platforms": {
     "darwin-aarch64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnNCR201R3lkcUJNWmZudTg0UE93b20rRTJLMEp5L3ZDUjR0bE5pSVdOZDJFdldISGFFQ2EycnAydmRzNGxlaXFlZEwwWFpzY3hqWElGeHYzUUZVY3dvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNTgzMTg1CWZpbGU6U2xhc2guYXBwLnRhci5nego0TXlDYVBtZFAzVjRiQU55d0VxaDJQK3VjOHVaQnBEQStPTCtOdGttV1JtdE5uOTRxZTVNc0J4SU5pNityeU5kckJsTk9pWUhFZGtoODJvd1N5bitDdz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.14/Slash.app.tar.gz"
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.15/Slash.app.tar.gz"
     },
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnZFalc0NktKNDRvSm1neDBabCtUZzVob1I4UGpWK3RKMUFEbnh4MDFJVTNqYkFXRVdDdHl1UjhDNjUzekFnY2Y4V2RZVEJzK3NXV2xCOWZRazV2a2c4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNTgzNTMxCWZpbGU6U2xhc2hfMC4xLjMtYmV0YS4xNF94NjQtc2V0dXAuZXhlCkNhWFI3dlo0alRIZ0haZmRHYWFzZlhBT1VmMXVzQUdFcTFhKzBPVEdUV2I5aXlleEZ5UW8zSzh0WFRCWDZPWEYxVHZLS0ZGbndDQWRVcng0TmhtMURRPT0K",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.14/Slash_0.1.3-beta.14_x64-setup.exe"
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.15/Slash_0.1.3-beta.15_x64-setup.exe"
     }
   }
 }
