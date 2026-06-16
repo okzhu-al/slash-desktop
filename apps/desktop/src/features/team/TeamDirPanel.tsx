@@ -315,6 +315,27 @@ export function TeamDirPanel({
         }
     };
 
+    const handleInviteAllMembers = async () => {
+        const config = syncService.getConfig();
+        if (!config || !teamVaultId || availableObservers.length === 0) return;
+        setActionLoading('invite-all');
+        try {
+            await Promise.all(availableObservers.map(member =>
+                teamService.setDirectoryPermissions(
+                    config.serverUrl, config.accessToken, teamVaultId,
+                    directoryPath, member.user_id, 'TeamMember', observerVisible, directoryId,
+                )
+            ));
+            setInviteUserId('');
+            await loadData(false);
+            autoSyncManager.manualSync();
+        } catch (e) {
+            console.error('[TeamDirPanel] Invite all failed:', e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     // ── 移除成员 ──
     const handleRemoveMember = async (userId: string) => {
         const config = syncService.getConfig();
@@ -556,7 +577,7 @@ export function TeamDirPanel({
                                 </div>
                                 <button
                                     onClick={handleInviteMember}
-                                    disabled={!inviteUserId || actionLoading === 'invite'}
+                                    disabled={!inviteUserId || actionLoading === 'invite' || actionLoading === 'invite-all'}
                                     className={cn(
                                         "p-1 rounded-md transition-all flex items-center justify-center",
                                         inviteUserId
@@ -569,6 +590,18 @@ export function TeamDirPanel({
                                         <Loader2 size={14} className="animate-spin" />
                                     ) : (
                                         <UserPlus size={14} />
+                                    )}
+                                </button>
+                                <button
+                                    onClick={handleInviteAllMembers}
+                                    disabled={actionLoading === 'invite' || actionLoading === 'invite-all'}
+                                    className="px-2 py-1 rounded-md text-xs font-medium text-indigo-600 dark:text-blue-300 bg-white dark:bg-blue-500/10 shadow-sm hover:bg-indigo-50 dark:hover:bg-blue-500/15 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                    title={t('team.dir_add_all_members', '添加所有成员')}
+                                >
+                                    {actionLoading === 'invite-all' ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        t('team.dir_add_all_short', '全部')
                                     )}
                                 </button>
                             </div>

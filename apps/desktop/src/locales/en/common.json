@@ -883,6 +883,8 @@
         "deleted_on": "on",
         "dir_add_member": "Add Member",
         "dir_add_member_placeholder": "Select team member",
+        "dir_add_all_members": "Add all members",
+        "dir_add_all_short": "All",
         "dir_remove_member": "Remove from directory",
         "dir_remove_confirm": "Remove {{name}} from this directory?",
         "promote_to_team": "Promote to Team",

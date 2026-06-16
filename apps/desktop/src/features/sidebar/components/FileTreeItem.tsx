@@ -359,7 +359,7 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
                             )}
                         </div>
 
-                        {/* Icon — 普通目录/文件=灰色线框，团队目录=品牌色实心图标 */}
+                        {/* Icon — 普通目录/文件=灰色线框，团队目录=品牌色线框图标 */}
                         <div
                             className={cn(
                                 'flex items-center justify-center shrink-0 rounded-md transition-colors',
@@ -369,13 +369,13 @@ export const FileTreeItem = ({ item, level, onSelect, activeId, actions }: FileT
                             {isFolder ? (
                                 <Folder size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7] dark:text-blue-300 fill-current'
+                                        ? 'text-[#002FA7] dark:text-blue-300'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             ) : (
                                 <FileText size={16} strokeWidth={1} className={cn(
                                     isTeamItem
-                                        ? 'text-[#002FA7] dark:text-blue-300 fill-current'
+                                        ? 'text-[#002FA7] dark:text-blue-300'
                                         : 'text-zinc-500 dark:text-zinc-400'
                                 )} />
                             )}

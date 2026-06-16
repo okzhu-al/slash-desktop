@@ -158,6 +158,7 @@ export const useEditorContainer = ({
         onTitleChange,
         setTitle,
         t,
+        isTeamNote,
     });
 
     const handleTitleBlur = useCallback(async () => {
@@ -392,9 +393,14 @@ export const useEditorContainer = ({
         frontmatterRef.current = fmString;
         hasUserEdited.current = true;
         (window as any).__slashEditorDirty = true;
-        if (editor) scheduleSave(() => (editor.storage as any)?.markdown?.getMarkdown() || '');
         if ('doc_status' in changes) {
-            autoSyncManager.forceSync('doc_status_changed');
+            cancelPendingSave();
+            const markdown = (editor?.storage as any)?.markdown?.getMarkdown() || '';
+            void saveContent(markdown, fmString, { allowRename: false }).then(() => {
+                autoSyncManager.forceSync('doc_status_changed');
+            });
+        } else if (editor) {
+            scheduleSave(() => (editor.storage as any)?.markdown?.getMarkdown() || '');
         }
     };
 

@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { useFileSystemStore } from '@/core/fs/store';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 
+function normalizeMappingPath(path: string): string {
+    let normalized = path.replace(/\\/g, '/').replace(/\/$/, '');
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+        normalized = normalized.charAt(0).toLowerCase() + normalized.slice(1);
+    }
+    return normalized.toLowerCase();
+}
+
 async function loadTeamSourceMappings(vaultPath: string): Promise<Record<string, string>> {
     const allMappings: Record<string, string> = {};
 
@@ -45,19 +53,16 @@ export async function isTeamNoteAsync(vaultPath: string | undefined | null, note
     try {
         const allMappings = await loadTeamSourceMappings(vaultPath);
 
-        // 🛡️ Windows 兼容：统一转换为正斜杠，并将盘符转为小写
-        let normNote = notePath.replace(/\\/g, '/');
-        if (/^[a-zA-Z]:\//.test(normNote)) normNote = normNote.charAt(0).toLowerCase() + normNote.slice(1);
-        
-        let normVault = vaultPath.replace(/\\/g, '/').replace(/\/$/, '');
-        if (/^[a-zA-Z]:\//.test(normVault)) normVault = normVault.charAt(0).toLowerCase() + normVault.slice(1);
+        const normNote = normalizeMappingPath(notePath);
+        const normVault = normalizeMappingPath(vaultPath);
 
         const relPath = normNote.startsWith(normVault + '/')
             ? normNote.slice(normVault.length + 1)
             : normNote;
 
         for (const source of Object.keys(allMappings)) {
-            if (relPath === source || relPath.startsWith(source + '/')) {
+            const sourceKey = normalizeMappingPath(source);
+            if (relPath === sourceKey || relPath.startsWith(sourceKey + '/')) {
                 return true;
             }
         }

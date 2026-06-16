@@ -892,6 +892,8 @@
         "deleted_on": "于",
         "dir_add_member": "添加成员",
         "dir_add_member_placeholder": "选择团队成员",
+        "dir_add_all_members": "添加所有成员",
+        "dir_add_all_short": "全部",
         "dir_remove_member": "移出目录",
         "dir_remove_confirm": "确定将 {{name}} 从此目录中移除？",
         "promote_to_team": "推送到团队",
