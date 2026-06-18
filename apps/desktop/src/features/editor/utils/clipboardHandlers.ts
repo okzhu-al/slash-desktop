@@ -187,11 +187,104 @@ const isUrl = (text: string): boolean => {
     }
 };
 
+// Some rich-text apps auto-wrap plain numeric clipboard text in a single HTML anchor like
+// <a href="https://1111">1111</a>. Treat that as plain text instead of a real link.
+const isNumericAnchorArtifact = (plainText: string, clipboardHtml: string): boolean => {
+    const trimmed = plainText.trim();
+    if (!trimmed || !/^[+-]?\d+(?:[.,]\d+)?$/.test(trimmed)) return false;
+    if (!clipboardHtml || /<(table|img|svg|canvas)[\s>]/i.test(clipboardHtml)) return false;
+
+    const container = document.createElement('div');
+    container.innerHTML = clipboardHtml;
+
+    const anchors = container.querySelectorAll('a[href]');
+    if (anchors.length !== 1) return false;
+
+    const anchor = anchors[0];
+    const anchorText = anchor.textContent?.trim() || '';
+    const bodyText = container.textContent?.trim() || '';
+    if (anchorText !== trimmed || bodyText !== trimmed) return false;
+
+    const href = (anchor.getAttribute('href') || '').trim();
+    if (!href) return false;
+
+    return (
+        href === trimmed ||
+        href === `https://${trimmed}` ||
+        href === `http://${trimmed}` ||
+        href === `mailto:${trimmed}` ||
+        href === `//${trimmed}`
+    );
+};
+
+const getClipboardPlaceholderExtension = (file: File, nativePath?: string): string => {
+    if (nativePath) {
+        const nativeExt = nativePath.split('.').pop()?.toLowerCase();
+        if (nativeExt) return nativeExt;
+    }
+    const nameExt = file.name.split('.').pop()?.toLowerCase();
+    if (nameExt) return nameExt;
+    const mimeExt = file.type.split('/').pop()?.toLowerCase();
+    return mimeExt || 'bin';
+};
+
+const saveClipboardMediaAsset = async (file: File, nativePath?: string): Promise<string> => {
+    const mediaType = getMediaType(file);
+    const hasBlobPayload = file.size > 0;
+
+    // Clipboard-generated images from Excel/Numbers can expose a transient native path
+    // whose file content is empty. Prefer the in-memory Blob payload when available.
+    if (mediaType === 'image' && hasBlobPayload) {
+        if (nativePath) {
+            try {
+                const { stat } = await import('@tauri-apps/plugin-fs');
+                const nativeStat = await stat(nativePath);
+                if (nativeStat.size === 0) {
+                    console.warn(`📋 [handlePaste] Clipboard image native path is empty, falling back to Blob payload: ${nativePath}`);
+                }
+            } catch (e) {
+                console.warn('📋 [handlePaste] Failed to stat clipboard image path, using Blob payload instead:', e);
+            }
+        }
+        return mediaService.saveAsset(file, true);
+    }
+
+    if (nativePath) {
+        if (hasBlobPayload) {
+            try {
+                const { stat } = await import('@tauri-apps/plugin-fs');
+                const nativeStat = await stat(nativePath);
+                if (nativeStat.size === 0) {
+                    console.warn(`📋 [handlePaste] Native path is empty, falling back to Blob payload: ${nativePath}`);
+                    return mediaService.saveAsset(file, true);
+                }
+            } catch (e) {
+                console.warn('📋 [handlePaste] Failed to stat native path, continuing with path import:', e);
+            }
+        }
+        return mediaService.saveAssetFromPath(nativePath);
+    }
+
+    return mediaService.saveAsset(file, true);
+};
+
 export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>) => {
     return (view: EditorView, event: ClipboardEvent) => {
-        // === 0. Hyperlink Paste Handling (High Priority URL pasting) ===
+        const clipboardHtml = event.clipboardData?.getData('text/html') || '';
         const plainText = event.clipboardData?.getData('text/plain') || '';
-        if (plainText && isUrl(plainText)) {
+        const trimmedPlainText = plainText.trim();
+
+        // Some rich-text apps may emit plain numbers as bogus HTML anchors. Preserve the number only.
+        if (trimmedPlainText && isNumericAnchorArtifact(trimmedPlainText, clipboardHtml)) {
+            const { state } = view;
+            const { selection } = state;
+            event.preventDefault();
+            view.dispatch(state.tr.insertText(trimmedPlainText, selection.from, selection.to).scrollIntoView());
+            return true;
+        }
+
+        // === 0. Hyperlink Paste Handling (High Priority URL pasting) ===
+        if (trimmedPlainText && isUrl(trimmedPlainText)) {
             const { state } = view;
             const { selection } = state;
             
@@ -199,7 +292,7 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
             if (!isInsideCodeOrMath(state, selection.from)) {
                 event.preventDefault();
                 
-                let href = plainText.trim();
+                let href = trimmedPlainText;
                 if (href.startsWith('www.')) {
                     href = 'https://' + href;
                 }
@@ -212,8 +305,8 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
                 if (linkMarkType) {
                     if (selection.empty) {
                         const { from } = selection;
-                        tr.insertText(plainText.trim());
-                        const to = from + plainText.trim().length;
+                        tr.insertText(trimmedPlainText);
+                        const to = from + trimmedPlainText.length;
                         tr.addMark(from, to, linkMarkType.create({ href }));
                     } else {
                         // Wrap selection text with the link mark
@@ -239,8 +332,7 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
             }
         }
 
-        const clipboardHtml = event.clipboardData?.getData('text/html') || '';
-        const clipboardText = event.clipboardData?.getData('text/plain') || '';
+        const clipboardText = plainText;
 
         // Case A: Pasting INTO a code block → force plain text (strip fences if present)
         if (inCodeBlock) {
@@ -465,18 +557,18 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
                     const pos = view.state.selection.from;
                     const mediaType = getMediaType(file);
 
-                    // 大文件 + 有原生路径 → placeholder-first 模式（约束 #1: 异步不阻塞）
-                    if (nativePath && file.size > IMMEDIATE_FEEDBACK_THRESHOLD && mediaType) {
-                        const ext = nativePath.split('.').pop()?.toLowerCase() || 'bin';
+                    // 大文件 → placeholder-first 模式（约束 #1: 异步不阻塞）
+                    if (file.size > IMMEDIATE_FEEDBACK_THRESHOLD && mediaType) {
+                        const ext = getClipboardPlaceholderExtension(file, nativePath);
                         const placeholderSrc = `assets/${IMPORTING_PREFIX}${crypto.randomUUID()}.${ext}`;
-                        console.log(`[MediaImport] placeholder inserted: placeholder=${placeholderSrc} size=${file.size} source=${nativePath}`);
+                        console.log(`[MediaImport] placeholder inserted: placeholder=${placeholderSrc} size=${file.size} source=${nativePath || '[blob]'}`);
 
                         // 立即插入占位节点
                         insertMediaNode(view, mediaType, placeholderSrc, pos);
 
                         // 后台异步执行 — fire & forget，不阻塞 paste handler
                         const startMs = performance.now();
-                        mediaService.saveAssetFromPath(nativePath).then((realPath) => {
+                        saveClipboardMediaAsset(file, nativePath).then((realPath) => {
                             const elapsedMs = Math.round(performance.now() - startMs);
                             console.log(`[MediaImport] complete: elapsed_ms=${elapsedMs} placeholder=${placeholderSrc} → ${realPath}`);
                             updateMediaSrc(view, placeholderSrc, realPath);
@@ -492,20 +584,15 @@ export const createEditorPasteHandler = (editorRef: React.MutableRefObject<any>)
 
                     // 小文件或无原生路径 → 同步模式（原行为）
                     let relativePath: string;
-                    if (nativePath) {
-                        console.log(`📋 [handlePaste] Using native path (zero JS memory): ${nativePath}`);
-                        relativePath = await mediaService.saveAssetFromPath(nativePath);
-                    } else {
-                        const JS_MEMORY_HARD_LIMIT = 100 * 1024 * 1024;
-                        if (file.size > JS_MEMORY_HARD_LIMIT) {
-                            console.error(`🚫 [handlePaste] File too large for JS memory (${(file.size / 1024 / 1024).toFixed(0)}MB), skipping`);
-                            toast.error(i18next.t('media.paste_too_large', '文件过大'), {
-                                description: i18next.t('media.paste_too_large_hint', '请使用拖拽方式导入超大文件'),
-                            });
-                            continue;
-                        }
-                        relativePath = await mediaService.saveAsset(file, false);
+                    const JS_MEMORY_HARD_LIMIT = 100 * 1024 * 1024;
+                    if (!nativePath && file.size > JS_MEMORY_HARD_LIMIT) {
+                        console.error(`🚫 [handlePaste] File too large for JS memory (${(file.size / 1024 / 1024).toFixed(0)}MB), skipping`);
+                        toast.error(i18next.t('media.paste_too_large', '文件过大'), {
+                            description: i18next.t('media.paste_too_large_hint', '请使用拖拽方式导入超大文件'),
+                        });
+                        continue;
                     }
+                    relativePath = await saveClipboardMediaAsset(file, nativePath);
 
                     if (mediaType) {
                         insertMediaNode(view, mediaType, relativePath, pos);

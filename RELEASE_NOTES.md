@@ -1,23 +1,27 @@
-## v0.1.3-beta.17
+## v0.1.3-beta.18
 
 #### 中文
 
 ##### Bug 修复
 
-- 修复团队笔记在本地目录大小写与团队映射不一致时，可能被误判为个人笔记，进而错误切回单人模式并重置协作者列表的问题。
-- 修复团队笔记普通内容编辑偶发被记录为“切换为单人模式”的协作历史问题。现在只有显式修改文档协作状态时才会生成状态切换事件。
+- 修复团队笔记离线时，Solo 模式编辑者本人可能被误判为只读的问题，并补充更清晰的离线提示。
+- 修复从 Excel、Telegram 等富文本应用粘贴纯数字时，内容可能被错误转换成外链的问题。
+- 修复从 Numbers / Excel 粘贴整块表格图片时，偶发出现裂图、404 或空资源文件的问题。
+- 修复长音频媒体索引被过早中断，以及失败后仍被错误标记为成功的问题。
 
 ##### 体验优化
 
-- 团队目录成员管理新增“全部”快捷操作，目录 Owner/Admin 可以一键把当前未加入该目录的团队成员全部加入。
+- 优化团队目录和团队笔记的蓝色线框图标清晰度，适度加粗线宽，减少侧边栏细线发虚的问题。
 
 #### English
 
 ##### Bug Fixes
 
-- Fixed team notes being misidentified as personal notes when local path casing did not match team mappings, which could incorrectly switch notes back to solo mode and reset contributors.
-- Fixed normal team-note content edits occasionally being recorded as “switched to solo mode” in collaboration history. Status events are now emitted only for explicit document mode changes.
+- Fixed Solo-mode team notes sometimes becoming read-only for the actual editor while offline, and improved offline messaging.
+- Fixed pure numbers copied from rich-text apps such as Excel and Telegram sometimes being converted into external links.
+- Fixed pasted table snapshots from Numbers / Excel occasionally becoming broken images, 404 assets, or empty media files.
+- Fixed long-audio media indexing being interrupted too early, and fixed failed media indexing being incorrectly reported as successful.
 
 ##### Improvements
 
-- Added an “All” shortcut to team-directory member management so directory Owners/Admins can add every currently unjoined team member in one action.
+- Improved the clarity of blue outline icons for team folders and team notes by slightly increasing the stroke width in the sidebar.

@@ -10,6 +10,7 @@ VERSION=""
 RUN_CHECKS=1
 WAIT_FOR_ACTIONS=1
 PUBLISH_SERVER=1
+PREVIOUS_UPDATER_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -269,9 +270,21 @@ update["version"] = version
 update["notes"] = notes
 update["pub_date"] = os.environ.get("PUB_DATE") or __import__("datetime").datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 update["platforms"]["darwin-aarch64"]["url"] = f"https://github.com/{repo}/releases/download/v{version}/Slash.app.tar.gz"
+update["platforms"]["darwin-aarch64"]["signature"] = "__PENDING_SIGNATURE__"
 update["platforms"]["windows-x86_64"]["url"] = f"https://github.com/{repo}/releases/download/v{version}/Slash_{version}_x64-setup.exe"
+update["platforms"]["windows-x86_64"]["signature"] = "__PENDING_SIGNATURE__"
 update_path.write_text(json.dumps(update, indent=2) + "\n")
 PY
+}
+
+verify_updater_metadata() {
+  local file="$1"
+  shift
+  run "$ROOT/scripts/verify-updater-metadata.py" \
+    --version "$VERSION" \
+    --repo "$REPO_FULL_NAME" \
+    --file "$file" \
+    "$@"
 }
 
 run_checks() {
@@ -415,6 +428,9 @@ for base in [Path(os.environ["ROOT"]), Path(os.environ["DESKTOP_REPO"])]:
     path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 
+  verify_updater_metadata "$ROOT/update.json" --previous-file "$PREVIOUS_UPDATER_FILE"
+  verify_updater_metadata "$DESKTOP_REPO/update.json" --previous-file "$PREVIOUS_UPDATER_FILE"
+
   commit_if_dirty "$DESKTOP_REPO" "chore: auto-populate dual-platform updater signatures for $tag"
   push_if_has_remote "$DESKTOP_REPO" "$(git -C "$DESKTOP_REPO" branch --show-current)"
 
@@ -422,8 +438,11 @@ PY
   push_if_has_remote "$ROOT" "$(git -C "$ROOT" branch --show-current)"
 
   log "Verifying online updater metadata"
-  curl -fsSL "https://raw.githubusercontent.com/$REPO_FULL_NAME/main/update.json" | \
-    jq -r '{version, mac_url:.platforms["darwin-aarch64"].url, mac_sig_len:(.platforms["darwin-aarch64"].signature|length), win_url:.platforms["windows-x86_64"].url, win_sig_len:(.platforms["windows-x86_64"].signature|length)}'
+  local online_update
+  online_update="$(mktemp)"
+  curl -fsSL "https://raw.githubusercontent.com/$REPO_FULL_NAME/main/update.json" -o "$online_update"
+  verify_updater_metadata "$online_update" --previous-file "$PREVIOUS_UPDATER_FILE"
+  jq -r '{version, mac_url:.platforms["darwin-aarch64"].url, mac_sig_len:(.platforms["darwin-aarch64"].signature|length), win_url:.platforms["windows-x86_64"].url, win_sig_len:(.platforms["windows-x86_64"].signature|length)}' "$online_update"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -476,7 +495,10 @@ ensure_tag_available
 ensure_version_progression
 ensure_changelog_entry
 
+PREVIOUS_UPDATER_FILE="$(mktemp)"
+cp "$ROOT/update.json" "$PREVIOUS_UPDATER_FILE"
 update_versions
+verify_updater_metadata "$ROOT/update.json" --allow-pending
 run_checks
 
 log "Committing and pushing main repo release preparation"

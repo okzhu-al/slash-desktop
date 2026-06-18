@@ -6,7 +6,7 @@
 //! - 由前端按钮触发，不自动后台运行
 //! - 处理完成后删除 media_pending 标记，重新走 schedule_note_for_embedding
 
-use crate::core::embedding::pipeline::enrich_with_media;
+use crate::core::embedding::pipeline::enrich_with_media_detailed;
 use rusqlite::{params, Connection};
 
 /// 媒体调度结果
@@ -210,12 +210,23 @@ pub async fn process_media_pending(
         };
 
         // 3. 调用 enrich_with_media（缓存未命中的会调 Sidecar 并写入缓存）
-        let enriched = enrich_with_media(
+        let enrich_result = enrich_with_media_detailed(
             &content,
             Some(vault_path),
             vision_config,
             Some(conn),
         ).await;
+
+        if enrich_result.had_failures {
+            log::warn!(
+                "⚠️ [MediaScheduler] Media enrichment incomplete for {}, keeping media_pending for retry",
+                note_path
+            );
+            result.failed += 1;
+            continue;
+        }
+
+        let enriched = enrich_result.enriched_content;
 
         if enriched.len() > content.len() {
             log::info!("✅ [MediaScheduler] Enriched {} (+{} chars)", note_path, enriched.len() - content.len());

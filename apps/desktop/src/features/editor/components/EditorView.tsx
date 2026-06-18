@@ -77,6 +77,7 @@ export const EditorView = (props: EditorContainerState) => {
         collabLockedByName,
         localUser,
         canRequestCollabLock,
+        isTeamOffline,
         coreFsStore,
         dynamicCustomSkillService,
         onNavigateToNote,
@@ -136,7 +137,7 @@ export const EditorView = (props: EditorContainerState) => {
     if (!editor) return null;
 
     // DocStatusBar 切换权限：仅非只读的编辑者或管理员可切换
-    const canSwitchDocStatus = !effectiveReadOnly && (isNoteEditor || isVaultOwner);
+    const canSwitchDocStatus = !effectiveReadOnly && !isTeamOffline && (isNoteEditor || isVaultOwner);
     // 是否展示协作锁胶囊（仅 collab 模式）
     const showCollabBadge = isTeamNote && noteDocStatus === 'collab';
     const statusPillSurfaceClass = 'border border-white/45 dark:border-white/10 shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]';
@@ -144,7 +145,7 @@ export const EditorView = (props: EditorContainerState) => {
         if (!effectiveReadOnly) return null;
         switch (readOnlyReason) {
             case 'collab_offline':
-                return t('editor.readonly_reason_collab_offline', '协作模式离线，恢复连接后可编辑。');
+                return t('editor.readonly_reason_collab_offline', '离线模式下无法编辑团队协作文件，请检查网络或服务。');
             case 'collab_unavailable':
                 return t('editor.readonly_reason_collab_unavailable', '暂时无法取得协作编辑锁，Slash 会自动重试。');
             case 'collab_locked_by_other':

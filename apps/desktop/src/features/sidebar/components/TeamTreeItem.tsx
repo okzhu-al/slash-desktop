@@ -127,7 +127,7 @@ export function TeamTreeItem({
                     }}
                 >
                     <div className="w-4 flex items-center justify-center shrink-0">
-                        <Folder size={16} strokeWidth={1} className="text-[#002FA7]/70 dark:text-blue-400/80 shrink-0" />
+                        <Folder size={16} strokeWidth={1.5} className="text-[#002FA7]/70 dark:text-blue-400/80 shrink-0" />
                     </div>
                     <span className="truncate">{node.name}</span>
                 </div>
@@ -225,7 +225,7 @@ export function TeamTreeItem({
             )}
             style={{ paddingLeft: paddingLeft + 20 }}
         >
-            <FileText size={16} strokeWidth={1} className={cn("shrink-0", isFileActive ? "text-[#002FA7]/70 dark:text-blue-400/80" : "text-zinc-500 dark:text-zinc-400")} />
+            <FileText size={16} strokeWidth={isFileActive ? 1.5 : 1} className={cn("shrink-0", isFileActive ? "text-[#002FA7]/70 dark:text-blue-400/80" : "text-zinc-500 dark:text-zinc-400")} />
             <span className="truncate flex-1 text-left">{node.name}</span>
         </button>
     );

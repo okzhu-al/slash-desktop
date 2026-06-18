@@ -635,7 +635,23 @@ async def parse(request: Request):
                     segments, info = model.transcribe(tmp_path, beam_size=5)
                     detected_lang = info.language
                     lang_prob = info.language_probability
-                    transcript_parts = [seg.text.strip() for seg in segments]
+                    transcript_parts = []
+                    segment_count = 0
+                    for seg in segments:
+                        segment_count += 1
+                        text = seg.text.strip()
+                        if text:
+                            transcript_parts.append(text)
+                        if segment_count == 1 or segment_count % 50 == 0:
+                            start_ts = getattr(seg, "start", None)
+                            end_ts = getattr(seg, "end", None)
+                            print(
+                                f"[DEBUG] faster-whisper segment progress: count={segment_count} "
+                                f"start={start_ts if start_ts is not None else '?'} "
+                                f"end={end_ts if end_ts is not None else '?'}",
+                                flush=True,
+                            )
+                    print(f"[DEBUG] faster-whisper segments collected: {segment_count}", flush=True)
                 finally:
                     os.unlink(tmp_path)
                 return detected_lang, lang_prob, transcript_parts

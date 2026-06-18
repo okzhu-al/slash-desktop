@@ -3,6 +3,7 @@ import { DocStatus } from '../components/DocStatusBar';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useFileSystemStore } from '@/core/fs/store';
 import { useCollabLock, CollabLockState } from './useCollabLock';
+import { autoSyncManager } from '@/services/AutoSyncManager';
 
 interface CollaborationState {
     isTeam: boolean;
@@ -18,7 +19,13 @@ interface CollaborationState {
     collabLockedByName: string | null;
     /** 是否处于协作离线状态（用于封锁评论/批注/回复） */
     isCollabOffline: boolean;
+    /** 团队同步是否离线（用于禁止切换 solo/collab 模式） */
+    isTeamOffline: boolean;
     reportActivity: (mode?: 'request' | 'renew') => void;
+}
+
+function normalizeIdentity(value: unknown): string {
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 /**
@@ -36,6 +43,8 @@ export function useEditorCollaboration(
     // 🛡️ 使用 zustand hook 响应式订阅，确保 session 变化时触发重渲染
     const isTeam = !!useSessionStore(s => s.teamVaultId);
     const localUser = useSessionStore(s => s.displayName) ?? '';
+    const localUsername = useSessionStore(s => s.teamUsername) ?? '';
+    const localUserId = useSessionStore(s => s.userId) ?? '';
     const teamRole = useSessionStore(s => s.teamRole) ?? '';
     const vaultId = useSessionStore(s => s.teamVaultId);
     
@@ -43,8 +52,37 @@ export function useEditorCollaboration(
     
     // YAML frontmatter 的 editor 字段（创建笔记时写入创建者的 display name）
     const noteEditorName = (initialMetadata as any)?.editor ?? '';
-    
-    const isNoteEditor = (isTeam || isTeamNote) && !!localUser && localUser === noteEditorName;
+
+    const [bindingIdentity, setBindingIdentity] = useState<{ displayName?: string; username?: string; userId?: string }>({});
+    const [isTeamOffline, setIsTeamOffline] = useState(() => autoSyncManager.getStatus() === 'offline' || !navigator.onLine);
+
+    const localIdentityNames = useMemo(() => new Set([
+        normalizeIdentity(localUser),
+        normalizeIdentity(localUsername),
+        normalizeIdentity(bindingIdentity.displayName),
+        normalizeIdentity(bindingIdentity.username),
+    ].filter(Boolean)), [bindingIdentity.displayName, bindingIdentity.username, localUser, localUsername]);
+
+    const noteEditorNames = useMemo(() => new Set([
+        normalizeIdentity((initialMetadata as any)?.editor),
+        normalizeIdentity((initialMetadata as any)?.editor_name),
+        normalizeIdentity((initialMetadata as any)?.editor_username),
+    ].filter(Boolean)), [initialMetadata]);
+
+    const localIdentityIds = useMemo(() => new Set([
+        normalizeIdentity(localUserId),
+        normalizeIdentity(bindingIdentity.userId),
+    ].filter(Boolean)), [bindingIdentity.userId, localUserId]);
+
+    const noteEditorIds = useMemo(() => new Set([
+        normalizeIdentity((initialMetadata as any)?.editor_id),
+        normalizeIdentity((initialMetadata as any)?.editorId),
+    ].filter(Boolean)), [initialMetadata]);
+
+    const isNoteEditor = isTeamNote && (
+        [...localIdentityNames].some(name => noteEditorNames.has(name))
+        || [...localIdentityIds].some(id => noteEditorIds.has(id))
+    );
     const isVaultOwner = isTeam && teamRole?.toLowerCase() === 'admin';
     
     // 🌸 史诗级自愈增强：如果当前处于个人库视图（vaultId 为空），但它确实是团队笔记，
@@ -100,6 +138,53 @@ export function useEditorCollaboration(
 
         return () => { isMounted = false; };
     }, [vaultId, isTeamNote, noteId]);
+
+    useEffect(() => {
+        const unsubscribe = autoSyncManager.onStatusChange((event) => {
+            setIsTeamOffline(event.status === 'offline' || !navigator.onLine);
+        });
+        const handleOffline = () => setIsTeamOffline(true);
+        const handleOnline = () => setIsTeamOffline(autoSyncManager.getStatus() === 'offline');
+        window.addEventListener('offline', handleOffline);
+        window.addEventListener('online', handleOnline);
+        return () => {
+            unsubscribe();
+            window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('online', handleOnline);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!isTeamNote) {
+            setBindingIdentity({});
+            return;
+        }
+
+        let isMounted = true;
+        (async () => {
+            try {
+                const rootPath = useFileSystemStore.getState().root?.path;
+                if (!rootPath) return;
+                const { readVaultBindings } = await import('@/services/VaultBindingService');
+                const { bindings } = await readVaultBindings(rootPath);
+                const match = bindings.find(binding =>
+                    binding.mode === 'team'
+                    && (!resolvedVaultId || binding.teamVaultId === resolvedVaultId)
+                );
+                if (isMounted) {
+                    setBindingIdentity(match ? {
+                        displayName: match.displayName,
+                        username: match.username,
+                        userId: match.userId,
+                    } : {});
+                }
+            } catch {
+                if (isMounted) setBindingIdentity({});
+            }
+        })();
+
+        return () => { isMounted = false; };
+    }, [isTeamNote, resolvedVaultId]);
 
     // 🌸 史诗级自愈增强 2：在自愈出的团队 ID 不为空时，即使处于个人视图，也自动异步拉取全局团队成员，
     // 回填至全局变量 (window as any).__slashTeamMembers，确保 @ 提及功能随时能够拉出全局所有成员！
@@ -253,6 +338,7 @@ export function useEditorCollaboration(
         collabLockState: lockState,
         collabLockedByName: lockedByName,
         isCollabOffline,
+        isTeamOffline,
         reportActivity,
-    }), [isTeam, localUser, teamRole, noteDocStatus, noteEditorName, isNoteEditor, isVaultOwner, effectiveReadOnly, readOnlyReason, lockState, lockedByName, isCollabOffline, reportActivity]);
+    }), [isTeam, localUser, teamRole, noteDocStatus, noteEditorName, isNoteEditor, isVaultOwner, effectiveReadOnly, readOnlyReason, lockState, lockedByName, isCollabOffline, isTeamOffline, reportActivity]);
 }

@@ -11,6 +11,7 @@ use super::types::{ChunkKind, JobStatus, PipelineConfig, ProductType};
 use crate::core::ai::service::AIService;
 use rusqlite::{params, Connection};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// LLM 配置，用于传给 Sidecar 做图片 OCR
 #[derive(Clone, Default)]
@@ -20,29 +21,73 @@ pub struct SidecarLlmConfig {
     pub llm_model: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct MediaEnrichResult {
+    pub enriched_content: String,
+    pub had_failures: bool,
+}
+
+fn is_audio_video_asset(filename: &str) -> bool {
+    matches!(
+        std::path::Path::new(filename)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase())
+            .as_deref(),
+        Some(
+            "mp3"
+                | "wav"
+                | "mp4"
+                | "avi"
+                | "m4a"
+                | "mkv"
+                | "mov"
+                | "webm"
+                | "flac"
+                | "ogg"
+                | "wmv"
+                | "flv"
+                | "aac"
+                | "wma"
+                | "m4v"
+        )
+    )
+}
+
 /// 多媒体语义提取：检测 ![](assets/...) 引用，查缓存或调 Sidecar /parse 获取文本
 ///
 /// Phase 6 改造：接入 media_enrich_cache 表
 /// - 以 CAS 文件名（即内容 hash）为键查询缓存
 /// - 命中 → 直接使用缓存文本（0 Sidecar 调用）
 /// - 未命中 → 调 Sidecar，结果写入缓存（确保后续调用返回相同文本，消除 chunk ID 漂移）
-pub async fn enrich_with_media(
+pub(crate) async fn enrich_with_media_detailed(
     content: &str,
     vault_path: Option<&std::path::Path>,
     llm_config: Option<&SidecarLlmConfig>,
     conn: Option<&Connection>,
-) -> String {
+) -> MediaEnrichResult {
     let media_regex = match regex::Regex::new(r"!\[.*?\]\((assets/[^)]+)\)") {
         Ok(r) => r,
-        Err(_) => return content.to_string(),
+        Err(_) => {
+            return MediaEnrichResult {
+                enriched_content: content.to_string(),
+                had_failures: false,
+            };
+        }
     };
 
     let vault = match vault_path {
         Some(v) => v,
-        None => return content.to_string(),
+        None => {
+            return MediaEnrichResult {
+                enriched_content: content.to_string(),
+                had_failures: false,
+            };
+        }
     };
 
     let mut media_texts: Vec<String> = Vec::new();
+    let mut had_failures = false;
 
     for cap in media_regex.captures_iter(content) {
         let asset_rel = &cap[1];
@@ -50,6 +95,7 @@ pub async fn enrich_with_media(
 
         if !asset_abs.exists() {
             log::warn!("⚠️ [MediaEnrich] Asset not found: {}", asset_abs.display());
+            had_failures = true;
             continue;
         }
 
@@ -102,10 +148,15 @@ pub async fn enrich_with_media(
         }
 
         let sidecar_url = crate::core::sidecar::get_sidecar_base_url();
+        let sidecar_timeout = if is_audio_video_asset(filename) {
+            Duration::from_secs(1800)
+        } else {
+            Duration::from_secs(120)
+        };
         match reqwest::Client::new()
             .post(&format!("{}/parse", sidecar_url))
             .json(&payload)
-            .timeout(std::time::Duration::from_secs(120))
+            .timeout(sidecar_timeout)
             .send()
             .await
         {
@@ -138,27 +189,50 @@ pub async fn enrich_with_media(
                             log::info!("✅ [MediaEnrich] Got {} chars from {}", md_text.len(), filename);
                         } else {
                             log::warn!("⚠️ [MediaEnrich] Sidecar returned empty markdown for {} (LLM config present: {})", filename, llm_config.is_some());
+                            had_failures = true;
                         }
                     } else {
                         log::warn!("⚠️ [MediaEnrich] Sidecar response missing 'markdown' field for {}", filename);
+                        had_failures = true;
                     }
+                } else {
+                    log::warn!("⚠️ [MediaEnrich] Failed to parse sidecar JSON response for {}", filename);
+                    had_failures = true;
                 }
             }
             Ok(resp) => {
                 log::warn!("⚠️ [MediaEnrich] Sidecar returned {}: {}", resp.status(), filename);
+                had_failures = true;
             }
             Err(e) => {
                 log::warn!("⚠️ [MediaEnrich] Sidecar request failed for {}: {}", filename, e);
+                had_failures = true;
             }
         }
     }
 
-    if media_texts.is_empty() {
+    let enriched_content = if media_texts.is_empty() {
         content.to_string()
     } else {
         log::info!("🧬 [MediaEnrich] Enriched with {} media extractions", media_texts.len());
         format!("{}{}", content, media_texts.join(""))
+    };
+
+    MediaEnrichResult {
+        enriched_content,
+        had_failures,
     }
+}
+
+pub async fn enrich_with_media(
+    content: &str,
+    vault_path: Option<&std::path::Path>,
+    llm_config: Option<&SidecarLlmConfig>,
+    conn: Option<&Connection>,
+) -> String {
+    enrich_with_media_detailed(content, vault_path, llm_config, conn)
+        .await
+        .enriched_content
 }
 
 /// 检测内容中是否包含媒体引用 ![](assets/...)

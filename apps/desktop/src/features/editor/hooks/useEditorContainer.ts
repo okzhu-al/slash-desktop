@@ -85,6 +85,7 @@ export const useEditorContainer = ({
         collabLockedByName,
         localUser,
         isCollabOffline,
+        isTeamOffline,
         reportActivity,
     } = useEditorCollaboration(initialMetadata, readOnly, noteId, isTeamNote, liveDocStatus, fileId);
 
@@ -505,6 +506,7 @@ export const useEditorContainer = ({
         collabLockedByName,
         localUser,
         isCollabOffline,
+        isTeamOffline,
         canRequestCollabLock,
         reportActivity,
         
