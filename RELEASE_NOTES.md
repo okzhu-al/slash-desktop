@@ -1,27 +1,19 @@
-## v0.1.3-beta.18
+## v0.1.3-beta.19
 
 #### 中文
 
 ##### Bug 修复
 
-- 修复团队笔记离线时，Solo 模式编辑者本人可能被误判为只读的问题，并补充更清晰的离线提示。
-- 修复从 Excel、Telegram 等富文本应用粘贴纯数字时，内容可能被错误转换成外链的问题。
-- 修复从 Numbers / Excel 粘贴整块表格图片时，偶发出现裂图、404 或空资源文件的问题。
-- 修复长音频媒体索引被过早中断，以及失败后仍被错误标记为成功的问题。
-
-##### 体验优化
-
-- 优化团队目录和团队笔记的蓝色线框图标清晰度，适度加粗线宽，减少侧边栏细线发虚的问题。
+- 修复长音频/视频媒体索引只保留前一小段转写文本的问题；旧的截断缓存会自动刷新为完整转写缓存。
+- 修复 `m4v` 视频在桌面端与 sidecar 之间类型识别不一致，导致未进入本地 Whisper 转写流程的问题。
+- 修复插入 `.m4a/.aac` 等音频附件时，占位节点触发 `_importing_*` 404，以及部分音频文件可能被误判为无引用后清理的问题。
+- 修复 InputHub 导入音视频后，转写内容在正文和悬浮卡复制粘贴时表现为类似 `Shift+Enter` 软换行的问题。
 
 #### English
 
 ##### Bug Fixes
 
-- Fixed Solo-mode team notes sometimes becoming read-only for the actual editor while offline, and improved offline messaging.
-- Fixed pure numbers copied from rich-text apps such as Excel and Telegram sometimes being converted into external links.
-- Fixed pasted table snapshots from Numbers / Excel occasionally becoming broken images, 404 assets, or empty media files.
-- Fixed long-audio media indexing being interrupted too early, and fixed failed media indexing being incorrectly reported as successful.
-
-##### Improvements
-
-- Improved the clarity of blue outline icons for team folders and team notes by slightly increasing the stroke width in the sidebar.
+- Fixed long audio/video media indexing keeping only a small initial portion of the transcript; legacy truncated caches are refreshed automatically.
+- Fixed inconsistent `m4v` media detection between the desktop app and sidecar, which could skip the local Whisper transcription path.
+- Fixed audio attachment imports such as `.m4a/.aac` triggering `_importing_*` 404s, and fixed some audio files being cleaned up after being misdetected as unreferenced.
+- Fixed audio/video transcripts imported through InputHub using soft-line-break style formatting in the note body and when copied from the media hover card.

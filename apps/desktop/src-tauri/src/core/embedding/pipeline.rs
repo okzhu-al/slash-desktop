@@ -13,6 +13,9 @@ use rusqlite::{params, Connection};
 use std::sync::Arc;
 use std::time::Duration;
 
+const AUDIO_VIDEO_FULL_CACHE_MARKER: &str = "audio_video_full_v1";
+const LEGACY_AUDIO_VIDEO_TRUNCATION_CUTOFF: i64 = 4096;
+
 /// LLM 配置，用于传给 Sidecar 做图片 OCR
 #[derive(Clone, Default)]
 pub struct SidecarLlmConfig {
@@ -52,6 +55,22 @@ fn is_audio_video_asset(filename: &str) -> bool {
                 | "m4v"
         )
     )
+}
+
+fn media_cache_text_for_embedding(filename: &str, md_text: &str) -> String {
+    if is_audio_video_asset(filename) {
+        md_text.to_string()
+    } else {
+        md_text.chars().take(2000).collect()
+    }
+}
+
+fn media_cache_model_name(filename: &str, model_name: &str) -> String {
+    if is_audio_video_asset(filename) && !model_name.contains(AUDIO_VIDEO_FULL_CACHE_MARKER) {
+        format!("{model_name}:{AUDIO_VIDEO_FULL_CACHE_MARKER}")
+    } else {
+        model_name.to_string()
+    }
 }
 
 /// 多媒体语义提取：检测 ![](assets/...) 引用，查缓存或调 Sidecar /parse 获取文本
@@ -112,16 +131,28 @@ pub(crate) async fn enrich_with_media_detailed(
 
         // 1. 查缓存
         if let Some(db) = conn {
-            let cached: Option<String> = db.query_row(
-                "SELECT enriched_text FROM media_enrich_cache WHERE asset_hash = ?1",
+            let cached: Option<(String, i64, String)> = db.query_row(
+                "SELECT enriched_text, char_count, model_name FROM media_enrich_cache WHERE asset_hash = ?1",
                 rusqlite::params![&asset_hash],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             ).ok();
 
-            if let Some(text) = cached {
-                log::info!("⚡ [MediaEnrich] Cache HIT for {} ({} chars)", filename, text.len());
-                media_texts.push(format!("\n[Media: {}]\n{}", filename, text));
-                continue;
+            if let Some((text, char_count, model_name)) = cached {
+                let is_legacy_truncated_audio = is_audio_video_asset(filename)
+                    && char_count <= LEGACY_AUDIO_VIDEO_TRUNCATION_CUTOFF
+                    && !model_name.contains(AUDIO_VIDEO_FULL_CACHE_MARKER);
+                if is_legacy_truncated_audio {
+                    log::info!(
+                        "♻️ [MediaEnrich] Refreshing legacy truncated audio/video cache for {} ({} chars, model={})",
+                        filename,
+                        char_count,
+                        model_name
+                    );
+                } else {
+                    log::info!("⚡ [MediaEnrich] Cache HIT for {} ({} chars)", filename, char_count);
+                    media_texts.push(format!("\n[Media: {}]\n{}", filename, text));
+                    continue;
+                }
             }
         }
 
@@ -164,29 +195,35 @@ pub(crate) async fn enrich_with_media_detailed(
                 if let Ok(body) = resp.json::<serde_json::Value>().await {
                     if let Some(md_text) = body["markdown"].as_str() {
                         if !md_text.is_empty() {
-                            let truncated: String = md_text.chars().take(2000).collect();
+                            let cached_text = media_cache_text_for_embedding(filename, md_text);
+                            let cached_char_count = cached_text.chars().count();
                             
                             // 3. 写入缓存（冻结文本，消除 ID 漂移）
                             if let Some(db) = conn {
                                 let model_name = llm_config
                                     .map(|c| c.llm_model.as_str())
                                     .unwrap_or("unknown");
+                                let cache_model_name = media_cache_model_name(filename, model_name);
                                 let _ = db.execute(
                                     r#"INSERT OR REPLACE INTO media_enrich_cache 
                                        (asset_hash, enriched_text, model_name, char_count, updated_at)
                                        VALUES (?1, ?2, ?3, ?4, unixepoch())"#,
                                     rusqlite::params![
                                         &asset_hash,
-                                        &truncated,
-                                        model_name,
-                                        truncated.len() as i64,
+                                        &cached_text,
+                                        &cache_model_name,
+                                        cached_char_count as i64,
                                     ],
                                 );
-                                log::info!("💾 [MediaEnrich] Cached {} ({} chars)", filename, truncated.len());
+                                log::info!("💾 [MediaEnrich] Cached {} ({} chars)", filename, cached_char_count);
                             }
                             
-                            media_texts.push(format!("\n[Media: {}]\n{}", filename, truncated));
-                            log::info!("✅ [MediaEnrich] Got {} chars from {}", md_text.len(), filename);
+                            media_texts.push(format!("\n[Media: {}]\n{}", filename, cached_text));
+                            log::info!(
+                                "✅ [MediaEnrich] Got {} chars from {}",
+                                md_text.chars().count(),
+                                filename
+                            );
                         } else {
                             log::warn!("⚠️ [MediaEnrich] Sidecar returned empty markdown for {} (LLM config present: {})", filename, llm_config.is_some());
                             had_failures = true;

@@ -1,15 +1,15 @@
 {
-  "version": "0.1.3-beta.18",
-  "notes": "#### 中文\n\n##### Bug 修复\n\n- 修复团队笔记离线时，Solo 模式编辑者本人可能被误判为只读的问题，并补充更清晰的离线提示。\n- 修复从 Excel、Telegram 等富文本应用粘贴纯数字时，内容可能被错误转换成外链的问题。\n- 修复从 Numbers / Excel 粘贴整块表格图片时，偶发出现裂图、404 或空资源文件的问题。\n- 修复长音频媒体索引被过早中断，以及失败后仍被错误标记为成功的问题。\n\n##### 体验优化\n\n- 优化团队目录和团队笔记的蓝色线框图标清晰度，适度加粗线宽，减少侧边栏细线发虚的问题。\n\n#### English\n\n##### Bug Fixes\n\n- Fixed Solo-mode team notes sometimes becoming read-only for the actual editor while offline, and improved offline messaging.\n- Fixed pure numbers copied from rich-text apps such as Excel and Telegram sometimes being converted into external links.\n- Fixed pasted table snapshots from Numbers / Excel occasionally becoming broken images, 404 assets, or empty media files.\n- Fixed long-audio media indexing being interrupted too early, and fixed failed media indexing being incorrectly reported as successful.\n\n##### Improvements\n\n- Improved the clarity of blue outline icons for team folders and team notes by slightly increasing the stroke width in the sidebar.",
-  "pub_date": "2026-06-18T11:40:44Z",
+  "version": "0.1.3-beta.19",
+  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u4fee\u590d\u957f\u97f3\u9891/\u89c6\u9891\u5a92\u4f53\u7d22\u5f15\u53ea\u4fdd\u7559\u524d\u4e00\u5c0f\u6bb5\u8f6c\u5199\u6587\u672c\u7684\u95ee\u9898\uff1b\u65e7\u7684\u622a\u65ad\u7f13\u5b58\u4f1a\u81ea\u52a8\u5237\u65b0\u4e3a\u5b8c\u6574\u8f6c\u5199\u7f13\u5b58\u3002\n- \u4fee\u590d `m4v` \u89c6\u9891\u5728\u684c\u9762\u7aef\u4e0e sidecar \u4e4b\u95f4\u7c7b\u578b\u8bc6\u522b\u4e0d\u4e00\u81f4\uff0c\u5bfc\u81f4\u672a\u8fdb\u5165\u672c\u5730 Whisper \u8f6c\u5199\u6d41\u7a0b\u7684\u95ee\u9898\u3002\n- \u4fee\u590d\u63d2\u5165 `.m4a/.aac` \u7b49\u97f3\u9891\u9644\u4ef6\u65f6\uff0c\u5360\u4f4d\u8282\u70b9\u89e6\u53d1 `_importing_*` 404\uff0c\u4ee5\u53ca\u90e8\u5206\u97f3\u9891\u6587\u4ef6\u53ef\u80fd\u88ab\u8bef\u5224\u4e3a\u65e0\u5f15\u7528\u540e\u6e05\u7406\u7684\u95ee\u9898\u3002\n- \u4fee\u590d InputHub \u5bfc\u5165\u97f3\u89c6\u9891\u540e\uff0c\u8f6c\u5199\u5185\u5bb9\u5728\u6b63\u6587\u548c\u60ac\u6d6e\u5361\u590d\u5236\u7c98\u8d34\u65f6\u8868\u73b0\u4e3a\u7c7b\u4f3c `Shift+Enter` \u8f6f\u6362\u884c\u7684\u95ee\u9898\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Fixed long audio/video media indexing keeping only a small initial portion of the transcript; legacy truncated caches are refreshed automatically.\n- Fixed inconsistent `m4v` media detection between the desktop app and sidecar, which could skip the local Whisper transcription path.\n- Fixed audio attachment imports such as `.m4a/.aac` triggering `_importing_*` 404s, and fixed some audio files being cleaned up after being misdetected as unreferenced.\n- Fixed audio/video transcripts imported through InputHub using soft-line-break style formatting in the note body and when copied from the media hover card.",
+  "pub_date": "2026-06-18T14:33:01Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnVVM1lnbytBNHQya3ZyTm01ZVd5cStYeWN0WmNDZE90dGpENjJQUWxzVjYwWTZ4ckYrOGpSQUZ5NmNKSWRRZTdubmZRMFdmM0o3NktZTE1uMXU4NXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzgzNTgwCWZpbGU6U2xhc2guYXBwLnRhci5negprUjl1U0JyUlUyZ0FjcCtpWUljTUxtcTJrM1VmS3pxOVk1akFNWXpOUHkvMnJRdEpmb3RHU0l5TllkQTlxL1Zic1VhQTBlUWc3S3p5TndhenBGVWdDdz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.18/Slash.app.tar.gz"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.19/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnAxb3NJV205OTE1dGNPMmg0ekVmTTRmTGMwTWd4YXZJcTFJV29CWXJ2Y1VHeEJSbHd6angwa04wUWhFWGw5NDlpZkc0NmQ0bXp4Z3Nic3pBWDkwQndZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNzgzOTc2CWZpbGU6U2xhc2hfMC4xLjMtYmV0YS4xOF94NjQtc2V0dXAuZXhlCkhpRHJBaTBvZGpZL0dHMHRNOElZL0F0MDBSMVBnOXNrZ3JjN0NUYmFYVXlNc0dSTWM5a1BrV2p1NWI0RW1SUXYzSE9hZEtETyszVnE1UHUvUFE1R0RBPT0K",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.18/Slash_0.1.3-beta.18_x64-setup.exe"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.3-beta.19/Slash_0.1.3-beta.19_x64-setup.exe"
     }
   }
 }

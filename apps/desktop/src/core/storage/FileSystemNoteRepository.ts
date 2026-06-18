@@ -370,6 +370,12 @@ export class FileSystemNoteRepository implements NoteRepository {
             const ref = decodeURIComponent(match[1]);
             if (ref.startsWith('assets/')) assetRefs.push(ref);
         }
+        // Extract audio/video tags in case the editor content is still in HTML form
+        const mediaHtmlRegex = /<(audio|video|source)[^>]+src=["']([^"']+)["']/g;
+        while ((match = mediaHtmlRegex.exec(content)) !== null) {
+            const ref = decodeURIComponent(match[2]);
+            if (ref.startsWith('assets/')) assetRefs.push(ref);
+        }
         return assetRefs;
     }
 

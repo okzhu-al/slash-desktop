@@ -25,6 +25,8 @@ export const AudioComponent = (props: any) => {
     const { enrichedText } = useMediaEnrichment(src);
 
     const audioRef = useRef<HTMLAudioElement>(null);
+    const isImporting = src?.includes('_importing_');
+    const isImportFailed = src?.includes('_import_failed_');
 
     // Generate random waveform bars (simplified visualization)
     useEffect(() => {
@@ -41,6 +43,11 @@ export const AudioComponent = (props: any) => {
 
     // Resolve audio URL
     useEffect(() => {
+        if (isImporting || isImportFailed) {
+            setResolvedSrc('');
+            return;
+        }
+
         let isMounted = true;
         const resolve = async () => {
             if (!src) return;
@@ -59,7 +66,7 @@ export const AudioComponent = (props: any) => {
         };
         resolve();
         return () => { isMounted = false; };
-    }, [src, root]);
+    }, [src, root, isImporting, isImportFailed]);
 
     // Audio time update
     useEffect(() => {
@@ -116,13 +123,30 @@ export const AudioComponent = (props: any) => {
     const isActive = isHovered;
     const progress = (duration && duration > 0) ? (currentTime / duration) : 0;
 
+    if (isImporting || isImportFailed) {
+        const placeholderClass = isImportFailed ? 'media-placeholder--failed' : 'media-placeholder--importing';
+        return (
+            <NodeViewWrapper
+                className="audio-view"
+                style={{ textAlign: 'left', display: 'block', clear: 'both' }}
+            >
+                <div className={`media-placeholder ${placeholderClass}`}>
+                    <div className="media-placeholder__icon">♪</div>
+                    <div className="media-placeholder__text">
+                        {isImportFailed ? 'Audio import failed' : 'Importing audio...'}
+                    </div>
+                </div>
+            </NodeViewWrapper>
+        );
+    }
+
     return (
         <NodeViewWrapper
             className="audio-view"
             style={{ textAlign: 'left', display: 'block', clear: 'both' }}
         >
             {/* Hidden audio element */}
-            <audio ref={audioRef} src={resolvedSrc || src} preload="metadata" />
+            <audio ref={audioRef} src={resolvedSrc || undefined} preload="metadata" />
 
             <EnrichmentHoverCard content={enrichedText}>
                 <div

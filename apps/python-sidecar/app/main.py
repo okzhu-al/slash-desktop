@@ -264,7 +264,42 @@ def get_whisper_model():
     return _whisper_model
 
 # 音视频文件扩展名集合
-AUDIO_VIDEO_EXTENSIONS = {"mp3", "wav", "mp4", "avi", "m4a", "mkv", "mov", "webm", "flac", "ogg", "wmv", "flv", "aac", "wma"}
+AUDIO_VIDEO_EXTENSIONS = {"mp3", "wav", "mp4", "avi", "m4a", "mkv", "mov", "webm", "flac", "ogg", "wmv", "flv", "aac", "wma", "m4v"}
+
+
+def format_transcript_markdown(transcript_parts):
+    """
+    将逐段转写文本整理成 Markdown 段落，而不是用单换行硬拼。
+    否则在编辑器 `breaks: true` 配置下会被解析成大量软换行，表现得像 Shift+Enter。
+    """
+    paragraphs = []
+    current_parts = []
+    current_len = 0
+    sentence_end_re = re.compile(r'[.!?。！？…]["\')\]]?$')
+
+    for raw_part in transcript_parts:
+        text = raw_part.strip()
+        if not text:
+            continue
+
+        current_parts.append(text)
+        current_len += len(text)
+
+        should_break = False
+        if current_len >= 280 and sentence_end_re.search(text):
+            should_break = True
+        elif current_len >= 420:
+            should_break = True
+
+        if should_break:
+            paragraphs.append(" ".join(current_parts).strip())
+            current_parts = []
+            current_len = 0
+
+    if current_parts:
+        paragraphs.append(" ".join(current_parts).strip())
+
+    return "\n\n".join(p for p in paragraphs if p)
 
 md = MarkItDown()
 
@@ -662,7 +697,7 @@ async def parse(request: Request):
                 )
                 f.write(f"[DEBUG] 检测到语言: {detected_lang} (概率: {lang_prob:.2f})\n")
 
-                markdown_text = "\n".join(transcript_parts) if transcript_parts else ""
+                markdown_text = format_transcript_markdown(transcript_parts) if transcript_parts else ""
 
                 if not markdown_text:
                     markdown_text = "> [!NOTE]\n> 音频/视频语音内容提取结束：未检测到可识别的清晰人声或语音片段。\n"
