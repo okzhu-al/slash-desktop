@@ -745,6 +745,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
     const [showCompose, setShowCompose] = useState(false);
     const [composing,   setComposing]   = useState('');
     const [currentFileId, setCurrentFileId] = useState<string | null>(null);
+    const [currentResolvedPath, setCurrentResolvedPath] = useState<string>('');
     // 记录由于交互已消除的事件时间戳
     const [clickedTs,   setClickedTs]   = useState<Set<number>>(new Set());
     const listEndRef = useRef<HTMLDivElement>(null);
@@ -758,19 +759,27 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
     const unreadFiles = useCollabNotifyStore(s => s.unreadFiles);
     const relPath = notePath?.replace(/^__team__\//, '').replace(/^\/|^\.\//g, '') ?? '';
     const basename = getBasename(relPath) ?? '';
+    const isVirtualTeamNote = notePath?.startsWith('__team__/') ?? false;
 
     const currentStoreUnreadSince = useMemo(() => {
-        if (!relPath) return 0;
-        let entry = getUnreadEntry(relPath);
-        if (!entry && currentFileId) {
-            for (const v of unreadFiles.values()) {
-                if (v.fileId === currentFileId) {
-                    entry = v;
-                    break;
+        let entry = currentFileId
+            ? (() => {
+                for (const v of unreadFiles.values()) {
+                    if (v.fileId === currentFileId) return v;
                 }
-            }
+                return undefined;
+            })()
+            : undefined;
+
+        if (!entry && currentResolvedPath) {
+            entry = getUnreadEntry(currentResolvedPath);
         }
-        if (!entry && basename) {
+
+        if (!entry && !isVirtualTeamNote && relPath) {
+            entry = getUnreadEntry(relPath);
+        }
+
+        if (!entry && !isVirtualTeamNote && basename) {
             for (const v of unreadFiles.values()) {
                 if (v.filePath === basename || v.filePath.endsWith('/' + basename)) {
                     entry = v;
@@ -779,25 +788,30 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
             }
         }
         return entry?.unreadSince || 0;
-    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId]);
+    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId, currentResolvedPath, isVirtualTeamNote]);
 
     const currentUnreadTarget = useMemo(() => {
-        if (!relPath) return null;
-
-        let matchedPath = relPath;
-        let matchedEntry = getUnreadEntry(relPath);
-
-        if (!matchedEntry && currentFileId) {
-            for (const entry of unreadFiles.values()) {
-                if (entry.fileId === currentFileId) {
-                    matchedEntry = entry;
-                    matchedPath = entry.filePath;
-                    break;
+        let matchedPath = currentResolvedPath || relPath;
+        let matchedEntry = currentFileId
+            ? (() => {
+                for (const entry of unreadFiles.values()) {
+                    if (entry.fileId === currentFileId) return entry;
                 }
-            }
+                return undefined;
+            })()
+            : undefined;
+
+        if (!matchedEntry && currentResolvedPath) {
+            matchedPath = currentResolvedPath;
+            matchedEntry = getUnreadEntry(currentResolvedPath);
         }
 
-        if (!matchedEntry && basename) {
+        if (!matchedEntry && !isVirtualTeamNote && relPath) {
+            matchedPath = relPath;
+            matchedEntry = getUnreadEntry(relPath);
+        }
+
+        if (!matchedEntry && !isVirtualTeamNote && basename) {
             for (const entry of unreadFiles.values()) {
                 if (entry.filePath === basename || entry.filePath.endsWith('/' + basename)) {
                     matchedEntry = entry;
@@ -809,7 +823,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
 
         if (!matchedEntry) return null;
         return { path: matchedPath, entry: matchedEntry };
-    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId]);
+    }, [relPath, basename, unreadFiles, getUnreadEntry, currentFileId, currentResolvedPath, isVirtualTeamNote]);
 
     // 冻结当前会话的界定游标，防止 markRead 后界面 NEW 瞬间蒸发
     const [frozenUnreadSince, setFrozenUnreadSince] = useState(0);
@@ -828,6 +842,7 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
         setClickedTs(new Set());
         setFrozenUnreadSince(0); // 切换笔记时强制解冻游标
         setCurrentFileId(null);
+        setCurrentResolvedPath('');
     }, [notePath]); // eslint-disable-line
 
     useEffect(() => {
@@ -842,11 +857,15 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
         loadIdentity().then(({ fileId, filePath }) => {
             if (cancelled) return;
             setCurrentFileId(fileId);
+            setCurrentResolvedPath(filePath || resolved?.filePath || '');
             if (resolved && !resolved.filePath && filePath) {
                 resolved.filePath = filePath;
             }
         }).catch(() => {
-            if (!cancelled) setCurrentFileId(resolved?.fileId ?? null);
+            if (!cancelled) {
+                setCurrentFileId(resolved?.fileId ?? null);
+                setCurrentResolvedPath(resolved?.filePath ?? '');
+            }
         });
         return () => {
             cancelled = true;

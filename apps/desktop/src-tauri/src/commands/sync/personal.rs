@@ -11,7 +11,6 @@ use slash_sync_proto::{
 
 use super::client::SyncClient;
 use super::helpers::{build_local_directory_hashes, collect_files_for_push, extract_asset_refs};
-use super::path_mapping::{normalize_prefix, TeamDirectoryMappingsFile, TeamPathMappingsFile};
 use super::state::{
     expire_edit_session_if_idle, load_unified_state, make_edit_session_id, save_unified_state,
 };
@@ -164,12 +163,7 @@ pub async fn sync_vault(
     // Step 1: Scan local personal path
     // 🛡️ 个人空间不设文件大小限制（传 None），仅团队空间受 max_sync_file_size 约束
     // assets/ 文件用文件名当 hash（零 IO），已在 scan_directory_manifests 中保证跳过内容读取
-    let team_local_prefixes = load_active_team_local_prefixes(&root);
-    let manifests = filter_personal_manifests(
-        &root,
-        scan_directory_manifests(&root, None),
-        &team_local_prefixes,
-    );
+    let manifests = filter_personal_manifests(&root, scan_directory_manifests(&root, None));
 
     // Step 2: 构建目录级 Merkle hash
     let directory_hashes = build_local_directory_hashes(&manifests);
@@ -756,11 +750,7 @@ pub async fn sync_vault(
         .map(|m| (m.relative_path.clone(), m.content_hash.clone()))
         .collect();
 
-    let post_manifests = filter_personal_manifests(
-        &root,
-        scan_directory_manifests(&root, None),
-        &team_local_prefixes,
-    );
+    let post_manifests = filter_personal_manifests(&root, scan_directory_manifests(&root, None));
     let post_hashes: std::collections::HashMap<String, String> = post_manifests
         .iter()
         .map(|m| (m.relative_path.clone(), m.content_hash.clone()))
@@ -862,52 +852,16 @@ pub async fn sync_vault(
     })
 }
 
-fn load_active_team_local_prefixes(root: &std::path::Path) -> Vec<String> {
-    let mut prefixes = std::collections::HashSet::new();
-
-    let directory_mappings_path = root.join(".slash").join("team_directory_mappings.json");
-    let directory_mappings = TeamDirectoryMappingsFile::load(&directory_mappings_path);
-    for team in directory_mappings.teams.values() {
-        for mapping in team.directories.values() {
-            if mapping.status == "active" && !mapping.local_path.trim().is_empty() {
-                prefixes.insert(normalize_prefix(mapping.local_path.trim_end_matches('/')));
-            }
-        }
-    }
-
-    let legacy_mappings_path = root.join(".slash").join("team_path_mappings.json");
-    let legacy_mappings = TeamPathMappingsFile::load(&legacy_mappings_path);
-    for team in legacy_mappings.teams.values() {
-        for local_path in team.keys() {
-            if !local_path.trim().is_empty() {
-                prefixes.insert(normalize_prefix(local_path.trim_end_matches('/')));
-            }
-        }
-    }
-
-    let mut prefixes: Vec<String> = prefixes.into_iter().collect();
-    prefixes.sort();
-    prefixes
-}
-
 fn filter_personal_manifests(
     root: &std::path::Path,
     manifests: Vec<slash_core::FileManifestBasic>,
-    team_local_prefixes: &[String],
 ) -> Vec<slash_core::FileManifestBasic> {
-    if team_local_prefixes.is_empty() {
-        return manifests;
-    }
-
     let mut personal_manifests = Vec::new();
     let mut asset_manifests = Vec::new();
 
     for manifest in manifests {
         if is_asset_path(&manifest.relative_path) {
             asset_manifests.push(manifest);
-            continue;
-        }
-        if is_under_team_local_dir(&manifest.relative_path, team_local_prefixes) {
             continue;
         }
         personal_manifests.push(manifest);
@@ -943,19 +897,12 @@ fn filter_personal_manifests(
 
     if excluded_asset_count > 0 {
         log::debug!(
-            "[PersonalSync] excluded {} team/unreferenced asset manifest(s) from personal scope",
+            "[PersonalSync] excluded {} unreferenced asset manifest(s) from personal backup scope",
             excluded_asset_count
         );
     }
 
     personal_manifests
-}
-
-fn is_under_team_local_dir(relative_path: &str, team_local_prefixes: &[String]) -> bool {
-    let normalized = relative_path.replace('\\', "/");
-    team_local_prefixes
-        .iter()
-        .any(|prefix| normalized.starts_with(prefix))
 }
 
 fn is_asset_path(relative_path: &str) -> bool {

@@ -1,10 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, ArrowUpCircle, AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
-import { check } from '@tauri-apps/plugin-updater';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { invoke } from '@tauri-apps/api/core';
 
 type UpdateState = 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error';
+
+const UPDATE_CHECK_OPTIONS = {
+    timeout: 30_000,
+    headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+    },
+};
+
+const UPDATE_DOWNLOAD_OPTIONS = {
+    timeout: 10 * 60_000,
+};
 
 interface UpdateCheckerModalProps {
     onClose: () => void;
@@ -19,7 +31,7 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
     const [progress, setProgress] = useState(0);
     const [downloadedSize, setDownloadedSize] = useState('0 KB');
     const [totalSize, setTotalSize] = useState('0 KB');
-    const [updateInstance, setUpdateInstance] = useState<any>(null);
+    const [updateInstance, setUpdateInstance] = useState<Update | null>(null);
 
     const formatBytes = (bytes: number): string => {
         if (bytes === 0) return '0 B';
@@ -34,11 +46,9 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
         setState('checking');
         setErrorMsg('');
         try {
-            const update = await check();
+            const update = await check(UPDATE_CHECK_OPTIONS);
             if (update) {
-                setUpdateInstance(update);
-                setVersion(update.version);
-                setBody(update.body || '');
+                syncUpdateState(update);
                 setState('available');
                 window.dispatchEvent(new CustomEvent('slash:update-available', {
                     detail: { version: update.version },
@@ -56,6 +66,53 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
         }
     };
 
+    const syncUpdateState = (update: Update) => {
+        setUpdateInstance(update);
+        setVersion(update.version);
+        setBody(update.body || '');
+    };
+
+    const refreshUpdateBeforeInstall = async (fallbackUpdate: Update): Promise<Update> => {
+        let freshUpdate: Update | null;
+        try {
+            freshUpdate = await check(UPDATE_CHECK_OPTIONS);
+        } catch (err) {
+            console.warn('Refresh update before install failed, using existing update:', err);
+            return fallbackUpdate;
+        }
+        if (freshUpdate) {
+            syncUpdateState(freshUpdate);
+            return freshUpdate;
+        }
+        setUpdateInstance(null);
+        setState('latest');
+        throw new Error(t('settings.up_to_date_desc', '您当前使用的 Slash 已是最新版本！'));
+    };
+
+    const downloadAndInstallUpdate = async (update: Update) => {
+        let downloadedBytesValue = 0;
+        let totalBytesValue = 0;
+
+        await update.downloadAndInstall((event) => {
+            switch (event.event) {
+                case 'Started':
+                    totalBytesValue = event.data.contentLength || 0;
+                    setTotalSize(formatBytes(totalBytesValue));
+                    break;
+                case 'Progress':
+                    downloadedBytesValue += event.data.chunkLength;
+                    setDownloadedSize(formatBytes(downloadedBytesValue));
+                    if (totalBytesValue > 0) {
+                        const pct = Math.round((downloadedBytesValue / totalBytesValue) * 100);
+                        setProgress(pct);
+                    }
+                    break;
+                case 'Finished':
+                    break;
+            }
+        }, UPDATE_DOWNLOAD_OPTIONS);
+    };
+
     useEffect(() => {
         handleCheckUpdate();
     }, []);
@@ -68,29 +125,23 @@ export const UpdateCheckerModal = ({ onClose }: UpdateCheckerModalProps) => {
         setTotalSize('0 KB');
         
         try {
-            let downloadedBytesValue = 0;
-            let totalBytesValue = 0;
+            const updateToInstall = await refreshUpdateBeforeInstall(updateInstance);
 
             await invoke('shutdown_sidecar_for_update');
-
-            await updateInstance.downloadAndInstall((event: any) => {
-                switch (event.event) {
-                    case 'Started':
-                        totalBytesValue = event.data.contentLength || 0;
-                        setTotalSize(formatBytes(totalBytesValue));
-                        break;
-                    case 'Progress':
-                        downloadedBytesValue += event.data.chunkLength;
-                        setDownloadedSize(formatBytes(downloadedBytesValue));
-                        if (totalBytesValue > 0) {
-                            const pct = Math.round((downloadedBytesValue / totalBytesValue) * 100);
-                            setProgress(pct);
-                        }
-                        break;
-                    case 'Finished':
-                        break;
+            try {
+                await downloadAndInstallUpdate(updateToInstall);
+            } catch (downloadErr) {
+                console.warn('Download failed, retrying once with refreshed update metadata:', downloadErr);
+                const retryUpdate = await check(UPDATE_CHECK_OPTIONS);
+                if (!retryUpdate) {
+                    throw downloadErr;
                 }
-            });
+                syncUpdateState(retryUpdate);
+                setProgress(0);
+                setDownloadedSize('0 KB');
+                setTotalSize('0 KB');
+                await downloadAndInstallUpdate(retryUpdate);
+            }
             setState('ready');
         } catch (err) {
             console.error('Download and install error:', err);
