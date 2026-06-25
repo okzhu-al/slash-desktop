@@ -20,6 +20,15 @@ export const ImageComponent = (props: any) => {
     const { fileSystemStore, mediaService, EnrichmentHoverCard } = useEditorServices();
     const { t } = useTranslation();
     const [vaultPath, setVaultPath] = useState(() => fileSystemStore?.root?.path || null);
+    const isTeamSpace = !!fileSystemStore?.isTeamSpace;
+
+    const isValidResolvedUrl = useCallback((url: string) => {
+        return !!url && (
+            url.startsWith('http') ||
+            url.startsWith('asset:') ||
+            url.startsWith('blob:')
+        );
+    }, []);
 
     useEffect(() => {
         if (!fileSystemStore?.subscribe) return;
@@ -36,7 +45,8 @@ export const ImageComponent = (props: any) => {
     const isImportFailed = src?.includes('_import_failed_');
 
     // 🛡️ Phase 6: Team asset 下载中检测（本地文件不存在，等待 TransferManager 下载）
-    const isAssetPendingDownload = failed && src?.includes('assets/');
+    const isAssetPendingDownload = failed && isTeamSpace && src?.includes('assets/');
+    const isLocalAssetRetrying = failed && !isTeamSpace && src?.includes('assets/');
 
     // 提取 asset 相对路径
     const assetRelPath = useMemo(() => {
@@ -72,7 +82,12 @@ export const ImageComponent = (props: any) => {
         setResolvedForVault(null);
 
         const resolve = async () => {
-            if (!src || !currentVaultPath) return;
+            if (!src) return;
+
+            // Relative asset paths require an active vault before they can be resolved.
+            if (!currentVaultPath && !src.startsWith('http') && !src.startsWith('asset:') && !src.startsWith('blob:')) {
+                return;
+            }
 
             // Skip resolution if this image doesn't belong to current vault
             // This prevents 500 errors when switching vaults while images are still mounted
@@ -90,14 +105,18 @@ export const ImageComponent = (props: any) => {
                     return;
                 }
 
+                if (!isValidResolvedUrl(url)) {
+                    console.warn(`[ImageComponent] MediaService returned invalid URL: ${url}`);
+                    return;
+                }
+
                 // Append timestamp on retry to bust any browser/WebView cache
                 if (retryCount > 0 && url) {
                     const separator = url.includes('?') ? '&' : '?';
                     url = `${url}${separator}_retry=${Date.now()}`;
                 }
 
-                // Only set if it's a valid URL (blob:, asset:, or http)
-                if (isMounted && (url.startsWith('blob:') || url.startsWith('asset:') || url.startsWith('http'))) {
+                if (isMounted) {
                     setResolvedSrc(url);
                     setResolvedForVault(currentVaultPath);
                     setFailed(false);
@@ -110,7 +129,7 @@ export const ImageComponent = (props: any) => {
 
         resolve();
         return () => { isMounted = false; };
-    }, [src, vaultPath, isImporting, isImportFailed, retryCount]);
+    }, [src, vaultPath, isImporting, isImportFailed, retryCount, mediaService, fileSystemStore.root?.path, isValidResolvedUrl]);
 
     // 资产缺失时：主动调用 recoverMissingAsset + 监听 download-completed 事件
     useEffect(() => {
@@ -162,6 +181,21 @@ export const ImageComponent = (props: any) => {
         };
     }, [isAssetPendingDownload, assetRelPath, mediaService]);
 
+    // Personal/local assets can fail during early app startup before the asset URL is fully usable.
+    // Keep retrying automatically so users don't need to switch notes to remount the node view.
+    useEffect(() => {
+        if (!isLocalAssetRetrying) return;
+        if (retryCount >= 8) return;
+
+        const delay = Math.min(750 * Math.pow(2, retryCount), 5000);
+        const timer = setTimeout(() => {
+            setFailed(false);
+            setRetryCount(prev => prev + 1);
+        }, delay);
+
+        return () => clearTimeout(timer);
+    }, [isLocalAssetRetrying, retryCount]);
+
     const handleResizeStart = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -200,11 +234,7 @@ export const ImageComponent = (props: any) => {
     const isActive = isHovered || resizing;
 
     // Determine what to show: resolved image, or a placeholder state
-    const hasValidUrl = resolvedSrc && (
-        resolvedSrc.startsWith('http') ||
-        resolvedSrc.startsWith('asset:') ||
-        resolvedSrc.startsWith('blob:')
-    );
+    const hasValidUrl = isValidResolvedUrl(resolvedSrc);
     const showImage = !isImporting && !isImportFailed && hasValidUrl && resolvedForVault === vaultPath;
 
     // Determine placeholder variant
@@ -251,7 +281,7 @@ export const ImageComponent = (props: any) => {
                                 padding: 0,
                             }}
                             onError={() => {
-                                if (retryCount < 3) {
+                                if (retryCount < 8) {
                                     setTimeout(() => setRetryCount(prev => prev + 1), 500 * Math.pow(2, retryCount));
                                 } else {
                                     setFailed(true);
@@ -300,7 +330,9 @@ export const ImageComponent = (props: any) => {
                                 ? t('media.import_failed_hint', '导入失败，请删除后重试')
                                 : isImporting
                                 ? t('media.importing', '导入中...')
-                                : src?.includes('assets/')
+                                : isLocalAssetRetrying
+                                ? t('media.resolving', '解析中...')
+                                : failed && src?.includes('assets/')
                                 ? t('media.syncing_asset', '正在同步资源...')
                                 : vaultPath ? t('media.resolving', '解析中...') : t('media.loading', '加载中...')
                             }

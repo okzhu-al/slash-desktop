@@ -5,6 +5,7 @@ import { ImageComponent } from './ImageComponent';
 export const CustomImageExtension = Image.extend({
     group: 'block',
     inline: false,
+
     addAttributes() {
         return {
             ...this.parent?.(),

@@ -205,33 +205,38 @@ export const SuperTableExtension = Table.extend({
                         state.write('|');
                         cells.forEach((cell: any) => {
                             state.write(' ');
+                            const serializableChildren = (cell.content?.content || []).filter((childNode: any) => {
+                                if (childNode.type.name !== 'paragraph') return true;
+                                if (childNode.childCount > 0) return true;
+                                return (childNode.textContent || '').trim().length > 0;
+                            });
 
                             // ✅ 关键修复：使用 renderInline 正确序列化单元格内容（保留 marks）
                             // 先保存当前输出位置
                             const startLen = state.out.length;
 
                             // 渲染单元格内容（包含 bold, italic, code 等 marks）
-                            if (cell.content && cell.content.content) {
-                                cell.content.content.forEach((childNode: any, idx: number) => {
+                            if (serializableChildren.length > 0) {
+                                serializableChildren.forEach((childNode: any, idx: number) => {
                                     // 处理段落节点 - 渲染其 inline 内容
                                     if (childNode.type.name === 'paragraph') {
                                         state.renderInline(childNode);
                                     } else if (childNode.isText) {
                                         state.text(childNode.text || '', false);
                                     } else {
-                                        // 其他节点类型，尝试渲染内容
-                                        state.renderInline(childNode);
+                                        // Image/video/audio may be block nodes in cells; render the node itself.
+                                        state.render(childNode, cell, idx);
                                     }
 
                                     // 多个段落之间用 <br> 分隔（Markdown 表格不支持真正换行）
-                                    if (idx < cell.content.content.length - 1) {
+                                    if (idx < serializableChildren.length - 1) {
                                         state.write('<br>');
                                     }
                                 });
                             }
 
                             // 获取渲染后的内容并处理
-                            let cellContent = state.out.slice(startLen);
+                            let cellContent = state.out.slice(startLen).replace(/\n+$/, '');
                             // 移除刚添加的内容，我们需要做后处理
                             state.out = state.out.slice(0, startLen);
 

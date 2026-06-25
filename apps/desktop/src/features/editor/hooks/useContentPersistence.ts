@@ -284,6 +284,11 @@ export function useContentPersistence({
         }
     }, []);
 
+    const clearPendingSaveBuffer = useCallback(() => {
+        pendingContentProviderRef.current = null;
+        pendingFmRef.current = null;
+    }, []);
+
     /**
      * Handle title blur with force-save-before-rename pattern
      * 
@@ -318,6 +323,10 @@ export function useContentPersistence({
                 console.warn('[useContentPersistence] Failed to check duplicate name:', e);
             }
 
+            // Stop the debounced autosave before the force-save/rename sequence starts.
+            // Otherwise an older queued save can run after the rename and resurrect the old path.
+            cancelPendingSave();
+
             // 🔒 CRITICAL: Save current editor content BEFORE rename
             // Otherwise, rename changes noteId, Editor reloads, and unsaved content is lost
             const editor = editorRef.current;
@@ -326,15 +335,17 @@ export function useContentPersistence({
                 await saveContent(currentBody, frontmatterRef.current, { allowRename: false });
             }
 
-            // Cancel any pending debounced save
-            cancelPendingSave();
+            // The current body has just been force-saved, so any buffered pre-rename save is stale.
+            // If the old editor instance unmounts with this buffer intact, flushPendingSave would
+            // write the old path back to disk and recreate the renamed note as a duplicate file.
+            clearPendingSaveBuffer();
 
             if (!isMountedRef.current) return;
             onTitleChange?.(cleanTitle);
         } else if (cleanTitle === "") {
             setTitle(initialTitle);
         }
-    }, [title, initialTitle, editorRef, frontmatterRef, isMountedRef, getMarkdown, saveContent, cancelPendingSave, onTitleChange, setTitle, t]);
+    }, [title, initialTitle, editorRef, frontmatterRef, isMountedRef, getMarkdown, saveContent, cancelPendingSave, clearPendingSaveBuffer, onTitleChange, setTitle, t]);
 
     return {
         saveContent,

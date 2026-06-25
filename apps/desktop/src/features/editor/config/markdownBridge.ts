@@ -40,6 +40,9 @@ export function createMarkdownExtension() {
                 // CRITICAL: paragraph must use prosemirror-markdown's serializer
                 // to properly call renderInline() for inline children like Math
                 paragraph: defaultMarkdownSerializer.nodes.paragraph,
+                hardBreak(state: any) {
+                    state.write(state.inTable ? '<br>' : '\\\n');
+                },
                 wikiLink: wikiLinkSerializer.serialize,
                 bulletList(state: any, node: any, parent: any, index: number) {
                     const isTopLevel = !state.listDepth || state.listDepth === 0;

@@ -92,6 +92,7 @@ export const useEditorContainer = ({
     // Map desktop FS store to editor-core FS store interface
     const coreFsStore = useMemo(() => ({
         ...fileSystemStore,
+        subscribe: useFileSystemStore.subscribe,
         isTeamSpace: isTeamNote,
         root: fileSystemStore.root ? { path: fileSystemStore.root.path } : undefined,
     }), [fileSystemStore, isTeamNote]);

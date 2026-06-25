@@ -69,16 +69,28 @@ export function useNoteOperations({
         const promise = operationMutex.current.then(async () => {
             if (!targetNotePath || !repo) return;
 
-            // 🛡️ Identity Guard: 使用 Editor 实例捕获的 targetNotePath 作为权威路径。
-            // selectedNoteRef.current 可能已漂移到其他笔记（用户快速切换时），
-            // 但 targetNotePath 在 Editor 生命周期内是稳定的。
             const refNote = selectedNoteRef.current;
-            const currentSelectedNote = (refNote && refNote.id === targetNotePath)
+            const refSlashId = refNote?.metadata?.slash_id ?? null;
+            const effectiveTargetPath =
+                targetFileId && refSlashId === targetFileId && refNote?.id && refNote.id !== targetNotePath
+                    ? refNote.id
+                    : targetNotePath;
+
+            if (effectiveTargetPath !== targetNotePath) {
+                console.warn(
+                    `🛡️ [handleSave] stale save path drift detected: ${targetNotePath} -> ${effectiveTargetPath}. Redirecting save to current renamed path.`
+                );
+            }
+
+            // 🛡️ Identity Guard: 默认使用 Editor 实例捕获的 targetNotePath 作为权威路径。
+            // 只有当 slash_id 明确表明该笔记已被重命名到新路径时，才允许重定向到当前路径，
+            // 以避免旧实例的延迟保存把旧文件重新写回磁盘。
+            const currentSelectedNote = (refNote && refNote.id === effectiveTargetPath)
                 ? refNote
                 : {
-                    id: targetNotePath,
-                    path: targetNotePath,
-                    title: getBasename(targetNotePath)?.replace(/\.md$/, '') || '',
+                    id: effectiveTargetPath,
+                    path: effectiveTargetPath,
+                    title: getBasename(effectiveTargetPath)?.replace(/\.md$/, '') || '',
                     content: '',
                     createdAt: Date.now(),
                     updatedAt: Date.now(),

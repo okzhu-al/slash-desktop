@@ -212,7 +212,7 @@ export function createEditorExtensions(options: EditorExtensionOptions) {
 
         // Media extensions
         CustomImageExtension.configure({
-            inline: true,
+            inline: false,
             allowBase64: true,
         }),
         VideoExtension,
@@ -322,4 +322,3 @@ export function createReadonlyExtensions() {
 }
 
 // 🛡️ Vite-HMR-Cache-Breaker: Force full extensions module resolution refresh - 2026-05-24T12:00:00
-

@@ -11,6 +11,7 @@
  * Handles:
  * 1. Legacy <p> wrapper cleanup from old saves
  * 2. HTML entity decoding (&lt; &gt; etc.)
+ * 3. Legacy hardBreak serialization artifacts
  *
  * Note: Multiple consecutive blank lines (3+) will be collapsed to a single
  * blank line by ProseMirror. This is acceptable behavior.
@@ -31,6 +32,22 @@ export function sanitizeMarkdown(content: string): string {
         const txt = document.createElement("textarea");
         txt.innerHTML = cleanContent;
         cleanContent = txt.value;
+    }
+
+    // 3. Repair legacy hardBreak artifacts from older table serialization.
+    // `[hardBreak](...)` preserved the next text chunk as an encoded link target;
+    // bare `[hardBreak]` means only the node name leaked into markdown.
+    if (cleanContent.includes('[hardBreak]')) {
+        cleanContent = cleanContent.replace(/\[hardBreak\]\(([^)]*)\)/g, (_match, rawTarget: string) => {
+            let restoredTarget = rawTarget;
+            try {
+                restoredTarget = decodeURIComponent(rawTarget);
+            } catch {
+                // Keep the raw target if it was not percent-encoded.
+            }
+            return `<br>${restoredTarget}`;
+        });
+        cleanContent = cleanContent.replace(/\[hardBreak\]/g, '<br>');
     }
 
     return cleanContent.trim();
