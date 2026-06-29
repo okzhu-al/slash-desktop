@@ -2103,7 +2103,8 @@ fn resolve_team_pull_local_path(
         return (default_local_path, default_local_rel);
     }
 
-    let fallback_owner_display_name = owner_display_name_for_team_path(scope, &manifest.relative_path);
+    let fallback_owner_display_name =
+        owner_display_name_for_team_path(scope, &manifest.relative_path);
     let file_display_name = manifest
         .editor_display_name
         .as_deref()
@@ -2524,6 +2525,18 @@ fn detect_team_deleted(
     let candidates: Vec<(String, String, bool)> = unified_state
         .iter()
         .filter(|(local_path, state)| {
+            // Team note deletion must be explicit (UI/API). A missing local markdown
+            // with a stable file_id can also mean "needs pull" after restore or after
+            // local mapping drift; reporting it here would immediately re-delete the
+            // restored server record during negotiate.
+            if local_path.ends_with(".md") && state.file_id.is_some() {
+                log::debug!(
+                    "[TeamSync] missing team note '{}' has file_id={:?}; skip local-missing delete and let server pull repair",
+                    local_path,
+                    state.file_id
+                );
+                return false;
+            }
             if !state.team_hash.is_empty() {
                 return true;
             }

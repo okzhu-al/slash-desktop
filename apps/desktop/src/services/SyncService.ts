@@ -51,6 +51,23 @@ export interface SyncResult {
     maintenance_started_at?: number | null;
 }
 
+function isHiddenTeamTreePath(path: string): boolean {
+    const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+    return normalized === 'assets'
+        || normalized.startsWith('assets/')
+        || normalized === '.slash'
+        || normalized.startsWith('.slash/');
+}
+
+function filterTeamTreeSystemNodes(nodes: TeamTreeNode[]): TeamTreeNode[] {
+    return nodes
+        .filter(node => !isHiddenTeamTreePath(node.path || node.name))
+        .map(node => ({
+            ...node,
+            children: node.children ? filterTeamTreeSystemNodes(node.children) : node.children,
+        }));
+}
+
 
 
 // ============================================================
@@ -452,7 +469,7 @@ class SyncServiceImpl {
             throw new Error(`Failed to get vault tree: ${resp.status}`);
         }
 
-        return resp.json();
+        return filterTeamTreeSystemNodes(await resp.json());
     }
 
     /** 获取指定 vault 中文件的内容（只读） */
