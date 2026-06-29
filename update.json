@@ -1,15 +1,15 @@
 {
-  "version": "0.1.5-beta.3",
-  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u7ee7\u7eed\u4fee\u590d\u56e2\u961f\u7b14\u8bb0\u4ece\u56de\u6536\u7ad9\u6062\u590d\u540e\uff0c\u53ef\u80fd\u88ab\u65e7\u672c\u5730\u540c\u6b65\u72b6\u6001\u518d\u6b21\u6807\u8bb0\u5220\u9664\u7684\u95ee\u9898\uff0c\u5e76\u589e\u52a0\u670d\u52a1\u7aef\u515c\u5e95\u9632\u7ebf\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Further fixed team notes being marked as deleted again after restore from Team Trash, with an additional server-side safeguard.",
-  "pub_date": "2026-06-29T06:44:34Z",
+  "version": "0.1.5-beta.4",
+  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u4fee\u590d\u56e2\u961f\u7b14\u8bb0\u6062\u590d\u540e\uff0c\u53ef\u80fd\u88ab\u4e2a\u4eba\u7a7a\u95f4\u4e2d\u7684\u65e7\u5220\u9664\u8bb0\u5f55\u53cd\u590d\u5220\u9664\u4e0e\u6062\u590d\u7684\u95ee\u9898\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Fixed team notes repeatedly disappearing and reappearing after restore due to stale personal-space deletion records.",
+  "pub_date": "2026-06-29T08:10:30Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnRjQnJrV01aMStHZHBLOGUyajFLL256dFVRR2dxUmo5WjgzbllpSmswVzZQVmlEblhsVVBhcUIzcm05aVBGajIva2d5NytMWDVSeU9pZVZLbDZpMndvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzE2MjQ2CWZpbGU6U2xhc2guYXBwLnRhci5negozVXNmUVhzZ1k1dDIweWdGTkxUc2tieGxLU29xbVBTNml5Rk9QSldOMGJaZ0NkQnNnYnI1NTZVOCtWL0ZzS25zZ0RFeUdvUGo3MUxON2xBWUhnTnFBdz09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.3/Slash.app.tar.gz"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.4/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbmk1SnpwdFpLWURoSDQva0g5TEVqTUI0TUZib2FMLzhWM1FMZlVGN0VTYmw2ai9CaDlXQkVrY1JEa0JiNEhwWmpMUGJKWFA0YXNEZjNnN1hKdEYyMGdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzE2NDY4CWZpbGU6U2xhc2hfMC4xLjUtYmV0YS4zX3g2NC1zZXR1cC5leGUKRHNrYTlJb0ZqN29uL3J1dmJQRG9YelJrSFBGQzJybEQ1dkFOR3Y2T0lSOHl0ZkhKZno3Z2trZlhna0hYWGZTUjg1elJZSDFiTnJEeUc4dGFjdVVBQWc9PQo=",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.3/Slash_0.1.5-beta.3_x64-setup.exe"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.4/Slash_0.1.5-beta.4_x64-setup.exe"
     }
   }
 }

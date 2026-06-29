@@ -11,10 +11,29 @@ use slash_sync_proto::{
 
 use super::client::SyncClient;
 use super::helpers::{build_local_directory_hashes, collect_files_for_push, extract_asset_refs};
+use super::path_mapping::{
+    normalize_prefix, TeamDirectoryMappingsFile, TeamFileMappingsFile, TeamPathMappingsFile,
+};
 use super::state::{
     expire_edit_session_if_idle, load_unified_state, make_edit_session_id, save_unified_state,
 };
 use super::team::sync_team_full;
+
+#[derive(Default)]
+struct TeamLocalScope {
+    dirs: std::collections::HashSet<String>,
+    files: std::collections::HashSet<String>,
+}
+
+impl TeamLocalScope {
+    fn contains(&self, relative_path: &str) -> bool {
+        self.files.contains(relative_path)
+            || self.dirs.iter().any(|dir| {
+                let dir = dir.trim_end_matches('/');
+                relative_path == dir || relative_path.starts_with(&format!("{dir}/"))
+            })
+    }
+}
 
 struct SyncingGuard(tauri::AppHandle);
 
@@ -163,6 +182,7 @@ pub async fn sync_vault(
     // Step 1: Scan local personal path
     // 🛡️ 个人空间不设文件大小限制（传 None），仅团队空间受 max_sync_file_size 约束
     // assets/ 文件用文件名当 hash（零 IO），已在 scan_directory_manifests 中保证跳过内容读取
+    let team_local_scope = load_team_local_scope(&root);
     let manifests = filter_personal_manifests(&root, scan_directory_manifests(&root, None));
 
     // Step 2: 构建目录级 Merkle hash
@@ -357,6 +377,24 @@ pub async fn sync_vault(
         for deleted_file in &negotiate_resp.server_deleted {
             let deleted_path = &deleted_file.path;
             let local_full_path = root.join(deleted_path);
+
+            // Personal tombstones must not physically delete Team landing paths.
+            // Team-owned files are deleted by Team sync/API; Personal sync only backs them up.
+            if team_local_scope.contains(deleted_path)
+                || unified_state
+                    .get(deleted_path)
+                    .map(|state| !state.team_hash.is_empty())
+                    .unwrap_or(false)
+            {
+                log::warn!(
+                    "[PersonalSync] Skipping personal server_deleted for team-mapped path '{}'",
+                    deleted_path
+                );
+                if let Some(entry) = unified_state.get_mut(deleted_path) {
+                    entry.personal_hash.clear();
+                }
+                continue;
+            }
 
             // 🛡️ Guard: Check if the path is located inside the vault to prevent Path Traversal
             if let Err(e) =
@@ -907,4 +945,47 @@ fn filter_personal_manifests(
 
 fn is_asset_path(relative_path: &str) -> bool {
     relative_path.starts_with("assets/") || relative_path.starts_with(".slash/assets/")
+}
+
+fn load_team_local_scope(root: &std::path::Path) -> TeamLocalScope {
+    let mut scope = TeamLocalScope::default();
+
+    let file_mappings =
+        TeamFileMappingsFile::load(&root.join(".slash").join("team_file_mappings.json"));
+    for team in file_mappings.teams.values() {
+        for mapping in team.files.values() {
+            if mapping.status == "active" {
+                scope.files.insert(mapping.local_path.clone());
+            }
+        }
+    }
+
+    let directory_mappings =
+        TeamDirectoryMappingsFile::load(&root.join(".slash").join("team_directory_mappings.json"));
+    for team in directory_mappings.teams.values() {
+        for mapping in team.directories.values() {
+            if mapping.status == "active" {
+                scope
+                    .dirs
+                    .insert(mapping.local_path.trim_end_matches('/').to_string());
+            }
+        }
+    }
+
+    let legacy_mappings =
+        TeamPathMappingsFile::load(&root.join(".slash").join("team_path_mappings.json"));
+    for team in legacy_mappings.teams.values() {
+        for local_dir in team.keys() {
+            scope
+                .dirs
+                .insert(local_dir.trim_end_matches('/').to_string());
+        }
+    }
+
+    scope.dirs = scope
+        .dirs
+        .into_iter()
+        .map(|dir| normalize_prefix(&dir).trim_end_matches('/').to_string())
+        .collect();
+    scope
 }

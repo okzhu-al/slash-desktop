@@ -1,13 +1,13 @@
-## v0.1.5-beta.3
+## v0.1.5-beta.4
 
 #### 中文
 
 ##### Bug 修复
 
-- 继续修复团队笔记从回收站恢复后，可能被旧本地同步状态再次标记删除的问题，并增加服务端兜底防线。
+- 修复团队笔记恢复后，可能被个人空间中的旧删除记录反复删除与恢复的问题。
 
 #### English
 
 ##### Bug Fixes
 
-- Further fixed team notes being marked as deleted again after restore from Team Trash, with an additional server-side safeguard.
+- Fixed team notes repeatedly disappearing and reappearing after restore due to stale personal-space deletion records.
