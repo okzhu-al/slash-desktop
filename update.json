@@ -1,15 +1,15 @@
 {
-  "version": "0.1.5-beta.2",
-  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u4fee\u590d\u56e2\u961f\u7b14\u8bb0\u4ece\u56de\u6536\u7ad9\u6062\u590d\u540e\uff0c\u53ef\u80fd\u56e0\u4e3a\u672c\u5730\u540c\u6b65\u72b6\u6001\u4ecd\u8ba4\u4e3a\u6587\u4ef6\u7f3a\u5931\u800c\u7acb\u523b\u518d\u6b21\u88ab\u6807\u8bb0\u5220\u9664\u7684\u95ee\u9898\u3002\n- \u4fee\u590d\u53ea\u8bfb\u56e2\u961f\u7a7a\u95f4\u4fa7\u8fb9\u680f\u4f1a\u663e\u793a `assets` \u7b49\u7cfb\u7edf\u8d44\u6e90\u76ee\u5f55\u7684\u95ee\u9898\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Fixed team notes being immediately marked as deleted again after restoring from team trash when stale local sync state still considered the file missing.\n- Fixed system resource folders such as `assets` appearing in the read-only team space sidebar.",
-  "pub_date": "2026-06-29T05:49:51Z",
+  "version": "0.1.5-beta.3",
+  "notes": "#### \u4e2d\u6587\n\n##### Bug \u4fee\u590d\n\n- \u7ee7\u7eed\u4fee\u590d\u56e2\u961f\u7b14\u8bb0\u4ece\u56de\u6536\u7ad9\u6062\u590d\u540e\uff0c\u53ef\u80fd\u88ab\u65e7\u672c\u5730\u540c\u6b65\u72b6\u6001\u518d\u6b21\u6807\u8bb0\u5220\u9664\u7684\u95ee\u9898\uff0c\u5e76\u589e\u52a0\u670d\u52a1\u7aef\u515c\u5e95\u9632\u7ebf\u3002\n\n#### English\n\n##### Bug Fixes\n\n- Further fixed team notes being marked as deleted again after restore from Team Trash, with an additional server-side safeguard.",
+  "pub_date": "2026-06-29T06:44:34Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbmpMT24zYWxlUDlQUzNGRk1JOTRXVnlTUFVEdzY0WmhYQWRuZUE5YVQ5akZoY20xL1dNc0FJb1B3TlNkM1d6aFowUHkrWSsyYzc0ZWFDc1Vrd2lPMVFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEyODQ1CWZpbGU6U2xhc2guYXBwLnRhci5negpibmtVa280dVIrZ1d5Q0RMYmZadFpjTE9RdXdDa3N0NXh5RTA0QUZrQ2ZJN2V5WXhxSFdpYm4vRFZ3MlpRWkdyd004T1gzMHJpQSt3OThQWGNiTkdBUT09Cg==",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.2/Slash.app.tar.gz"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.3/Slash.app.tar.gz"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTVVRvd2crSFRKbnRuSTZsZDVmRjlmTExPcStPY1k4OEswcXJJaVdFaEpyZ3V5TXNmQi9IZ2NqQ0c4NW42dVhVSTJteXBlOUZKbk1Eb1I4ZDVrSWNSTDVKRUh2bUszRkFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNzEzMjMyCWZpbGU6U2xhc2hfMC4xLjUtYmV0YS4yX3g2NC1zZXR1cC5leGUKTnRvNVdzTHlYaEhmMHV3SGo0VDN0L3JPWWk5NzZna2tUYlNOeDhaSmFXbE1tTGNJMHZsZHlrUGJ5Y2h6cnFXN1FzSHIxM0laanZPQVlVK3ErYlpMQ1E9PQo=",
-      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.2/Slash_0.1.5-beta.2_x64-setup.exe"
+      "signature": "__PENDING_SIGNATURE__",
+      "url": "https://github.com/okzhu-al/slash-desktop/releases/download/v0.1.5-beta.3/Slash_0.1.5-beta.3_x64-setup.exe"
     }
   }
 }

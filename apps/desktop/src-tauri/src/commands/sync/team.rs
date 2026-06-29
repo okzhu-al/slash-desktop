@@ -2526,12 +2526,12 @@ fn detect_team_deleted(
         .iter()
         .filter(|(local_path, state)| {
             // Team note deletion must be explicit (UI/API). A missing local markdown
-            // with a stable file_id can also mean "needs pull" after restore or after
-            // local mapping drift; reporting it here would immediately re-delete the
-            // restored server record during negotiate.
-            if local_path.ends_with(".md") && state.file_id.is_some() {
+            // can also mean "needs pull" after restore or after local mapping drift.
+            // Some legacy unified_sync_state entries have team_hash but no file_id, so
+            // the guard must cover all markdown notes, not only UUID-first entries.
+            if local_path.ends_with(".md") {
                 log::debug!(
-                    "[TeamSync] missing team note '{}' has file_id={:?}; skip local-missing delete and let server pull repair",
+                    "[TeamSync] missing team note '{}' (file_id={:?}); skip local-missing delete and let server pull repair",
                     local_path,
                     state.file_id
                 );
