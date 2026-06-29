@@ -244,6 +244,13 @@ async fn sync_team_single(
         ensure_team_sync_state_file(root, team_vault_id)?;
     }
 
+    let active_user_id = {
+        use tauri::Manager;
+        let session = app.state::<crate::state::SessionStateWrapper>();
+        let store = session.0.lock().unwrap();
+        store.active_user_id.clone()
+    };
+
     // Step 2: 读取并更新路径映射
     let (path_mappings, reverse_mappings_owned, directory_id_mappings) =
         resolve_path_mappings(root, team_vault_id, &scope);
@@ -1197,7 +1204,7 @@ async fn sync_team_single(
 
     let mut files_pulled = 0u32;
     let mut pulled_local_paths: Vec<String> = Vec::new();
-    let mut pulled_hashes: Vec<(String, String, String)> = Vec::new();
+    let mut pulled_hashes: Vec<(String, String, String, Option<String>)> = Vec::new();
     let mut pull_dl_created = 0u32;
     let mut pull_dl_revived = 0u32;
     let mut pull_dl_skipped_valid = 0u32;
@@ -1304,6 +1311,7 @@ async fn sync_team_single(
                     file.manifest.relative_path.clone(),
                     file.manifest.content_hash.clone(),
                     local_rel.clone(),
+                    file.manifest.pushed_by_user_id.clone(),
                 ));
                 continue;
             }
@@ -1316,6 +1324,7 @@ async fn sync_team_single(
                         file.manifest.relative_path.clone(),
                         file.manifest.content_hash.clone(),
                         local_rel.clone(),
+                        file.manifest.pushed_by_user_id.clone(),
                     ));
                     log::info!(
                         "[TeamSync] ✅ Pulled: {} → {}",
@@ -1488,8 +1497,25 @@ async fn sync_team_single(
     }
 
     // Pull 的文件 → 更新 team_hash + local_snapshot（用 pull 后的磁盘 hash）
-    for (_, server_hash, local_rel) in &pulled_hashes {
+    for (_, server_hash, local_rel, pushed_by_user_id) in &pulled_hashes {
         let entry = new_state.entry(local_rel.clone()).or_default();
+        let pulled_from_other_user = pushed_by_user_id
+            .as_ref()
+            .zip(active_user_id.as_ref())
+            .map(|(remote, local)| remote != local)
+            .unwrap_or(false);
+        if pulled_from_other_user
+            && (entry.edit_started_at.is_some()
+                || entry.edit_session_id.is_some()
+                || entry.edit_session_touched_at.is_some())
+        {
+            // A teammate has produced a new remote version for this file. Reset the local
+            // edit session so the next edit starts a fresh history session instead of merging
+            // into the previous user's snapshot window.
+            entry.edit_started_at = None;
+            entry.edit_session_id = None;
+            entry.edit_session_touched_at = None;
+        }
         entry.team_hash = server_hash.clone();
         // 重新读取磁盘 hash 作为快照
         let local_path = root.join(local_rel);

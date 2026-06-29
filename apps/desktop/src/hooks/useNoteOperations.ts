@@ -236,10 +236,11 @@ export function useNoteOperations({
                         invoke('scan_vault', { vaultPath }).catch(console.error);
                     }
 
-                    // Update tab: close old path, open new path
+                    // Preserve the existing tab and update it in place.
+                    // Smart rename and manual title rename can both flow through here,
+                    // and closing/reopening the tab makes the rename feel like the note disappeared.
                     const tabsStore = useTabsStore.getState();
-                    tabsStore.closeTab(currentNote.id);
-                    tabsStore.openTab(newPath, safeName);
+                    tabsStore.renameTab(currentNote.id, newPath, safeName);
 
                     await emit('note-renamed', {
                         oldId: currentNote.id,

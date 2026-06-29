@@ -655,5 +655,224 @@ try {
   logTestResult("场景 14 (多级任务行首中文插入不能丢失缩进)", false, { error: e.stack });
 }
 
+// =========================================================================
+// 场景 15：顶级段落重输有序列表标记时必须回并前一个同级有序列表
+// =========================================================================
+try {
+  const isolatedEditor = new Editor({
+    element: dom.window.document.createElement('div'),
+    extensions: [
+      StarterKit.configure({
+        taskList: false,
+        taskItem: false,
+        listItem: false,
+      }),
+      MixedListItem,
+      MixedTaskList,
+      MixedTaskItem,
+      MixedListKeymap,
+      Markdown.configure({
+        html: false,
+        breaks: true,
+        tightLists: true,
+        bulletListMarker: '-',
+      }),
+    ],
+  });
+
+  isolatedEditor.commands.setContent({
+    type: 'doc',
+    content: [
+      {
+        type: 'orderedList',
+        attrs: { start: 1 },
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Parent-A' }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Parent-B' }],
+      },
+      {
+        type: 'orderedList',
+        attrs: { start: 1 },
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Child-C' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const parentPos = findTextPosition(isolatedEditor, 'Parent-B');
+  isolatedEditor.commands.command(({ tr, dispatch }) => {
+    tr.insertText('2.', parentPos);
+    tr.setSelection(TextSelection.create(tr.doc, parentPos + 2));
+    dispatch?.(tr);
+    return true;
+  });
+
+  const cursorPos = isolatedEditor.state.selection.from;
+  let handled = false;
+  isolatedEditor.view.someProp('handleTextInput', (handler) => {
+    handled = handler(isolatedEditor.view, cursorPos, cursorPos, ' ') || handled;
+  });
+
+  const json15 = isolatedEditor.getJSON();
+  const serialized15 = isolatedEditor.storage.markdown.getMarkdown().trim();
+  const rebuiltList = json15.content[0];
+  const mergedIntoPrevious =
+    rebuiltList?.type === 'orderedList' &&
+    rebuiltList?.content?.length === 2;
+  const secondItemPreserved =
+    rebuiltList?.content?.[1]?.content?.[0]?.content?.[0]?.text === 'Parent-B';
+  const nestedListPreserved =
+    rebuiltList?.content?.[1]?.content?.[1]?.type === 'orderedList' &&
+    rebuiltList?.content?.[1]?.content?.[1]?.content?.[0]?.content?.[0]?.content?.[0]?.text === 'Child-C';
+
+  logTestResult("场景 15 (重输 2. 后回并前序有序列表)", handled && mergedIntoPrevious && secondItemPreserved && nestedListPreserved, {
+    Handled: handled ? 'OK' : 'FAIL',
+    'Merged Into Previous List': mergedIntoPrevious ? 'OK' : 'FAIL',
+    'Second Item Preserved': secondItemPreserved ? 'OK' : 'FAIL',
+    'Nested List Preserved': nestedListPreserved ? 'OK' : 'FAIL',
+    'Serialized Markdown': serialized15,
+    'JSON AST': JSON.stringify(json15, null, 2),
+  });
+
+  isolatedEditor.destroy();
+} catch (e) {
+  logTestResult("场景 15 (重输 2. 后回并前序有序列表)", false, { error: e.stack });
+}
+
+// =========================================================================
+// 场景 16：遗留拆分的顶级有序列表在转无序时必须整簇一起转换
+// =========================================================================
+try {
+  const isolatedEditor = new Editor({
+    element: dom.window.document.createElement('div'),
+    extensions: [
+      StarterKit.configure({
+        taskList: false,
+        taskItem: false,
+        listItem: false,
+      }),
+      MixedListItem,
+      MixedTaskList,
+      MixedTaskItem,
+      MixedListKeymap,
+      Markdown.configure({
+        html: false,
+        breaks: true,
+        tightLists: true,
+        bulletListMarker: '-',
+      }),
+    ],
+  });
+
+  isolatedEditor.commands.setContent({
+    type: 'doc',
+    content: [
+      {
+        type: 'orderedList',
+        attrs: { start: 1 },
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Level1-1' }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: 'orderedList',
+        attrs: { start: 2 },
+        content: [
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Level1-2' }],
+              },
+              {
+                type: 'orderedList',
+                attrs: { start: 1 },
+                content: [
+                  {
+                    type: 'listItem',
+                    content: [
+                      {
+                        type: 'paragraph',
+                        content: [{ type: 'text', text: 'Level1-3-1' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const firstItemPos = findTextPosition(isolatedEditor, 'Level1-1');
+  isolatedEditor.commands.command(({ tr, dispatch }) => {
+    tr.insertText('-', firstItemPos);
+    tr.setSelection(TextSelection.create(tr.doc, firstItemPos + 1));
+    dispatch?.(tr);
+    return true;
+  });
+
+  const cursorPos = isolatedEditor.state.selection.from;
+  let handled = false;
+  isolatedEditor.view.someProp('handleTextInput', (handler) => {
+    handled = handler(isolatedEditor.view, cursorPos, cursorPos, ' ') || handled;
+  });
+
+  const json16 = isolatedEditor.getJSON();
+  const serialized16 = isolatedEditor.storage.markdown.getMarkdown().trim();
+  const convertedList = json16.content[0];
+  const clusterConverted =
+    convertedList?.type === 'bulletList' &&
+    convertedList?.content?.length === 2 &&
+    json16.content?.[1]?.type !== 'orderedList';
+  const nestedOrderedPreserved =
+    convertedList?.content?.[1]?.content?.[1]?.type === 'orderedList' &&
+    convertedList?.content?.[1]?.content?.[1]?.content?.[0]?.content?.[0]?.content?.[0]?.text === 'Level1-3-1';
+
+  logTestResult("场景 16 (拆分有序列表转无序时整簇转换)", handled && clusterConverted && nestedOrderedPreserved, {
+    Handled: handled ? 'OK' : 'FAIL',
+    'Cluster Converted': clusterConverted ? 'OK' : 'FAIL',
+    'Nested Ordered Preserved': nestedOrderedPreserved ? 'OK' : 'FAIL',
+    'Serialized Markdown': serialized16,
+    'JSON AST': JSON.stringify(json16, null, 2),
+  });
+
+  isolatedEditor.destroy();
+} catch (e) {
+  logTestResult("场景 16 (拆分有序列表转无序时整簇转换)", false, { error: e.stack });
+}
+
 console.log("\n🏁 E2E Regression Tests Completed.");
 process.exit(0);

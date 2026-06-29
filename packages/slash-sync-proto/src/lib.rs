@@ -32,6 +32,9 @@ pub struct FileManifest {
     /// 最近推送者展示名。用于 editor_display_name 缺失时的本地避让 fallback。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pushed_by_display_name: Option<String>,
+    /// 最近推送者的用户 ID。用于客户端判断远端更新是否来自其他协作者。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pushed_by_user_id: Option<String>,
     /// 用户开始编辑此文件的时间（Unix timestamp, seconds）
     /// 客户端记录编辑生命周期开始时间，服务端保存为历史版本的 session_started_at
     /// None = 未知，服务端使用 push 到达时间
@@ -803,6 +806,7 @@ mod tests {
             directory_id: None,
             editor_display_name: None,
             pushed_by_display_name: None,
+            pushed_by_user_id: None,
             edit_started_at: None,
             edit_session_id: None,
             is_user_edit: false,

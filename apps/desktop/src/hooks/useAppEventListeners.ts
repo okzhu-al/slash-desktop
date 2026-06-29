@@ -6,8 +6,7 @@
  * - AI 降级事件监听（ai:degraded → toast warning）
  * - 语言切换同步 document.lang
  * - Cmd+K 搜索快捷键 + Cmd+= / Cmd+- / Cmd+0 / Ctrl+Wheel 缩放
- * - collab:new-events 监听 → 写 store + 自动切换协作面板
- * - 笔记切换时未读检测 → 自动打开协作面板
+ * - collab:new-events 监听 → 写 store + 当前笔记实时切换协作面板
  * - 全局 toast bridge（__slashToast）
  * - V1 安全会话迁移（一次性）
  */
@@ -40,24 +39,18 @@ async function readCurrentFileId(vaultPath: string | null, notePath: string): Pr
 interface UseAppEventListenersOptions {
   /** 当前笔记路径的 stable ref */
   currentNotePathRef: MutableRefObject<string | undefined>;
-  /** 当前选中笔记 ID */
-  selectedNoteId: string | undefined;
   /** 打开搜索面板回调 */
   setIsSearchOpen: (open: boolean) => void;
   /** 设置右面板模式回调 */
   setRightPanelMode: (mode: RightPanelMode) => void;
-  /** 设置右面板展开回调 */
-  setGraphPanelOpen: (open: boolean) => void;
   /** vault 路径（用于同步 window 全局状态） */
   vaultPath: string | null;
 }
 
 export function useAppEventListeners({
   currentNotePathRef,
-  selectedNoteId,
   setIsSearchOpen,
   setRightPanelMode,
-  setGraphPanelOpen,
   vaultPath,
 }: UseAppEventListenersOptions) {
   const { t, i18n } = useTranslation();
@@ -260,23 +253,4 @@ export function useAppEventListeners({
     window.addEventListener('collab:new-events', handleCollabEvents);
     return () => window.removeEventListener('collab:new-events', handleCollabEvents);
   }, [markUnreadFromEvents, vaultPath]);
-
-  // ── 笔记切换时：有未读事件 → 自动打开协作面板 ──
-  useEffect(() => {
-    if (!selectedNoteId) return;
-    const parsedTeamNote = parseTeamNoteId(selectedNoteId);
-    const relPath = selectedNoteId.replace(/^__team__\//, '').replace(/^\/|^\.\//g, '');
-    const basename = getBasename(selectedNoteId) ?? '';
-    const { unreadFiles, getUnreadEntry } = useCollabNotifyStore.getState();
-    const hasUnread = Boolean(getUnreadEntry(relPath)) ||
-      Boolean(parsedTeamNote.fileId && [...unreadFiles.values()].some(entry => entry.fileId === parsedTeamNote.fileId)) ||
-      (basename.endsWith('.md') && [...unreadFiles.values()].some(entry =>
-        entry.filePath === basename || entry.filePath.endsWith('/' + basename)
-      ));
-    if (hasUnread) {
-      setRightPanelMode('activity');
-      setGraphPanelOpen(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNoteId]);
 }

@@ -376,6 +376,7 @@ function FlatReplyNode({
 }) {
     const rTs = new Date(reply.created_at).getTime();
     const isNew = activeUnreadTsSet.has(rTs) && !clickedTs.has(rTs);
+    const [draftReply, setDraftReply] = useState('');
 
     return (
         <div 
@@ -402,7 +403,9 @@ function FlatReplyNode({
                             </span>
                         )}
                         
-                        <span className="text-zinc-600 dark:text-zinc-300 ml-1">{reply.content}</span>
+                        <span className="text-zinc-600 dark:text-zinc-300 ml-1 whitespace-pre-wrap break-words">
+                            {reply.content}
+                        </span>
                         
                         {isNew && (
                             <span className="text-[9px] font-semibold px-1 rounded-sm bg-red-500 text-white shrink-0 shadow-sm ml-1 h-[14px] flex items-center">
@@ -431,21 +434,52 @@ function FlatReplyNode({
 
             {/* Nested Reply Input */}
             {replyingTo === reply.id && (
-                <div className="ml-12 flex items-center gap-1.5 py-1.5 mt-1">
-                    <input
+                <div className="ml-12 flex items-end gap-1.5 py-1.5 mt-1">
+                    <textarea
                         autoFocus
+                        value={draftReply}
                         placeholder={t('activity.reply_to', '回复 @{{name}}...', { name: reply.author_name || '?' })}
+                        onChange={e => setDraftReply(e.currentTarget.value)}
                         onMouseDown={e => e.stopPropagation()}
                         onKeyDown={async e => {
-                            if (e.key === 'Enter') {
-                                const v = (e.currentTarget as HTMLInputElement).value.trim();
-                                if (v) await onSendReply(reply.id, 'comment', v);
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                e.preventDefault();
+                                const v = draftReply.trim();
+                                if (v) {
+                                    await onSendReply(reply.id, 'comment', v);
+                                    setDraftReply('');
+                                }
                             }
-                            if (e.key === 'Escape') onCancelReply();
+                            if (e.key === 'Escape') {
+                                setDraftReply('');
+                                onCancelReply();
+                            }
                         }}
-                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
+                        rows={2}
+                        className="flex-1 text-[11px] resize-none border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                     />
-                    <button onClick={onCancelReply} className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5">{t('activity.cancel', '取消')}</button>
+                    <button
+                        onClick={async (e) => {
+                            e.stopPropagation();
+                            const v = draftReply.trim();
+                            if (!v) return;
+                            await onSendReply(reply.id, 'comment', v);
+                            setDraftReply('');
+                        }}
+                        disabled={!draftReply.trim()}
+                        className="text-[10px] rounded-md bg-indigo-500 px-2 py-1.5 text-white hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {t('activity.send', '发送')}
+                    </button>
+                    <button
+                        onClick={() => {
+                            setDraftReply('');
+                            onCancelReply();
+                        }}
+                        className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5"
+                    >
+                        {t('activity.cancel', '取消')}
+                    </button>
                 </div>
             )}
         </div>
@@ -590,7 +624,7 @@ function EventRow({ t, event, currentUser, noteName, onPreviewVersion,
                         )}
                     </div>
                     {contentPreview && (
-                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 leading-snug truncate">
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 leading-snug whitespace-pre-wrap break-words">
                             {contentPreview}
                         </p>
                     )}
@@ -631,23 +665,73 @@ function EventRow({ t, event, currentUser, noteName, onPreviewVersion,
 
             {/* Top-level Reply input */}
             {replyingTo === eventId && (
-                <div className="ml-12 flex items-center gap-1.5 py-1.5 mt-1">
-                    <input
-                        autoFocus
-                        placeholder={t('activity.reply_main', '回复主事件...')}
-                        onMouseDown={e => e.stopPropagation()}
-                        onKeyDown={async e => {
-                            if (e.key === 'Enter') {
-                                const v = (e.currentTarget as HTMLInputElement).value.trim();
-                                if (v) await onSendReply(eventId as string, event.kind, v);
-                            }
-                            if (e.key === 'Escape') onCancelReply();
-                        }}
-                        className="flex-1 text-[11px] border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
-                    />
-                    <button onClick={onCancelReply} className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5">{t('activity.cancel', '取消')}</button>
-                </div>
+                <TopLevelReplyBox
+                    placeholder={t('activity.reply_main', '回复主事件...')}
+                    onCancel={onCancelReply}
+                    onSend={async (value) => {
+                        await onSendReply(eventId as string, event.kind, value);
+                    }}
+                    onMouseDown={e => e.stopPropagation()}
+                    t={t}
+                />
             )}
+        </div>
+    );
+}
+
+function TopLevelReplyBox({
+    placeholder,
+    onCancel,
+    onSend,
+    onMouseDown,
+    t,
+}: {
+    placeholder: string;
+    onCancel: () => void;
+    onSend: (value: string) => Promise<void>;
+    onMouseDown: (event: any) => void;
+    t: any;
+}) {
+    const [value, setValue] = useState('');
+
+    return (
+        <div className="ml-12 flex items-end gap-1.5 py-1.5 mt-1">
+            <textarea
+                autoFocus
+                value={value}
+                placeholder={placeholder}
+                onChange={e => setValue(e.currentTarget.value)}
+                onMouseDown={onMouseDown}
+                onKeyDown={async e => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        const trimmed = value.trim();
+                        if (!trimmed) return;
+                        await onSend(trimmed);
+                        setValue('');
+                    }
+                    if (e.key === 'Escape') {
+                        setValue('');
+                        onCancel();
+                    }
+                }}
+                rows={2}
+                className="flex-1 text-[11px] resize-none border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1.5 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
+            />
+            <button
+                onClick={async (e) => {
+                    e.stopPropagation();
+                    const trimmed = value.trim();
+                    if (!trimmed) return;
+                    await onSend(trimmed);
+                    setValue('');
+                }}
+                disabled={!value.trim()}
+                className="text-[10px] rounded-md bg-indigo-500 px-2 py-1.5 text-white hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+                {t('activity.send', '发送')}
+            </button>
+            <button onClick={onCancel} className="text-[10px] text-zinc-400 hover:text-zinc-600 px-1.5">{t('activity.cancel', '取消')}</button>
         </div>
     );
 }
@@ -1106,9 +1190,14 @@ export function ActivityTimeline({ notePath, docStatus: _docStatus = 'solo', vau
                             value={composing}
                             onChange={e => setComposing(e.target.value)}
                             onMouseDown={e => e.stopPropagation()}
-                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                            onKeyDown={e => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSendComment();
+                                }
+                            }}
                             placeholder={t('comments.input_placeholder', '写一条评论...')}
-                            rows={2}
+                            rows={3}
                             className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30"
                         />
                         <button onClick={handleSendComment} disabled={!composing.trim()}

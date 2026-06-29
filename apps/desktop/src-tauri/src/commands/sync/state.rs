@@ -62,7 +62,9 @@ pub type UnifiedSyncState = HashMap<String, UnifiedFileState>;
 /// 旧版同步状态（兼容迁移）：路径 → hash
 pub type LegacySyncState = HashMap<String, String>;
 
-pub const EDIT_SESSION_IDLE_SECS: i64 = 60;
+/// Keep one edit session alive for 10 minutes of inactivity so version history
+/// reflects a continuous editing burst instead of fragmenting into short snapshots.
+pub const EDIT_SESSION_IDLE_SECS: i64 = 600;
 
 /// 为一次本地编辑生命周期生成稳定 ID。
 /// 不依赖随机数，避免同一轮 sync 内重复构造 payload 时得到不同 session。

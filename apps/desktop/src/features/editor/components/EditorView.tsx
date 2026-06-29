@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { EditorContent } from '@tiptap/react';
 import { AlertTriangle, Lock } from 'lucide-react';
@@ -16,10 +16,12 @@ import { DocStatusBar } from './DocStatusBar';
 import { CollabLockBadge } from './CollabLockBadge';
 import { EditorStatusBar } from './EditorStatusBar';
 import { EditorDependencyProvider } from './EditorDependencyProvider';
+import { StatusPill } from './StatusPill';
 import type { EditorContainerState } from '../hooks/useEditorContainer';
 import { useEditorZoomStore } from '@/stores/useEditorZoomStore';
 import { useOutlineExtraction } from '../hooks/useOutlineExtraction';
 import type { DynamicSkillConfig } from '@/services/CustomSkillService';
+import { getScrollContainer } from '../hooks/useSlashEditor';
 
 /**
  * 确保 editor focus 和 caret 在空节点中可见
@@ -97,6 +99,8 @@ export const EditorView = (props: EditorContainerState) => {
 
     // ── AIRangeSelector 状态 ──
     const [aiRangeState, setAiRangeState] = useState<AIRangeSelectEvent | null>(null);
+    const [showFloatingStatus, setShowFloatingStatus] = useState(false);
+    const statusRowRef = useRef<HTMLDivElement>(null);
 
     const handleAiRangeSelect = useCallback((e: Event) => {
         const detail = (e as CustomEvent<AIRangeSelectEvent>).detail;
@@ -134,13 +138,10 @@ export const EditorView = (props: EditorContainerState) => {
         };
     }, [editor, canRequestCollabLock, reportActivity]);
 
-    if (!editor) return null;
-
     // DocStatusBar 切换权限：仅非只读的编辑者或管理员可切换
     const canSwitchDocStatus = !effectiveReadOnly && !isTeamOffline && (isNoteEditor || isVaultOwner);
     // 是否展示协作锁胶囊（仅 collab 模式）
     const showCollabBadge = isTeamNote && noteDocStatus === 'collab';
-    const statusPillSurfaceClass = 'border border-white/45 dark:border-white/10 shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]';
     const readOnlyMessage = (() => {
         if (!effectiveReadOnly) return null;
         switch (readOnlyReason) {
@@ -166,6 +167,79 @@ export const EditorView = (props: EditorContainerState) => {
                 return t('editor.readonly_reason_team', '当前团队笔记处于只读保护状态。');
         }
     })();
+    const showStatusPills = isTeamNote;
+    const hasFloatingStatusContent = isTeamNote && (showCollabBadge || effectiveReadOnly);
+
+    useEffect(() => {
+        if (!editor || !showStatusPills) {
+            setShowFloatingStatus(false);
+            return;
+        }
+
+        const scrollContainer = getScrollContainer(editor.view.dom);
+        const statusRow = statusRowRef.current;
+        if (!scrollContainer || !statusRow) {
+            setShowFloatingStatus(false);
+            return;
+        }
+
+        let rafId = 0;
+        const updateFloatingVisibility = () => {
+            rafId = 0;
+            const row = statusRowRef.current;
+            if (!row) return;
+            const rowRect = row.getBoundingClientRect();
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const nextVisible = rowRect.bottom <= containerRect.top + 16;
+            setShowFloatingStatus((prev) => (prev === nextVisible ? prev : nextVisible));
+        };
+
+        const requestVisibilityUpdate = () => {
+            if (rafId) return;
+            rafId = window.requestAnimationFrame(updateFloatingVisibility);
+        };
+
+        updateFloatingVisibility();
+        scrollContainer.addEventListener('scroll', requestVisibilityUpdate, { passive: true });
+        window.addEventListener('resize', requestVisibilityUpdate);
+
+        return () => {
+            scrollContainer.removeEventListener('scroll', requestVisibilityUpdate);
+            window.removeEventListener('resize', requestVisibilityUpdate);
+            if (rafId) window.cancelAnimationFrame(rafId);
+        };
+    }, [editor, showStatusPills, zoomLevel]);
+
+    const renderReadOnlyPill = () => (
+        <StatusPill
+            icon={<Lock size={12} className="text-amber-600 dark:text-amber-500" />}
+            toneClassName="bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            title={readOnlyMessage || t('editor.readonly_mode', '团队空间为只读模式')}
+            className="shrink-0"
+        >
+            {t('editor.readonly', '只读')}
+        </StatusPill>
+    );
+
+    const renderTeamStatusPills = (canSwitchStatus: boolean) => (
+        <>
+            <DocStatusBar
+                status={noteDocStatus}
+                canSwitch={canSwitchStatus}
+                onChange={(s) => handleMetadataChange({ doc_status: s } as any)}
+            />
+            {showCollabBadge && (
+                <CollabLockBadge
+                    lockState={collabLockState}
+                    lockedByName={collabLockedByName}
+                    localUser={localUser}
+                />
+            )}
+            {effectiveReadOnly && renderReadOnlyPill()}
+        </>
+    );
+
+    if (!editor) return null;
 
     return (
         <>
@@ -180,33 +254,24 @@ export const EditorView = (props: EditorContainerState) => {
                 onClose={() => setShowFindBar(false)}
             />
 
+            {hasFloatingStatusContent && (
+                <div className="sticky top-3 z-30 -mb-12 h-0 flex justify-end pointer-events-none">
+                    <div
+                        className={cn(
+                            'pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-2xl border border-white/55 bg-white/72 px-3 py-2 shadow-[0_12px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/68',
+                            'transition-all duration-200',
+                            showFloatingStatus ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0',
+                        )}
+                    >
+                        {renderTeamStatusPills(canSwitchDocStatus)}
+                    </div>
+                </div>
+            )}
+
             {/* 文档状态标签 + 协作锁胶囊 — 仅团队文档显示 */}
-            {isTeamNote && (
-                <div className="flex items-center gap-2 px-1 mb-1.5 mt-3.5">
-                    <DocStatusBar
-                        status={noteDocStatus}
-                        canSwitch={canSwitchDocStatus}
-                        onChange={(s) => handleMetadataChange({ doc_status: s } as any)}
-                    />
-                    {showCollabBadge && (
-                        <CollabLockBadge
-                            lockState={collabLockState}
-                            lockedByName={collabLockedByName}
-                            localUser={localUser}
-                        />
-                    )}
-                    {effectiveReadOnly && (
-                        <div 
-                            className={cn(
-                                'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border-amber-500/20 select-none shrink-0 transition-colors',
-                                statusPillSurfaceClass
-                            )}
-                            title={readOnlyMessage || t('editor.readonly_mode', '团队空间为只读模式')}
-                        >
-                            <Lock size={12} className="text-amber-600 dark:text-amber-500" />
-                            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">{t('editor.readonly', '只读')}</span>
-                        </div>
-                    )}
+            {showStatusPills && (
+                <div ref={statusRowRef} className="flex items-center gap-2 px-1 mb-1.5 mt-3.5">
+                    {renderTeamStatusPills(canSwitchDocStatus)}
                 </div>
             )}
 

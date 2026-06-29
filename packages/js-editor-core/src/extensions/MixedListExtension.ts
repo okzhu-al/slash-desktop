@@ -1413,6 +1413,59 @@ function findClosestListType($pos: any): string | null {
     return null;
 }
 
+function getTopLevelChildStart(doc: any, index: number): number {
+    let pos = 0;
+    for (let i = 0; i < index; i++) {
+        pos += doc.child(i).nodeSize;
+    }
+    return pos;
+}
+
+function findTopLevelChildIndex(doc: any, pos: number): number {
+    let offset = 0;
+    for (let i = 0; i < doc.childCount; i++) {
+        if (offset === pos) return i;
+        offset += doc.child(i).nodeSize;
+    }
+    return -1;
+}
+
+function canJoinAdjacentTopLevelLists(left: any, right: any): boolean {
+    if (!left || !right) return false;
+    if (left.type.name !== right.type.name) return false;
+    if (!LIST_TYPES.includes(left.type.name)) return false;
+
+    if (left.type.name === 'orderedList') {
+        const leftStart = typeof left.attrs?.start === 'number' ? left.attrs.start : 1;
+        const rightStart = typeof right.attrs?.start === 'number' ? right.attrs.start : 1;
+        return leftStart + left.childCount === rightStart;
+    }
+
+    return true;
+}
+
+function collectTopLevelListCluster(doc: any, anchorIndex: number) {
+    if (anchorIndex < 0 || anchorIndex >= doc.childCount) return null;
+
+    let startIndex = anchorIndex;
+    let endIndex = anchorIndex;
+
+    while (startIndex > 0 && canJoinAdjacentTopLevelLists(doc.child(startIndex - 1), doc.child(startIndex))) {
+        startIndex -= 1;
+    }
+
+    while (endIndex < doc.childCount - 1 && canJoinAdjacentTopLevelLists(doc.child(endIndex), doc.child(endIndex + 1))) {
+        endIndex += 1;
+    }
+
+    return {
+        startIndex,
+        endIndex,
+        startPos: getTopLevelChildStart(doc, startIndex),
+        endPos: getTopLevelChildStart(doc, endIndex) + doc.child(endIndex).nodeSize,
+    };
+}
+
 export const MixedListKeymap = Extension.create({
     name: 'mixedListKeymap',
 
@@ -1485,18 +1538,16 @@ export const MixedListKeymap = Extension.create({
                         const $from = state.doc.resolve(from);
                         const textBefore = $from.parent.textBetween(0, $from.parentOffset);
 
-                        // 只处理已在列表内的情况（不在列表内由默认 InputRules 处理）
-                        const closestList = findClosestListType($from);
-                        if (!closestList) return false;
-
                         // 识别用户输入的列表标记
                         let targetType: string | null = null;
                         let checked = false;
+                        let orderedStart = 1;
 
                         if (/^[-+*]$/.test(textBefore)) {
                             targetType = 'bulletList';
                         } else if (/^\d+\.$/.test(textBefore)) {
                             targetType = 'orderedList';
+                            orderedStart = parseInt(textBefore.replace(/\.$/, ''), 10) || 1;
                         } else if (/^\[\s?\]$/.test(textBefore) || /^【\s?】$/.test(textBefore)) {
                             targetType = 'taskList';
                         } else if (/^\[[xX]\]$/.test(textBefore) || /^【[xX]】$/.test(textBefore)) {
@@ -1504,7 +1555,88 @@ export const MixedListKeymap = Extension.create({
                             checked = true;
                         }
 
+                        // 只处理已在列表内的情况（不在列表内由默认 InputRules 处理）
+                        const closestList = findClosestListType($from);
                         if (!targetType) return false;
+
+                        // 顶级段落后紧跟一棵列表时，将它一并吸附回新建的 listItem，避免
+                        // “先退格去掉列表符号，再重新输入 2.” 导致原嵌套子列表掉平成同级节点。
+                        if (!closestList) {
+                            const isTopLevelParagraph = $from.depth === 1 && $from.parent.type.name === 'paragraph';
+                            const docIndex = $from.index(0);
+                            const hasNextSibling = docIndex + 1 < state.doc.childCount;
+                            const nextSibling = hasNextSibling ? state.doc.child(docIndex + 1) : null;
+                            const nextIsList = !!nextSibling && LIST_TYPES.includes(nextSibling.type.name);
+
+                            if (!isTopLevelParagraph || !nextSibling || !nextIsList) return false;
+
+                            const { schema } = state;
+                            const tr = state.tr;
+                            const markerFrom = $from.start($from.depth);
+                            const markerTo = from;
+                            const paragraphStart = $from.before(1);
+                            const paragraphEnd = $from.after(1);
+                            const nextListStart = paragraphEnd;
+                            const nextListEnd = paragraphEnd + nextSibling.nodeSize;
+
+                            tr.delete(markerFrom, markerTo);
+
+                            const mappedParagraphStart = tr.mapping.map(paragraphStart);
+                            const mappedNextListStart = tr.mapping.map(nextListStart);
+                            const mappedNextListEnd = tr.mapping.map(nextListEnd);
+                            const paragraphNode = tr.doc.nodeAt(mappedParagraphStart);
+                            const nestedListNode = tr.doc.nodeAt(mappedNextListStart);
+                            if (!paragraphNode || !nestedListNode) {
+                                view.dispatch(tr.insertText(text, from, from));
+                                return true;
+                            }
+
+                            const listNodeType = schema.nodes[targetType];
+                            const itemNodeType = schema.nodes[targetType === 'taskList' ? 'taskItem' : 'listItem'];
+                            const listAttrs = targetType === 'orderedList' ? { start: orderedStart } : null;
+                            const itemAttrs = targetType === 'taskList' ? { checked } : null;
+                            const mergedItem = itemNodeType.create(itemAttrs, [paragraphNode, nestedListNode]);
+                            const rebuiltList = listNodeType.create(listAttrs, [mergedItem]);
+
+                            let replacementStart = mappedParagraphStart;
+                            const replacementEnd = mappedNextListEnd;
+                            let replacementNode = rebuiltList;
+                            let targetItemIndex = 0;
+
+                            const paragraphIndex = findTopLevelChildIndex(tr.doc, mappedParagraphStart);
+                            if (paragraphIndex > 0) {
+                                const prevIndex = paragraphIndex - 1;
+                                const prevSibling = tr.doc.child(prevIndex);
+
+                                if (prevSibling.type.name === targetType && canJoinAdjacentTopLevelLists(prevSibling, rebuiltList)) {
+                                    const mergedItems: any[] = [];
+                                    prevSibling.forEach((child: any) => {
+                                        mergedItems.push(child.copy(child.content));
+                                    });
+                                    mergedItems.push(mergedItem);
+
+                                    replacementStart = getTopLevelChildStart(tr.doc, prevIndex);
+                                    replacementNode = listNodeType.create(prevSibling.attrs, mergedItems);
+                                    targetItemIndex = prevSibling.childCount;
+                                }
+                            }
+
+                            tr.replaceWith(replacementStart, replacementEnd, replacementNode);
+
+                            const insertedList = tr.doc.nodeAt(replacementStart);
+                            if (insertedList) {
+                                let offset = 0;
+                                for (let i = 0; i < targetItemIndex && i < insertedList.childCount; i++) {
+                                    offset += insertedList.child(i).nodeSize;
+                                }
+                                const cursorPos = replacementStart + 1 + offset + 1 + 1;
+                                tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+                            } else {
+                                tr.setSelection(TextSelection.create(tr.doc, replacementStart + 3));
+                            }
+                            view.dispatch(tr);
+                            return true;
+                        }
 
                         // 已经是同类型列表 → 阻止 InputRule 创建嵌套列表，仅插入空格
                         if (targetType === closestList) {
@@ -1541,36 +1673,61 @@ export const MixedListKeymap = Extension.create({
                         const updatedList = tr.doc.nodeAt(mappedStart);
                         if (!updatedList) return true;
 
+                        let replaceStart = mappedStart;
+                        let replaceEnd = mappedEnd;
+                        let sourceLists = [updatedList];
+                        let itemIndex = $from.index(listDepth);
+
+                        if (listDepth === 1) {
+                            const listIndex = findTopLevelChildIndex(tr.doc, mappedStart);
+                            const cluster = collectTopLevelListCluster(tr.doc, listIndex);
+
+                            if (cluster) {
+                                replaceStart = cluster.startPos;
+                                replaceEnd = cluster.endPos;
+                                sourceLists = [];
+
+                                for (let i = cluster.startIndex; i <= cluster.endIndex; i++) {
+                                    sourceLists.push(tr.doc.child(i));
+                                }
+
+                                for (let i = cluster.startIndex; i < listIndex; i++) {
+                                    itemIndex += tr.doc.child(i).childCount;
+                                }
+                            }
+                        }
+
                         // 4. 构建新的列表节点（原子替换，避免中间状态 schema 错误）
                         const srcItem = updatedList.type.name === 'taskList' ? 'taskItem' : 'listItem';
                         const dstItem = targetType === 'taskList' ? 'taskItem' : 'listItem';
                         const dstItemType = schema.nodes[dstItem];
 
                         const newItems: any[] = [];
-                        updatedList.forEach((child) => {
-                            if (child.type.name === srcItem && srcItem !== dstItem) {
-                                const newAttrs = dstItem === 'taskItem'
-                                    ? { checked: checked }
-                                    : {};
-                                newItems.push(dstItemType.create(newAttrs, child.content, child.marks));
-                            } else {
-                                newItems.push(child.copy(child.content));
-                            }
+                        sourceLists.forEach((listNode) => {
+                            listNode.forEach((child: any) => {
+                                if (child.type.name === srcItem && srcItem !== dstItem) {
+                                    const newAttrs = dstItem === 'taskItem'
+                                        ? { checked: checked }
+                                        : {};
+                                    newItems.push(dstItemType.create(newAttrs, child.content, child.marks));
+                                } else {
+                                    newItems.push(child.copy(child.content));
+                                }
+                            });
                         });
 
                         const newList = targetNodeType.create(null, newItems);
-                        tr.replaceWith(mappedStart, mappedEnd, newList);
+                        tr.replaceWith(replaceStart, replaceEnd, newList);
 
                         // 5. 设置光标到用户所在的列表项内
-                        const itemIndex = $from.index(listDepth);
-                        const insertedList = tr.doc.nodeAt(mappedStart);
+                        const insertedList = tr.doc.nodeAt(replaceStart);
                         if (insertedList) {
                             let offset = 0;
                             for (let i = 0; i < itemIndex && i < insertedList.childCount; i++) {
                                 offset += insertedList.child(i).nodeSize;
                             }
                             // +1 进入 list, +offset 跳过前面的 items, +1 进入 item, +1 进入 paragraph
-                            const cursorPos = mappedStart + 1 + offset + 1 + 1;
+                            const cursorPos = replaceStart + 1 + offset + 1 + 1;
                             tr.setSelection(TextSelection.create(tr.doc, cursorPos));
                         }
 

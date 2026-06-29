@@ -135,7 +135,7 @@ export const CommentPanel = ({ notePath }: CommentPanelProps) => {
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
             handleSend();
         }
@@ -242,7 +242,7 @@ export const CommentPanel = ({ notePath }: CommentPanelProps) => {
                         onKeyDown={handleKeyDown}
                         placeholder={t('comments.input_placeholder', '写一条评论...')}
                         className="flex-1 text-xs resize-none rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2 text-zinc-700 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-blue-400/30 min-h-[36px] max-h-[100px]"
-                        rows={1}
+                        rows={3}
                     />
                     <button
                         onClick={handleSend}

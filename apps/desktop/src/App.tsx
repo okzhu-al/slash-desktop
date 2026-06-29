@@ -378,10 +378,8 @@ function App() {
   // ── 全局事件监听（Tldraw fix, AI降级, 语言, 缩放, 协作通知）──
   useAppEventListeners({
     currentNotePathRef,
-    selectedNoteId: selectedNote?.id,
     setIsSearchOpen,
     setRightPanelMode,
-    setGraphPanelOpen,
     vaultPath,
   });
 

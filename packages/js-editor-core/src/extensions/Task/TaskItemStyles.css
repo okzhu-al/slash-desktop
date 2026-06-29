@@ -490,7 +490,8 @@
     padding: 0.5rem 0.75rem;
     color: #F1F5F9;
     font-size: 0.85rem;
-    min-width: 180px;
+    min-width: 220px;
+    width: 100%;
     outline: none;
     transition: border-color 100ms ease;
 }
@@ -520,7 +521,7 @@
 .task-member-list {
     max-height: 200px;
     overflow-y: auto;
-    margin-top: 0.25rem;
+    margin-top: 0.5rem;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -542,7 +543,8 @@
     text-align: left;
 }
 
-.task-member-option:hover {
+.task-member-option:hover,
+.task-member-option.is-active {
     background: #1E293B;
     color: #F1F5F9;
 }
@@ -579,6 +581,14 @@
     font-size: 0.7rem;
     color: #64748B;
     line-height: 1.2;
+}
+
+.task-member-empty {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.25rem 0.125rem;
+    color: #64748B;
+    font-size: 0.78rem;
+    text-align: center;
 }
 
 .priority-menu-content {
@@ -780,7 +790,8 @@
     color: #334155;
 }
 
-.light .task-member-option:hover {
+.light .task-member-option:hover,
+.light .task-member-option.is-active {
     background: #F1F5F9;
     color: #0F172A;
 }
@@ -791,6 +802,10 @@
 }
 
 .light .task-member-username {
+    color: #94A3B8;
+}
+
+.light .task-member-empty {
     color: #94A3B8;
 }
 

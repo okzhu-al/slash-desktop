@@ -13,13 +13,15 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { User, Users, ChevronDown, CheckCircle } from 'lucide-react';
 
+import { cn } from '@/shared/utils/cn';
+import { STATUS_PILL_BASE_CLASS, STATUS_PILL_SURFACE_CLASS } from './StatusPill';
+
 export type DocStatus = 'solo' | 'collab';
 
 interface StatusConfig {
     label: string;
     icon: React.ReactNode;
     pill: string;
-    ring: string;
     hint: string;
 }
 
@@ -28,15 +30,13 @@ function useStatusConfig(t: (k: string, fallback: string) => string): Record<Doc
         solo: {
             label: t('docStatus.solo', '单人'),
             icon: <User size={11} />,
-            pill: 'bg-[#E6A23C]/10 text-[#E6A23C]',
-            ring: 'ring-[#E6A23C]/30',
+            pill: 'bg-[#E6A23C]/10 text-[#C7841F] dark:text-[#F0BE62]',
             hint: t('docStatus.hint.solo', '仅你可编辑，其他成员只读与评论'),
         },
         collab: {
             label: t('docStatus.collab', '协作'),
             icon: <Users size={11} />,
-            pill: 'bg-[#A42227]/10 text-[#A42227]',
-            ring: 'ring-[#A42227]/30',
+            pill: 'bg-[#A42227]/10 text-[#A42227] dark:text-[#F07B80]',
             hint: t('docStatus.hint.collab', '团队成员均可编辑此文档'),
         },
     };
@@ -59,7 +59,6 @@ export function DocStatusBar({ status, onChange, canSwitch = false }: DocStatusB
     const triggerRef = useRef<HTMLButtonElement>(null);
 
     const current = configs[status] ?? configs.solo;
-    const pillSurfaceClass = 'border border-white/45 dark:border-white/10 shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]';
 
     useEffect(() => {
         if (!open) return;
@@ -80,14 +79,14 @@ export function DocStatusBar({ status, onChange, canSwitch = false }: DocStatusB
             <button
                 ref={triggerRef}
                 onClick={() => canSwitch && setOpen(!open)}
-                className={[
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
-                    'ring-1 transition-all duration-150',
-                    pillSurfaceClass,
+                className={cn(
+                    STATUS_PILL_BASE_CLASS,
+                    STATUS_PILL_SURFACE_CLASS,
                     current.pill,
-                    current.ring,
-                    canSwitch ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
-                ].join(' ')}
+                    canSwitch
+                        ? 'cursor-pointer hover:-translate-y-px hover:brightness-[0.99] active:translate-y-0'
+                        : 'cursor-default',
+                )}
                 title={canSwitch ? t('docStatus.change', '点击切换模式') : current.hint}
             >
                 {current.icon}
